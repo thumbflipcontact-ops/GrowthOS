@@ -27,6 +27,18 @@ class AgentConfigRepository(Repository[AgentConfig]):
         )
         return list(result.scalars().all())
 
+    async def get_by_project_and_key(
+        self, project_id: uuid.UUID, agent_key: str
+    ) -> AgentConfig | None:
+        """Matches `agent_configs`' `unique(project_id, agent_key)` constraint — the lookup
+        both the on-demand trigger endpoint and AgentConfigService's upsert use."""
+        result = await self.session.execute(
+            select(AgentConfig).where(
+                AgentConfig.project_id == project_id, AgentConfig.agent_key == agent_key
+            )
+        )
+        return result.scalar_one_or_none()
+
 
 class AgentRunRepository(Repository[AgentRun]):
     model = AgentRun
@@ -35,6 +47,19 @@ class AgentRunRepository(Repository[AgentRun]):
         result = await self.session.execute(
             select(AgentRun)
             .where(AgentRun.project_id == project_id)
+            .order_by(AgentRun.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def list_by_project_and_key(
+        self, project_id: uuid.UUID, agent_key: str, *, limit: int = 50
+    ) -> list[AgentRun]:
+        """The run history behind `GET .../agent-configs/{agent_key}/runs` — see
+        docs/api/API_DESIGN.md."""
+        result = await self.session.execute(
+            select(AgentRun)
+            .where(AgentRun.project_id == project_id, AgentRun.agent_key == agent_key)
             .order_by(AgentRun.created_at.desc())
             .limit(limit)
         )

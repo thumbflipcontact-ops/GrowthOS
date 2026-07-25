@@ -46,6 +46,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
+    arq_redis = getattr(app.state, "arq_redis", None)
+    if arq_redis is not None:
+        await arq_redis.aclose()
     await engine.dispose()
     logger.info("app.stopped")
 

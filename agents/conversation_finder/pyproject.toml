@@ -1,0 +1,17 @@
+[project]
+name = "growthos-agent-conversation-finder"
+version = "0.1.0"
+description = "GrowthOS agent: Conversation Finder (schedule-triggered discovery, Phase 2A)"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.9"]
+
+[project.entry-points."growthos.agents"]
+conversation_finder = "agents.conversation_finder.subscriptions:AGENT_SUBSCRIPTIONS"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agents.conversation_finder"]
+package-dir = {"agents.conversation_finder" = "."}

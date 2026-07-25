@@ -145,7 +145,7 @@ to a content-drafting agent directly (see `ARCHITECTURE.md` §8).
 | Agent | Phase | Trigger | Purpose |
 |---|---|---|---|
 | `orchestrator` | 1 | n/a — the scheduler itself | Schedules agents, assembles the Daily Brief on `project.daily_cycle.completed` |
-| `conversation_finder` | 1 | Schedule | Finds relevant external discussions |
+| `conversation_finder` | 2A (implemented) | Schedule | Finds relevant external discussions — see `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md` |
 | `content_agent` | 1 | Subscription (`knowledge_item.created`) | Drafts replies/articles/outreach as `content_items` |
 | `customer_finder` | 2 | Schedule | Finds ICP-matched companies/contacts |
 | `competitor_watch` | 2 | Schedule | Tracks competitor activity |

@@ -11,6 +11,8 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 
+from arq import ArqRedis, create_pool
+from arq.connections import RedisSettings
 from fastapi import Cookie, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +48,22 @@ def get_plugin_catalog(request: Request) -> PluginCatalog:
     a request handler's perspective. See app/core/plugin_catalog.py."""
     catalog: PluginCatalog = request.app.state.plugin_catalog
     return catalog
+
+
+async def get_arq_redis(request: Request) -> ArqRedis:
+    """Lazily creates and caches one Arq connection pool per process, on first use — not at
+    app startup (unlike `plugin_catalog` above), so a route that never enqueues a job (i.e.
+    every route except `.../agent-configs/{agent_key}/runs/trigger`) imposes no live-Redis
+    dependency. This is what lets `app.router.lifespan_context` keep running for free against
+    a real Postgres in tests without also requiring a real Redis — see
+    docs/jobs/BACKGROUND_JOBS.md and the trigger endpoint's own tests, which override this
+    dependency instead of talking to a real broker."""
+    pool = getattr(request.app.state, "arq_redis", None)
+    if pool is None:
+        settings = get_settings()
+        pool = await create_pool(RedisSettings.from_dsn(str(settings.redis_url)))
+        request.app.state.arq_redis = pool
+    return pool
 
 
 async def get_current_user(

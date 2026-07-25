@@ -113,6 +113,15 @@ scoped to indexed/enum columns (`?status=pending_review`, `?buying_intent=high`,
 `docs/database/SCHEMA.md`; a filter that would require a full table scan is not exposed
 until there's an index to back it.
 
+**Not yet true of any shipped endpoint, including Phase 2A's.** Every list endpoint built so
+far (`projects`, `plugin-connections`, and Phase 2A's `agent-configs`/`.../runs`/
+`knowledge-items`) uses plain `limit`/`offset` query params and returns a bare JSON array,
+matching `app/repositories/base.py`'s `Repository.list_all(limit, offset)` convention rather
+than this section's cursor design. Adopting cursor pagination is a cross-cutting change
+better done once, consistently, across every list endpoint — not introduced piecemeal by
+whichever endpoint happens to be built next. Tracked here rather than silently diverging from
+this document.
+
 ## Response shape
 
 ```json
@@ -122,8 +131,14 @@ until there's an index to back it.
 }
 ```
 
+**Also not yet true of any shipped endpoint** — every response so far is the bare
+`data`-equivalent value directly (`response_model=list[X]` / `response_model=X`), no
+envelope, no `meta`. Same reasoning as pagination above: a fleet-wide change, not a
+per-endpoint one.
+
 Errors follow a single shape across the API — see `docs/errors/ERROR_HANDLING.md` for the
-error envelope and status code conventions; this document doesn't duplicate it.
+error envelope and status code conventions; this document doesn't duplicate it. Error
+responses *do* already match this document, unlike the two success-path conventions above.
 
 ## Idempotency
 

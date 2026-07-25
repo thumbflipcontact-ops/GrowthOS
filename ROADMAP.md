@@ -36,10 +36,24 @@ reworked. This ordering is what the (now-archived) V1→V2 migration plan produc
    dispatcher crash mid-cycle.
 4. **Reddit plugin** — `plugins/reddit/`, against the mechanism built in step 2, not a
    hand-registered one-off. See `plugins/reddit/README.md` and
-   `docs/decisions/0005-first-plugin-reddit.md`.
+   `docs/decisions/0005-first-plugin-reddit.md`. **Done** — implemented against the platform
+   mechanisms built in steps 2 and 7 (manifest/discovery, and the OAuth2 framework/envelope
+   encryption respectively), including its own unit + contract test suite. Not yet connected
+   to a real account, and not yet exercised end-to-end (that needs step 5's Conversation
+   Finder + Content Agent, still to come) — see
+   `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`.
 5. **Conversation Finder + Content Agent** — Conversation Finder remains schedule-triggered
    (it originates discovery); Content Agent subscribes to `knowledge_item.created` instead of
-   being placed in a sequencing config.
+   being placed in a sequencing config. **Conversation Finder half done** —
+   `agents/conversation_finder/`, built against the mechanisms from steps 2–4 (plugin
+   capability discovery, the event outbox, the Reddit plugin) plus the first concrete
+   `KnowledgeBaseClient` and real `run_scheduled_agent` job wiring built alongside it. Rule-
+   based ranking/scoring, not LLM-based — no LLM integration exists yet (see
+   `docs/decisions/0004-llm-provider-abstraction.md`, still config-plumbing-only), so
+   `knowledge_items.problem`/`industry`/`product`/`pain_point`/`buying_intent`/`suggested_*`
+   stay unpopulated pending a future enrichment pass. See
+   `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`. Content Agent itself is not
+   yet built — that's the remaining half of this step.
 6. **Approval Inbox + publish worker** — `ContentApprovalService` with the `version`-column
    concurrency guard included from the start, not retrofitted.
 7. **Credential encryption** — envelope encryption built as part of the plugin connection

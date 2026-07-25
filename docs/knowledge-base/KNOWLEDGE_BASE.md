@@ -4,6 +4,17 @@
 the same transaction; §Two ways the knowledge base gets queried below is updated to reflect
 event subscription replacing polling. See `ARCHITECTURE.md` §7.
 
+**Phase 2A note:** `app/services/knowledge_base.py`'s `KnowledgeBaseClient` is the first
+concrete implementation, built for Conversation Finder
+(`docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`). It has no LLM to extract
+`problem`/`industry`/`product`/`pain_point`/`buying_intent`/`suggested_*` with yet (no LLM
+provider client exists — see `docs/decisions/0004-llm-provider-abstraction.md`), so those
+fields stay at their schema defaults for every row Conversation Finder writes. `confidence`
+on those rows is a deterministic keyword-relevance score (how well a result matched the
+configured search terms — see `agents/conversation_finder/ranking.py`), not an LLM's judgment
+of buying intent — read it accordingly until a future enrichment pass populates the
+LLM-derived fields described below.
+
 ## What it is
 
 The `knowledge_items` table (`docs/database/SCHEMA.md`) is GrowthOS's answer to the vision's

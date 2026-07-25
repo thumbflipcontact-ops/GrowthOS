@@ -4,12 +4,15 @@ Kept runtime-independent of backend/app (types needed only for static checking a
 TYPE_CHECKING-guarded), mirroring plugins/_shared/base.py's dependency discipline — an
 agent package should be able to import this module without pulling in the whole backend.
 
-No concrete agent implements this in Phase 1 (Conversation Finder, Content Agent, etc. are
-explicitly out of scope — see ROADMAP.md). This is the contract Phase 2 builds against.
+Phase 2A (docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md) is the first concrete
+agent built against this contract — `knowledge_base` is now typed to the concrete
+`KnowledgeBaseClient` rather than `object`. `llm` stays loosely typed: no LLM provider client
+exists yet (explicitly out of Phase 2A scope, see ROADMAP.md).
 """
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
@@ -21,6 +24,7 @@ if TYPE_CHECKING:
     from app.core.events import EventPublisher
     from app.core.plugin_registry import PluginRegistry
     from app.models.project import Project
+    from app.services.knowledge_base import KnowledgeBaseClient
 
 
 @dataclass(slots=True)
@@ -28,13 +32,18 @@ class AgentContext:
     project: "Project"
     config: dict
     plugins: "PluginRegistry"
-    # llm and knowledge_base are typed loosely (no concrete class exists yet — AI providers
-    # and the knowledge base client are explicitly out of Phase 1 scope, see ROADMAP.md) so
-    # this dataclass doesn't reference types that don't exist. Phase 2 tightens these.
+    # llm stays typed loosely (object) — no LLM provider client exists yet, explicitly out
+    # of Phase 2A scope, see ROADMAP.md and the config_schema fields conversation_finder
+    # deliberately leaves unpopulated (README.md §"What Phase 2A does not do").
     llm: object
-    knowledge_base: object
+    knowledge_base: "KnowledgeBaseClient"
     events: "EventPublisher"
     logger: "structlog.stdlib.BoundLogger"
+    # The agent_runs row this context was built for, if any — set by the job runner
+    # (app/jobs/agent_runs.py) once that row exists, so an agent can stamp
+    # knowledge_items.source_agent_run_id. None for a context built outside a real run (e.g.
+    # a unit test constructing AgentContext directly).
+    agent_run_id: "uuid.UUID | None" = None
 
 
 @dataclass(slots=True)

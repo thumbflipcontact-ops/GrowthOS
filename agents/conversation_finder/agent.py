@@ -1,0 +1,118 @@
+"""Conversation Finder — see README.md.
+
+Schedule-triggered (see subscriptions.py — it originates a discovery cycle rather than
+reacting to one). Phase 2A scope: search every connected Searchable plugin, rank results with
+a deterministic keyword-relevance score, deduplicate against what's already known, persist
+survivors to the knowledge base, and announce each new one with a `knowledge_item.created`
+domain event. Deliberately does NOT call an LLM or populate
+problem/industry/product/pain_point/buying_intent/suggested_* — see README.md §"What Phase
+2A does not do" — that's a future enrichment pass.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
+from agents._shared.base import AgentContext, AgentResult
+from agents.conversation_finder.config import ConversationFinderConfig
+from agents.conversation_finder.ranking import score_result
+from plugins._shared.base import PluginQuery, Searchable
+
+if TYPE_CHECKING:
+    from app.models.project import Project
+
+
+class ConversationFinderAgent:
+    key = "conversation_finder"
+    config_schema = ConversationFinderConfig
+
+    async def run(self, ctx: AgentContext) -> AgentResult:
+        config = ConversationFinderConfig.model_validate(ctx.config)
+        result = AgentResult()
+
+        terms = _effective_terms(config, ctx.project)
+        if not terms:
+            result.errors.append(
+                "No search keywords configured — set this agent's config.keywords or "
+                "project.icp_config['keywords']."
+            )
+            return result
+
+        query = PluginQuery(
+            project_id=ctx.project.id,
+            terms=terms,
+            since=datetime.now(UTC) - timedelta(hours=config.lookback_hours),
+            limit=config.max_results_per_platform,
+        )
+
+        plugins_searched: list[str] = []
+        results_found = 0
+        seen_urls: set[str] = set()
+
+        for plugin in ctx.plugins.all_with_capability(Searchable):
+            platform = plugin.manifest.key
+            plugins_searched.append(platform)
+            try:
+                plugin_results = await plugin.search(query)
+            except Exception:
+                # One plugin misbehaving must never fail the whole discovery cycle — mirrors
+                # PluginRegistry.all_with_capability()'s own resilience contract one level up
+                # (a broken plugin is skipped at construction time; a plugin that constructs
+                # fine but raises from search() itself is skipped here, same principle).
+                ctx.logger.warning(
+                    "conversation_finder.plugin_search_failed", platform=platform, exc_info=True
+                )
+                continue
+
+            for plugin_result in plugin_results:
+                results_found += 1
+                if plugin_result.url in seen_urls:
+                    continue
+                seen_urls.add(plugin_result.url)
+
+                score, matched_terms = score_result(plugin_result, terms)
+                if score < config.min_score_to_save:
+                    continue
+
+                saved, created = await ctx.knowledge_base.upsert_discovery(
+                    project_id=ctx.project.id,
+                    source_agent_run_id=ctx.agent_run_id,
+                    platform=platform,
+                    url=plugin_result.url,
+                    tags=matched_terms,
+                    confidence=Decimal(str(score)),
+                )
+                if created:
+                    result.knowledge_items_created += 1
+                    await ctx.events.publish(
+                        project_id=ctx.project.id,
+                        event_type="knowledge_item.created",
+                        payload={
+                            "knowledge_item_id": str(saved.id),
+                            "platform": saved.platform,
+                            "url": saved.url,
+                            "buying_intent": saved.buying_intent.value,
+                            "confidence": float(saved.confidence),
+                            "tags": saved.tags,
+                        },
+                    )
+
+        result.summary = {
+            "platforms_searched": plugins_searched,
+            "results_found": results_found,
+            "unique_urls": len(seen_urls),
+        }
+        return result
+
+
+def _effective_terms(config: ConversationFinderConfig, project: Project) -> list[str]:
+    if config.keywords:
+        return config.keywords
+    icp_config = project.icp_config if isinstance(project.icp_config, dict) else {}
+    icp_keywords = icp_config.get("keywords")
+    return list(icp_keywords) if isinstance(icp_keywords, list) else []
+
+
+AGENT = ConversationFinderAgent()
