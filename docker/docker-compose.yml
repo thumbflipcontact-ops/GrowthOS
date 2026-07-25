@@ -1,7 +1,14 @@
 # Local/production service topology for GrowthOS — Version 2.
 # See docs/deployment/DEPLOYMENT.md for the reasoning behind this shape.
-# NOTE: backend/ and frontend/ application code is not yet implemented (see ROADMAP.md
-# Phase 1) — this file documents the intended topology and will not build until it exists.
+#
+# NOTE: this file is unbuilt/unverified as of Phase 1 — the backend was implemented and
+# tested against a Docker-free local setup instead (see scripts/README.md and
+# backend/scripts/dev_postgres.py), per an explicit instruction not to use Docker for Phase 1
+# implementation. The module paths below (app.jobs.*.WorkerSettings, app.scheduler) are real
+# and match the actual code in backend/app/ — but no one has run `docker compose build`
+# against them yet. frontend/ genuinely has no code yet (Phase 2). Before relying on this
+# file, do a real build-and-up pass and fix whatever Docker-specific issue turns up (there is
+# usually at least one — networking/env details differ from a bare-metal run).
 
 services:
   postgres:

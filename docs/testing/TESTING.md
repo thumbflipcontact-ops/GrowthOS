@@ -1,5 +1,14 @@
 # Testing Strategy
 
+**Phase 1 update:** integration tests run against `pgserver` (a pip-installable, embedded
+Postgres binary — no Docker, no system install) rather than `testcontainers`, since Phase 1
+implementation deliberately avoided Docker for local development — see
+`backend/tests/conftest.py` and `PHASE_1_REPORT.md`. The requirement this satisfies (a real
+Postgres, never SQLite, exercising real Postgres-specific features) is unchanged; only the
+mechanism differs. A CI environment with Docker available may prefer `testcontainers`
+instead — both satisfy the same requirement, and `conftest.py`'s fixtures are the only place
+that would need to change.
+
 ## Layers
 
 | Layer | Location | What it covers | Runs against |

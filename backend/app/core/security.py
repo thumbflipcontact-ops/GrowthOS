@@ -1,0 +1,58 @@
+"""Password hashing and session token signing — see docs/auth/AUTHENTICATION.md.
+
+Argon2id for passwords, a signed (not encrypted — the payload is just a user id, not
+sensitive) timed token for sessions, held in an HTTP-only cookie. CSRF protection is a
+standard double-submit token, generated alongside the session and checked on state-changing
+requests.
+"""
+
+from __future__ import annotations
+
+import secrets
+import uuid
+
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+_hasher = PasswordHasher()
+
+SESSION_COOKIE_NAME = "growthos_session"
+CSRF_COOKIE_NAME = "growthos_csrf"
+SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14  # 14 days
+
+
+def hash_password(password: str) -> str:
+    return _hasher.hash(password)
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return _hasher.verify(password_hash, password)
+    except VerifyMismatchError:
+        return False
+
+
+def _serializer(secret_key: str) -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(secret_key, salt="growthos-session")
+
+
+def create_session_token(user_id: uuid.UUID, *, secret_key: str) -> str:
+    return _serializer(secret_key).dumps({"user_id": str(user_id)})
+
+
+def verify_session_token(token: str, *, secret_key: str) -> uuid.UUID | None:
+    """Returns the user id if the token is valid and unexpired, else None. Never raises —
+    an invalid/expired/tampered session token is equivalent to "not logged in", not a 500."""
+    try:
+        data = _serializer(secret_key).loads(token, max_age=SESSION_MAX_AGE_SECONDS)
+    except (BadSignature, SignatureExpired):
+        return None
+    try:
+        return uuid.UUID(data["user_id"])
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def generate_csrf_token() -> str:
+    return secrets.token_urlsafe(32)

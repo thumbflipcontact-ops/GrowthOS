@@ -2,6 +2,8 @@
 
 **Architecture: Version 2 (frozen).** See [ARCHITECTURE_FREEZE.md](ARCHITECTURE_FREEZE.md)
 for the freeze declaration and [ARCHITECTURE.md](ARCHITECTURE.md) for the canonical design.
+**Platform foundation: implemented and tested (Phase 1).** See
+[PHASE_1_REPORT.md](PHASE_1_REPORT.md).
 
 GrowthOS is an AI-powered operating system for solo founders. It researches the market,
 finds the right people and conversations, drafts content and outreach, and tells you what to
@@ -95,18 +97,30 @@ Full reasoning for each choice: `docs/decisions/`.
 
 ## Status
 
-Phase 0 is complete: design documentation, a Principal Engineer design review, and the
-resulting Version 2 architecture, frozen — see [ARCHITECTURE_FREEZE.md](ARCHITECTURE_FREEZE.md).
-This repository still contains **design documentation and project scaffolding only** — no
-production code has been written yet, by design. See `ROADMAP.md` Phase 1 for what's built
-first and in what order.
+Phase 0 (architecture) and Phase 1 (platform foundation) are both complete — see
+[ARCHITECTURE_FREEZE.md](ARCHITECTURE_FREEZE.md) for the frozen design and
+[PHASE_1_REPORT.md](PHASE_1_REPORT.md) for what was built, tested, and verified. The backend
+now has a real FastAPI app, database schema + migrations, auth, the plugin SDK/registry, the
+event bus, and background job plumbing — all with a passing test suite. No agent or plugin
+*business logic* exists yet by design (no Reddit integration, no AI provider calls, no
+Conversation Finder/Content Agent) — see `ROADMAP.md` Phase 2 for what's next.
 
-## Getting started (once implementation begins)
+## Getting started
+
+No Docker required for local development — see [PHASE_1_REPORT.md](PHASE_1_REPORT.md) for
+why and `docker/README.md` for the (currently unverified) Docker-based alternative.
 
 ```bash
-cp .env.example .env
-docker compose -f docker/docker-compose.yml up --build
+python scripts/setup.py                       # creates backend/.venv, installs deps, .env
+# in one terminal — a real, embedded local Postgres, no install/Docker needed:
+cd backend && .venv/Scripts/python scripts/dev_postgres.py   # Windows
+cd backend && .venv/bin/python scripts/dev_postgres.py       # macOS/Linux
+# in another terminal:
+python scripts/migrate.py                     # apply the database schema
+python scripts/seed.py                        # optional: demo org/user
+cd backend && .venv/Scripts/python -m pytest -p no:cov   # run the test suite (Windows)
+cd backend && .venv/bin/python -m pytest -p no:cov        # (macOS/Linux)
 ```
 
-See `docs/deployment/DEPLOYMENT.md` for environment-by-environment detail and
-`scripts/README.md` for local dev scripts.
+See `scripts/README.md` for what each script does and `docs/deployment/DEPLOYMENT.md` for
+environment-by-environment detail.

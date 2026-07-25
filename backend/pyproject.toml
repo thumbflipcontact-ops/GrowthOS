@@ -1,0 +1,97 @@
+[project]
+name = "growthos-backend"
+version = "0.1.0"
+description = "GrowthOS platform foundation — FastAPI app, plugin/event core, background workers"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115,<0.116",
+    "uvicorn[standard]>=0.32,<0.33",
+    "pydantic>=2.9,<3",
+    "pydantic-settings>=2.6,<3",
+    "email-validator>=2.2,<3",
+    "sqlalchemy[asyncio]>=2.0.36,<2.1",
+    "asyncpg>=0.30,<0.31",
+    "alembic>=1.14,<1.15",
+    "arq>=0.26,<0.27",
+    "redis>=5.2,<6",
+    "structlog>=24.4,<25",
+    "argon2-cffi>=23.1,<24",
+    "itsdangerous>=2.2,<3",
+    "pgvector>=0.3.6,<0.4",
+    "httpx>=0.27,<0.28",
+    "python-dotenv>=1.0,<2",
+    "croniter>=3.0,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.24,<0.25",
+    "pytest-cov>=6.0,<7",
+    "pgserver>=0.1.4,<0.2",
+    "fakeredis>=2.26,<3",
+    "ruff>=0.7,<0.8",
+    "mypy>=1.13,<2",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+# The repo is a monorepo: backend/, plugins/, agents/ are siblings. `app` resolves as
+# backend's own package; `pythonpath` below adds the repo root so `plugins._shared` and
+# `agents._shared` (the Plugin/Agent SDKs — see ARCHITECTURE.md §5, §7) are importable the
+# same way in-process as they will be once each plugin/agent ships as its own package. This
+# is dev/test wiring only, not a deviation from the documented file layout.
+[tool.pytest.ini_options]
+pythonpath = [".", ".."]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: requires a real (embedded) Postgres instance via pgserver",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Alembic-generated migrations are not hand-formatted to project style — see
+# migrations/README for the convention (edit generated migrations for correctness, not
+# lint compliance).
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# B008 (no function calls in argument defaults) is bugbear's generic rule; FastAPI's
+# Depends(...)-in-default-argument is the framework's own documented, idiomatic dependency-
+# injection pattern (see app/api/deps.py), not the mutable-default-argument footgun B008
+# exists to catch. Disabled globally rather than per-file since every route/dependency in
+# app/api/ uses this pattern.
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test assertions and fixture setup read better as one line (a broken-up `insert into ...`
+# or a multi-field constructor call loses more clarity than it gains) — the 100-char limit
+# stays enforced for application code in app/, agents/, plugins/.
+"tests/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = ["tests/fixtures/", "migrations/"]
+# Same reasoning as pytest's `pythonpath` above: plugins/_shared and agents/_shared live at
+# the repo root, as siblings of backend/, not inside it.
+mypy_path = ".."
+# The one strict sub-flag deliberately relaxed: JSONB columns (agent_configs.config,
+# knowledge_items' free-form fields, ...), Arq's `ctx` dict, and event/subscription payloads
+# are genuinely heterogeneous by design — that's what JSONB and "whatever an agent's config
+# needs" mean. Spelling every one as `dict[str, Any]` adds noise without adding safety,
+# since `Any` opts out of checking anyway. Every other strict check (no untyped defs, no
+# implicit Any elsewhere, warn on unused ignores, etc.) stays on.
+disallow_any_generics = false
+
+[[tool.mypy.overrides]]
+module = ["arq.*", "pgvector.*", "croniter.*"]
+ignore_missing_imports = true

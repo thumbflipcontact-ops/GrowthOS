@@ -18,7 +18,11 @@
 --     enum. See docs/decisions/0008-plugin-contributed-content-types.md for why this
 --     distinction matters and where the line is drawn.
 
-create extension if not exists "pgcrypto";   -- gen_random_uuid()
+-- gen_random_uuid() is a Postgres core builtin since v13 — no pgcrypto extension needed.
+-- (Discovered during Phase 1 implementation: some minimal Postgres distributions don't
+-- bundle pgcrypto at all, and requiring it was already unnecessary on our targeted PG16.
+-- This is a DDL correctness fix, not an architectural change — nothing in ARCHITECTURE.md
+-- or LOCKED_DECISIONS.md specifies pgcrypto.)
 create extension if not exists "vector";     -- pgvector, for knowledge_items.embedding
 
 -- ============================================================================

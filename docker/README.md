@@ -23,7 +23,11 @@ docker compose -f docker-compose.yml up --build
 
 ## Status
 
-Compose file and Dockerfiles are scaffolded to match the service topology in
-`docs/deployment/DEPLOYMENT.md`; they reference `backend/` and `frontend/` application code
-that hasn't been implemented yet (Phase 1, see `ROADMAP.md`) and will not successfully build
-until that code exists.
+`backend/` is implemented (Phase 1 platform foundation — see `ARCHITECTURE_FREEZE.md` and
+`ROADMAP.md`) and the Dockerfiles/compose file reference its real module paths
+(`app.jobs.*.WorkerSettings`, `app.scheduler`), but **this Docker setup has not itself been
+built or run** — Phase 1 implementation used a Docker-free local workflow instead (see
+`scripts/README.md` and `backend/scripts/dev_postgres.py`), per explicit instruction. Treat
+this as unverified until someone runs `docker compose up --build` end to end and fixes
+whatever Docker-specific issue surfaces (there is usually at least one). `frontend/` has no
+code yet at all (Phase 2).

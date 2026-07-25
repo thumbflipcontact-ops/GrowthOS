@@ -1,17 +1,23 @@
-# Base image for backend, scheduler, and (via Dockerfile.worker) both worker pools.
+# Base image for backend, scheduler, and (via Dockerfile.worker) all worker pools.
 # See docs/deployment/DEPLOYMENT.md.
 FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY backend/pyproject.toml backend/poetry.lock* /app/backend/
-RUN pip install --no-cache-dir poetry && \
-    cd backend && poetry config virtualenvs.create false && \
-    poetry install --no-interaction --no-ansi --only main
+# backend/ is a standard PEP 621 (pyproject.toml) package — see backend/pyproject.toml.
+# `pip install .` (not `-e`) here since this is a built image, not an editable dev checkout.
+COPY backend/pyproject.toml /app/backend/pyproject.toml
+COPY backend/app /app/backend/app
+RUN pip install --no-cache-dir /app/backend
 
 COPY backend /app/backend
 COPY agents /app/agents
 COPY plugins /app/plugins
+
+# agents/_shared and plugins/_shared (the Agent/Plugin SDKs) live at the repo root, as
+# siblings of backend/ — same reasoning as backend/pyproject.toml's `pythonpath` for
+# pytest/mypy, see docs/plugins/PLUGIN_ARCHITECTURE.md and docs/agents/AGENT_ARCHITECTURE.md.
+ENV PYTHONPATH=/app
 
 WORKDIR /app/backend
 EXPOSE 8000
