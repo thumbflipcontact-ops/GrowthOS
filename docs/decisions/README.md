@@ -18,6 +18,7 @@ decision gets a new ADR that supersedes the old one, with the old one marked
 | [0008](0008-plugin-contributed-content-types.md) | Plugin-contributed content types, not a closed database enum | Accepted |
 | [0009](0009-plugin-config-schema-dynamic-ui.md) | Plugin-declared config schema, rendered by one generic frontend form | Accepted |
 | [0010](0010-envelope-encryption-for-credentials.md) | Envelope encryption for plugin credentials | Accepted |
+| [0011](0011-generic-oauth2-plugin-framework.md) | Generic OAuth2 framework in the platform layer, not per-plugin | Accepted |
 
 0006–0010 came out of the Principal Engineer design review in
 [`docs/reviews/DESIGN_REVIEW.md`](../reviews/DESIGN_REVIEW.md) — see `ARCHITECTURE.md`

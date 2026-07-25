@@ -21,6 +21,10 @@ dependencies = [
     "httpx>=0.27,<0.28",
     "python-dotenv>=1.0,<2",
     "croniter>=3.0,<4",
+    # AES-GCM for envelope encryption (ADR 0010) — see app/core/crypto.py. First real consumer
+    # is the OAuth2 framework (docs/auth/OAUTH2_ARCHITECTURE.md); the standard, well-audited
+    # choice for authenticated encryption in Python, not something worth hand-rolling.
+    "cryptography>=43,<44",
 ]
 
 [project.optional-dependencies]

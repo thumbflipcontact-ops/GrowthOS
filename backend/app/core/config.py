@@ -5,11 +5,14 @@ malformed required variable fails fast at process startup, not on the first requ
 happens to need it.
 """
 
+import os
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, PostgresDsn, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.oauth.errors import OAuthClientNotConfigured
 
 
 class Settings(BaseSettings):
@@ -38,6 +41,14 @@ class Settings(BaseSettings):
     # --- Frontend (not consumed by the backend itself; kept for .env parity) ---
     next_public_api_base_url: str = Field(default="http://localhost:8000")
 
+    # --- OAuth2 plugin framework — see docs/auth/OAUTH2_ARCHITECTURE.md ---
+    # oauth_callback_base_url must be the exact, publicly reachable origin registered as
+    # this deployment's redirect_uri with every OAuth-capable plugin's provider — see
+    # docs/auth/OAUTH2_ARCHITECTURE.md §3 on why this is one fixed URL, not
+    # project-scoped/templated.
+    oauth_callback_base_url: str = Field(default="http://localhost:8000")
+    oauth_frontend_redirect_url: str = Field(default="http://localhost:3000/settings/plugins")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
@@ -47,6 +58,25 @@ class Settings(BaseSettings):
     @property
     def is_local(self) -> bool:
         return self.environment == "local"
+
+    def oauth_client_credentials(self, plugin_key: str) -> tuple[SecretStr, SecretStr]:
+        """Per-plugin OAuth app-registration credentials — `{PLUGIN_KEY}_OAUTH_CLIENT_ID` /
+        `_CLIENT_SECRET` read directly from the environment, deliberately NOT fixed
+        `Settings` fields: the plugin set is open-ended (100+ over this system's stated
+        lifetime, ARCHITECTURE.md §1), so there is no fixed schema to declare them against —
+        see docs/auth/OAUTH2_ARCHITECTURE.md §6. Raised at first use (when a connection
+        attempt for this specific plugin is actually initiated), not at process startup,
+        since which installed plugins need OAuth credentials is only known after catalog
+        discovery has run, not at Settings-load time."""
+        prefix = plugin_key.upper().replace("-", "_")
+        client_id = os.environ.get(f"{prefix}_OAUTH_CLIENT_ID")
+        client_secret = os.environ.get(f"{prefix}_OAUTH_CLIENT_SECRET")
+        if not client_id or not client_secret:
+            raise OAuthClientNotConfigured(
+                f"{prefix}_OAUTH_CLIENT_ID and {prefix}_OAUTH_CLIENT_SECRET must both be set "
+                f"in the environment to connect plugin {plugin_key!r}."
+            )
+        return SecretStr(client_id), SecretStr(client_secret)
 
 
 @lru_cache

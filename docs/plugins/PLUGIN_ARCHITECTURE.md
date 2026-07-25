@@ -21,7 +21,7 @@ Every plugin package ships a `manifest.py`:
 
 ```python
 # plugins/reddit/manifest.py
-from growthos.plugins import PluginManifest, ContentTypeSpec
+from plugins._shared import PluginManifest, ContentTypeSpec, OAuthProviderSpec
 
 MANIFEST = PluginManifest(
     key="reddit",
@@ -32,13 +32,22 @@ MANIFEST = PluginManifest(
     ],
     config_schema=RedditConnectionConfig,      # a pydantic model → JSON Schema
     auth_type="oauth2",
+    oauth=OAuthProviderSpec(                   # required when auth_type="oauth2" — see
+        authorize_url="https://www.reddit.com/api/v1/authorize",  # docs/auth/OAUTH2_ARCHITECTURE.md
+        token_url="https://www.reddit.com/api/v1/access_token",
+        revoke_url="https://www.reddit.com/api/v1/revoke_token",
+        scopes=("read", "submit"),
+    ),
 )
 ```
 
 This one object is the complete, machine-readable description of what the plugin is, what it
 can do, what it can publish, and what configuration it needs to connect — everything the core
 system, the API, and the frontend need to know about it, without importing any of the
-plugin's actual client code.
+plugin's actual client code. `oauth` is the plugin's *entire* OAuth-side surface — the actual
+authorization-code flow, PKCE, token refresh, and CSRF state handling all live in the
+platform (`app/core/oauth/`), never in a plugin package. See
+`docs/auth/OAUTH2_ARCHITECTURE.md`.
 
 ## Discovery — a scanner, never a list
 
@@ -109,7 +118,7 @@ class Publishable(Protocol):
     async def publish(self, item: "ContentItem") -> PublishResult: ...
 
 class WebhookReceivable(Protocol):
-    async def handle_webhook(self, payload: dict) -> None: ...
+    async def handle_webhook(self, payload: dict, *, events: DomainEventPublisher) -> None: ...
 
 class MetricsQueryable(Protocol):
     async def query_metrics(self, spec: MetricsQuerySpec) -> MetricsResult: ...
@@ -128,7 +137,7 @@ implements all four.
 
 ```python
 class PluginRegistry:
-    def __init__(self, project: Project, connections: list[PluginConnection]): ...
+    def __init__(self, catalog: PluginCatalog, connections: list[PluginConnection], settings: Settings): ...
 
     def get(self, key: str, required: type[Searchable | Publishable | WebhookReceivable | MetricsQueryable]) -> Any:
         """Returns a plugin instance scoped to this project. Raises if the plugin isn't
@@ -140,6 +149,10 @@ class PluginRegistry:
         """Used by agents like conversation_finder that want to query everything connected
         and Searchable, without knowing plugin names in advance."""
 ```
+
+`settings` exists so the registry can derive the envelope-encryption master key
+(`app/core/crypto.py`, ADR 0010) when resolving a connection's credentials — see
+Credentials, below.
 
 Agents ask the registry for a *capability type*, not a plugin name, wherever possible — this
 is what lets `conversation_finder`'s code stay unchanged when a project connects a 50th
@@ -165,8 +178,11 @@ plugin-contributed one.
 
 Every plugin's `config_schema` (a pydantic model) is exposed as JSON Schema via
 `GET /api/v1/plugins/catalog`. `plugin_connections.config jsonb` holds each connection's
-actual settings (a subreddit allowlist, OAuth scopes, monitored channel IDs), validated
-against that schema on write. The frontend implements **one** generic
+actual settings (a subreddit allowlist, monitored channel IDs), validated against that
+schema on write. (OAuth scopes are handled separately, not through `config` — a plugin
+*requests* scopes via its manifest's `OAuthProviderSpec.scopes`; what a connection actually
+*was granted* lives in `plugin_connections.granted_scopes`, populated by the OAuth callback —
+see `docs/auth/OAUTH2_ARCHITECTURE.md`.) The frontend implements **one** generic
 `DynamicConnectionForm` component that renders any plugin's connection form from its schema.
 This is what makes "adding a plugin" a zero-frontend-code-change operation, not just a
 zero-backend-code-change one — see `docs/decisions/0009-plugin-config-schema-dynamic-ui.md`.
@@ -176,17 +192,57 @@ zero-backend-code-change one — see `docs/decisions/0009-plugin-config-schema-d
 `plugin_connections.credentials_encrypted` is protected by envelope encryption — a rotatable
 master key wraps a unique data key per connection, and the data key encrypts the actual
 credential. See `docs/security/SECURITY.md` and
-`docs/decisions/0010-envelope-encryption-for-credentials.md`. Plugin code receives decrypted
-credentials only inside the request-scoped plugin instance the registry constructs; nothing
-outside `plugins/` ever handles raw credentials.
+`docs/decisions/0010-envelope-encryption-for-credentials.md`. **A plugin never decrypts
+anything itself, and never sees ciphertext.** `app/core/plugin_registry.py` is the *only*
+place `credentials_encrypted` is ever decrypted; a plugin's `create_plugin()` receives a
+`ResolvedConnection` (`plugins/_shared/base.py`) with an already-decrypted, typed
+`credentials` field instead of the raw connection row:
+
+```python
+# plugins/_shared/base.py
+@dataclass(frozen=True, slots=True)
+class ResolvedConnection:
+    project_id: uuid.UUID
+    plugin_key: str
+    label: str
+    config: dict
+    credentials: Credentials | None   # OAuth2Credentials | ApiKeyCredentials | None
+
+def create_plugin(connection: ResolvedConnection) -> MyPlugin:
+    return MyPlugin(access_token=connection.credentials.access_token)  # for an oauth2 plugin
+```
+
+For `auth_type="oauth2"`, `credentials` is an `OAuth2Credentials`
+(`plugins/_shared/credentials.py`) — `access_token`, `refresh_token`, `token_type`,
+`expires_at`, `granted_scopes`, already current (the background refresh job keeps it fresh;
+a plugin is never responsible for refreshing its own token). `credentials` is `None` if the
+connection exists (config saved, capabilities chosen) but no OAuth flow has completed for it
+yet — see `docs/auth/OAUTH2_ARCHITECTURE.md` for the full OAuth2 design, including where the
+actual authorize/token/refresh/revoke logic lives (`app/core/oauth/`, not any plugin
+package).
 
 ## Rate limiting & backoff
 
-Each plugin is responsible for respecting its own external API's rate limits, via a shared
-`plugins/_shared/rate_limit.py` helper backed by Redis (token bucket per `plugin_key` +
-`project_id`). A throttled plugin returns fewer/no results and logs a warning rather than
-raising, so one rate-limited plugin never fails an entire agent run that also queries other
-plugins.
+Each plugin is responsible for respecting its own external API's rate limits, via the shared
+`plugins/_shared/rate_limit.py` helper — an in-process token bucket, one per `plugin_key` +
+`project_id` pair:
+
+```python
+from plugins._shared.rate_limit import RateLimiter
+
+limiter = RateLimiter(capacity=60, refill_rate=1.0)  # e.g. Reddit's ~60 req/min
+
+if not limiter.try_acquire(plugin_key="reddit", project_id=str(project_id)):
+    logger.warning("reddit.rate_limited", project_id=project_id)
+    return []  # fewer/no results — never raise for a self-inflicted rate limit
+```
+
+A throttled plugin returns fewer/no results and logs a warning rather than raising, so one
+rate-limited plugin never fails an entire agent run that also queries other plugins.
+`RateLimiter` is deliberately process-local (no Redis, no external dependency — see its
+docstring for the known limitation this implies under multiple worker replicas); it is not a
+mock or a stub; it is what a plugin actually uses today, and is stringent enough for the
+current single-process deployment.
 
 ## Webhooks and events
 
@@ -197,16 +253,59 @@ does. This is what gives webhook-triggered discovery a real, immediate reactivit
 instead of sitting inert until the next scheduled cycle. See `ARCHITECTURE.md` §7 and
 `docs/agents/AGENT_ARCHITECTURE.md`.
 
+Since `plugins/_shared` must never import `backend/app` (and `EventPublisher` lives there),
+`handle_webhook()` receives a `DomainEventPublisher` — a narrow, dependency-free Protocol
+(`plugins/_shared/events.py`) matching `EventPublisher.publish(project_id=, event_type=,
+payload=)`'s exact shape. The registry passes the real `EventPublisher` wherever this is
+required; it satisfies the Protocol structurally, no plugin-side import of `backend/app`
+required:
+
+```python
+# plugins/_shared/events.py
+class DomainEventPublisher(Protocol):
+    async def publish(self, *, project_id: UUID, event_type: str, payload: dict) -> object: ...
+```
+
+```python
+# inside a WebhookReceivable plugin's handle_webhook()
+knowledge_item = self._client.parse(payload)
+await self._write_row(knowledge_item)  # whatever this plugin's own persistence path is
+await events.publish(
+    project_id=knowledge_item.project_id,
+    event_type="knowledge_item.created",
+    payload={"knowledge_item_id": str(knowledge_item.id)},
+)
+```
+
+The webhook ingress route itself (`POST /webhooks/{plugin_key}`, resolving the right
+connection, opening the transaction `handle_webhook()` writes inside) is Phase 2+ — it ships
+alongside the first `WebhookReceivable` plugin (`email`, `slack`, or `discord`), all
+explicitly out of scope until then. What's fixed now is the SDK contract: a
+`WebhookReceivable` plugin has a real, dependency-free way to fulfill what this section
+requires, which it did not before.
+
 ## Interface versioning
 
-Every manifest declares `interface_version`. The running core supports a range of versions;
-a plugin outside that range fails at startup, not at first invocation. This exists because,
-over a 100+-plugin, multi-year lifetime, the `GrowthOSPlugin`/capability Protocol contract
-will eventually need a breaking change, and there must be a way to know which installed
-plugins were written against which version rather than discovering it as a runtime failure.
-The deprecation policy (how long an old interface version stays supported after a new one
-ships) should be documented here once the first breaking change is actually being planned —
-not speculatively now.
+Every manifest declares `interface_version` as `"{major}.{minor}"`. The running core has its
+own `CORE_INTERFACE_VERSION` (`app/core/plugin_catalog.py`); a plugin is compatible if its
+declared **major** version matches the core's — same-major-any-minor is accepted. A plugin
+outside that range fails at startup (logged, excluded from the catalog), not at first
+invocation.
+
+The convention: bump the core's minor version for an additive, non-breaking change to the
+`GrowthOSPlugin`/capability Protocol contract (a new optional capability, a new field on a
+result dataclass with a default); bump the major version only for a genuine breaking change
+(removing/renaming a Protocol method, changing a required field). Existing installed plugins
+declaring the old major version then fail discovery loudly at the next process start, rather
+than loading and failing unpredictably the first time the changed surface is actually used.
+
+This exists because, over a 100+-plugin, multi-year lifetime, the contract will eventually
+need a breaking change, and there must be a way to know which installed plugins were written
+against which version rather than discovering it as a runtime failure. The deprecation
+policy — how long an old major version stays supported after a new one ships, whether the
+core ever supports two majors side by side — is still not decided; that's a real decision to
+make once a first breaking change is actually being planned, not speculatively now. What's
+fixed today is the mechanical compatibility check itself, not that future policy.
 
 ## Trust model
 
@@ -243,12 +342,26 @@ plugins' own READMEs carried under the original design.
 
 ## How to add a new plugin
 
-1. Create `plugins/<name>/` — `manifest.py`, `client.py`, `plugin.py` (implementing
-   `GrowthOSPlugin` plus whichever capability Protocols apply), `README.md`, `tests/`.
-2. Declare capabilities, content types, and `config_schema` honestly in the manifest — don't
-   declare `publishable` if you haven't implemented and tested `publish()`.
-3. Register the entry point in `pyproject.toml`.
-4. Write tests, including the shared contract test suite
-   (`plugins/_shared/tests/test_plugin_contract.py`) run against your plugin, parameterized —
-   this verifies your plugin actually honors whichever Protocols it claims to implement.
-5. Install the package and restart. **No other file in the repository needs to change.**
+See `docs/plugins/QUICKSTART.md` for the full runnable, step-by-step walkthrough (install,
+verify discovery, run tests, connect to a project). Summary:
+
+1. `python scripts/new_plugin.py <name> --capabilities searchable,publishable` scaffolds
+   `plugins/<name>/manifest.py`, `plugin.py` (implementing `GrowthOSPlugin` plus whichever
+   capability Protocols you asked for — every method a stub that raises
+   `NotImplementedError`), `README.md`, `pyproject.toml`, and `tests/test_contract.py`. There
+   is no required `client.py` — separating a plugin's raw HTTP client from `plugin.py` is a
+   convention you can adopt if it helps, not a mandated file.
+2. Fill in the manifest's capabilities, content types, and `config_schema` honestly — don't
+   declare `publishable` if you haven't implemented and tested `publish()`. For
+   `--auth-type oauth2`, the scaffold also generates an `oauth=OAuthProviderSpec(...)` stub
+   with TODO placeholders — fill in the real `authorize_url`/`token_url`/`scopes` from the
+   provider's docs; see `docs/auth/OAUTH2_ARCHITECTURE.md` for the full OAuth2 design (no
+   OAuth code to write in the plugin itself, only this metadata).
+3. Implement each stub method for real.
+4. The entry point in `pyproject.toml` is already generated by step 1.
+5. Write tests, including the shared contract test suite
+   (`plugins/_shared/tests/test_plugin_contract.py`, already wired up by
+   `tests/test_contract.py` from step 1) run against your plugin — this verifies your plugin
+   actually honors whichever Protocols it claims to implement.
+6. Install the package (`uv pip install -e plugins/<name> --python backend/.venv`) and
+   restart the API process. **No other file in the repository needs to change.**

@@ -8,10 +8,11 @@ structurally (`isinstance` against a `Protocol`), so a plugin that doesn't imple
 `Publishable` cannot be handed to code expecting one, independent of what its manifest
 claims.
 
-No plugin implementations exist in this repository yet by design — see ROADMAP.md Phase 1
-("Do NOT implement: Reddit plugin ... Any plugin-specific functionality"). This module is
-the contract Phase 1 proves is real (via a trivial test-fixture plugin, see
-backend/tests/fixtures/dummy_plugin/), not a working integration.
+No real (non-fixture) plugin implementation exists in this repository yet by design — see
+ROADMAP.md Phase 1 ("Do NOT implement: Reddit plugin ... Any plugin-specific functionality").
+This module is the contract Phase 1 proves is real, via `plugins/dummy/` — a trivial
+test-fixture plugin (see its `README.md`), not a working integration with any real external
+system.
 """
 
 from __future__ import annotations
@@ -21,7 +22,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from plugins._shared.credentials import Credentials
+
 if TYPE_CHECKING:
+    from plugins._shared.events import DomainEventPublisher
     from plugins._shared.manifest import PluginManifest
 
 
@@ -63,6 +67,22 @@ class PublishResult:
     error: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvedConnection:
+    """What `create_plugin()` receives — see docs/auth/OAUTH2_ARCHITECTURE.md §1, §4. Replaces
+    passing the raw `PluginConnection` ORM row (which carried `credentials_encrypted` as
+    opaque bytes and forced `plugins/_shared` either to import `backend/app`'s ORM model or
+    stay typed `object`). The registry decrypts and builds this; a plugin's `create_plugin`
+    never sees ciphertext, never imports anything from `backend/app`, and never handles
+    encryption/decryption itself, for ANY `auth_type` — not just OAuth."""
+
+    project_id: uuid.UUID
+    plugin_key: str
+    label: str
+    config: dict
+    credentials: Credentials | None
+
+
 @runtime_checkable
 class Searchable(Protocol):
     async def search(self, query: PluginQuery) -> list[PluginResult]: ...
@@ -79,7 +99,14 @@ class Publishable(Protocol):
 
 @runtime_checkable
 class WebhookReceivable(Protocol):
-    async def handle_webhook(self, payload: dict) -> None: ...
+    async def handle_webhook(self, payload: dict, *, events: DomainEventPublisher) -> None:
+        """`events` is the transactional-outbox publisher (see plugins/_shared/events.py) —
+        write your resulting row via whatever the plugin was given at construction time, then
+        call `events.publish(...)` before returning, so the row and its event commit in the
+        same transaction as every other write path in the system. The caller (the webhook
+        ingress route, Phase 2+) is responsible for the actual transaction boundary, exactly
+        as documented for `app.core.events.EventPublisher`."""
+        ...
 
 
 @runtime_checkable
@@ -89,7 +116,7 @@ class MetricsQueryable(Protocol):
 
 @runtime_checkable
 class GrowthOSPlugin(Protocol):
-    manifest: "PluginManifest"
+    manifest: PluginManifest
 
     async def health_check(self) -> bool: ...
 

@@ -57,6 +57,11 @@ _REDACTED_KEYS = {
     "openai_api_key",
     "session_token",
     "authorization",
+    # OAuth2 framework (docs/auth/OAUTH2_ARCHITECTURE.md) — access/refresh tokens and the
+    # per-plugin OAuth app client secret are exactly the kind of value this set exists for.
+    "access_token",
+    "refresh_token",
+    "client_secret",
 }
 
 

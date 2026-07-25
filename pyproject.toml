@@ -1,0 +1,17 @@
+# Repo root. This file exists ONLY so `pytest` can be run directly against a plugin's or
+# agent's own tests/ folder — e.g. `pytest plugins/dummy/tests` — using backend's dev
+# virtualenv, without every plugin author needing to know that `plugins/_shared` and
+# `agents/_shared` only become importable with the repo root on `sys.path`. See
+# docs/plugins/PLUGIN_ARCHITECTURE.md's quickstart and CONTRIBUTING.md "Adding a new plugin".
+#
+# backend/ has its own pyproject.toml as the actual installable package, with its own
+# [tool.pytest.ini_options] scoped to backend/tests/ (testpaths = ["tests"]). This file does
+# not build or install anything, and does not change how `cd backend && pytest` behaves —
+# it only matters when pytest's rootdir search lands here, i.e. when a plugin's or agent's
+# tests are run from the repo root instead.
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+markers = [
+    "integration: requires a real (embedded) Postgres instance via pgserver",
+]

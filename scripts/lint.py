@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Runs the same checks CI runs: ruff (lint) and mypy --strict (type check) against
-backend/app/, plus ruff against agents/ and plugins/. See scripts/README.md and
-CONTRIBUTING.md "Code style".
+"""Runs the same checks CI runs: ruff (lint) against all of backend/ (app/ and tests/;
+migrations/versions/ is excluded, see backend/pyproject.toml) and mypy --strict against
+backend/app/. See scripts/README.md and CONTRIBUTING.md "Code style".
+
+Does NOT lint agents/ or plugins/ — they're siblings of backend/, not under it, and ruff's
+config/first-party-import detection is rooted at backend/pyproject.toml. Lint your own
+plugin's code directly instead: `backend/.venv/Scripts/ruff.exe check --config
+backend/pyproject.toml plugins/<name>` (run from the repo root) — see
+docs/plugins/QUICKSTART.md.
 
 Run: python scripts/lint.py
 """

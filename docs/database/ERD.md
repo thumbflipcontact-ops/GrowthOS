@@ -7,6 +7,12 @@ DDL ever disagree, the DDL wins — update this file.
 is now `text` (not a native enum, so it's not shown as `enum` below); `plugin_connections`
 gains `config` and the envelope-encryption columns; `content_items` gains `version`.
 
+**OAuth2 framework** (ADR 0011, `docs/auth/OAUTH2_ARCHITECTURE.md`) — `plugin_connections`
+gains `label` (multiple connections per plugin per project), `token_expires_at` and
+`granted_scopes` (plaintext), and `plugin_connection_status` gains the `expired` value.
+Relationships below are unchanged — this is additive columns on an existing entity, not a new
+one.
+
 ```mermaid
 erDiagram
     ORGANIZATIONS ||--o{ MEMBERSHIPS : has

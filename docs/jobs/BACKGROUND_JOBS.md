@@ -32,8 +32,13 @@ the event-dispatch mechanism (below), reinforcing rather than complicating this 
 4. **Publish jobs.** Enqueued when a `content_item` transitions to `approved` — the only
    trigger for a publish attempt (`ARCHITECTURE.md` §8).
 5. **Enrichment/maintenance jobs.** Knowledge Base Agent's periodic enrichment pass, plugin
-   `health_check()` polling, credential-refresh jobs for OAuth tokens nearing expiry,
-   `plugin_catalog` refresh on startup.
+   `health_check()` polling, `plugin_catalog` refresh on startup, and — implemented alongside
+   the OAuth2 framework (`docs/auth/OAUTH2_ARCHITECTURE.md`) — `app/jobs/oauth_refresh.py`,
+   a periodic sweep that refreshes any `connected` OAuth token nearing expiry. Locks
+   candidate rows (`FOR UPDATE SKIP LOCKED`) so a concurrent sweep run or a user-triggered
+   reconnect never double-processes the same connection. A permanent failure
+   (`invalid_grant`) transitions the connection to `expired`; a transient failure (network,
+   provider 5xx) leaves it `connected` for the next cycle to retry.
 
 ## Queues
 

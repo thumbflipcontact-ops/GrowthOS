@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.core.oauth.errors import OAuthClientNotConfigured
 
 
 def _base_env() -> dict:
@@ -49,3 +50,46 @@ def test_secrets_are_not_plain_strings() -> None:
     # docs/logging/LOGGING.md "What never gets logged".
     assert "x" not in str(settings.secret_key)
     assert settings.secret_key.get_secret_value() == "x"
+
+
+def test_oauth_client_credentials_reads_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("REDDIT_OAUTH_CLIENT_ID", "the-client-id")
+    monkeypatch.setenv("REDDIT_OAUTH_CLIENT_SECRET", "the-client-secret")
+    settings = Settings(**_base_env())
+
+    client_id, client_secret = settings.oauth_client_credentials("reddit")
+    assert client_id.get_secret_value() == "the-client-id"
+    assert client_secret.get_secret_value() == "the-client-secret"
+
+
+def test_oauth_client_credentials_handles_hyphenated_plugin_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOOGLE_SEARCH_CONSOLE_OAUTH_CLIENT_ID", "id")
+    monkeypatch.setenv("GOOGLE_SEARCH_CONSOLE_OAUTH_CLIENT_SECRET", "secret")
+    settings = Settings(**_base_env())
+
+    client_id, _ = settings.oauth_client_credentials("google-search-console")
+    assert client_id.get_secret_value() == "id"
+
+
+def test_oauth_client_credentials_raises_when_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("UNCONFIGURED_PLUGIN_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.delenv("UNCONFIGURED_PLUGIN_OAUTH_CLIENT_SECRET", raising=False)
+    settings = Settings(**_base_env())
+
+    with pytest.raises(OAuthClientNotConfigured):
+        settings.oauth_client_credentials("unconfigured_plugin")
+
+
+def test_oauth_client_credentials_raises_when_only_one_half_is_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HALF_CONFIGURED_OAUTH_CLIENT_ID", "id-only")
+    monkeypatch.delenv("HALF_CONFIGURED_OAUTH_CLIENT_SECRET", raising=False)
+    settings = Settings(**_base_env())
+
+    with pytest.raises(OAuthClientNotConfigured):
+        settings.oauth_client_credentials("half_configured")
+
+
+def test_oauth_settings_have_sane_local_defaults() -> None:
+    settings = Settings(**_base_env())
+    assert settings.oauth_callback_base_url == "http://localhost:8000"
+    assert settings.oauth_frontend_redirect_url == "http://localhost:3000/settings/plugins"

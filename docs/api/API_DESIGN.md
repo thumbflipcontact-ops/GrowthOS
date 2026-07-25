@@ -25,8 +25,42 @@ crossing the schema design goes out of its way to avoid.
                                                                              frontend's generic connection form,
                                                                              see docs/plugins/PLUGIN_ARCHITECTURE.md
 /api/v1/projects/{project_id}
-/api/v1/projects/{project_id}/plugin-connections                           POST body validated against the
-                                                                             target plugin's config_schema
+/api/v1/projects/{project_id}/plugin-connections                           GET — list; POST body validated
+                                                                             against the target plugin's
+                                                                             config_schema (rejects unknown
+                                                                             plugin_key, undeclared
+                                                                             capabilities, or a duplicate
+                                                                             connection for the project).
+                                                                             Credentials are wired separately,
+                                                                             per auth_type — not part of this
+                                                                             request body (see
+                                                                             docs/auth/AUTHENTICATION.md).
+                                                                             Writes an audit_log row — see
+                                                                             app/services/plugin_connection.py.
+/api/v1/projects/{project_id}/plugin-connections/{plugin_key}/oauth/start  POST — returns
+                                                                             {authorize_url} for the frontend
+                                                                             to navigate the browser to; also
+                                                                             how reconnecting an expired/error
+                                                                             connection is initiated. Body:
+                                                                             {label?} (default "default"). See
+                                                                             docs/auth/OAUTH2_ARCHITECTURE.md.
+/api/v1/projects/{project_id}/plugin-connections/{connection_id}/oauth/disconnect
+                                                                             POST — 204. Best-effort revokes at
+                                                                             the provider, always clears local
+                                                                             credentials regardless.
+/api/v1/oauth/{plugin_key}/callback                                        GET — NOT project-scoped (a
+                                                                             provider's registered redirect_uri
+                                                                             must be one fixed URL; identity
+                                                                             travels in the signed `state`
+                                                                             param instead). Hit by a top-level
+                                                                             browser redirect from the
+                                                                             provider, not a frontend fetch() —
+                                                                             always responds 302 to
+                                                                             Settings.oauth_frontend_redirect_url
+                                                                             with a query param indicating
+                                                                             success/failure, never a raw JSON
+                                                                             error body. See
+                                                                             docs/auth/OAUTH2_ARCHITECTURE.md.
 /api/v1/projects/{project_id}/agent-configs
 /api/v1/projects/{project_id}/agent-configs/{agent_key}/runs
 /api/v1/projects/{project_id}/agent-configs/{agent_key}/runs/trigger      POST — on-demand run

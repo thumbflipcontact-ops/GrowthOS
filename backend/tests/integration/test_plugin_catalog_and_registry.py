@@ -14,7 +14,9 @@ import uuid
 
 import pytest
 from plugins._shared.base import MetricsQueryable, PluginQuery, Publishable, Searchable
+from plugins._shared.manifest import PluginManifest
 
+from app.core.config import Settings
 from app.core.errors import CapabilityNotSupported
 from app.core.plugin_catalog import (
     PluginCatalog,
@@ -25,6 +27,19 @@ from app.core.plugin_registry import PluginRegistry
 from app.models.plugin import PluginCapability, PluginConnection
 
 pytestmark = pytest.mark.integration
+
+# Built directly (not via get_settings(), which needs DATABASE_URL — only set once the
+# postgres_url fixture actually runs, not at module import time) — none of these tests touch
+# the database or decrypt real credentials, so placeholder values are enough. Matches
+# test_config.py's _base_env() pattern.
+_SETTINGS = Settings(
+    database_url="postgresql://x:x@localhost:5432/x",
+    redis_url="redis://localhost:6379/0",
+    anthropic_api_key="x",
+    openai_api_key="x",
+    secret_key="x",
+    credential_master_key="x",
+)
 
 
 def test_discover_installed_plugins_finds_the_dummy_fixture() -> None:
@@ -63,7 +78,7 @@ async def test_registry_resolves_a_capability_the_plugin_declares() -> None:
     connection = PluginConnection(
         project_id=uuid.uuid4(), plugin_key="dummy", capabilities_enabled=[PluginCapability.SEARCHABLE]
     )
-    registry = PluginRegistry(catalog, [connection])
+    registry = PluginRegistry(catalog, [connection], _SETTINGS)
 
     plugin = registry.get("dummy", Searchable)
     results = await plugin.search(PluginQuery(project_id=connection.project_id, terms=["test"]))
@@ -78,7 +93,7 @@ async def test_registry_rejects_capability_the_manifest_does_not_declare() -> No
     connection = PluginConnection(
         project_id=uuid.uuid4(), plugin_key="dummy", capabilities_enabled=[PluginCapability.SEARCHABLE]
     )
-    registry = PluginRegistry(catalog, [connection])
+    registry = PluginRegistry(catalog, [connection], _SETTINGS)
 
     with pytest.raises(CapabilityNotSupported):
         registry.get("dummy", Publishable)
@@ -94,7 +109,7 @@ async def test_registry_rejects_capability_project_has_not_enabled() -> None:
     connection = PluginConnection(
         project_id=uuid.uuid4(), plugin_key="dummy", capabilities_enabled=[]  # nothing enabled
     )
-    registry = PluginRegistry(catalog, [connection])
+    registry = PluginRegistry(catalog, [connection], _SETTINGS)
 
     with pytest.raises(CapabilityNotSupported):
         registry.get("dummy", Searchable)
@@ -104,10 +119,63 @@ async def test_registry_rejects_capability_project_has_not_enabled() -> None:
 async def test_registry_rejects_unknown_plugin_key() -> None:
     catalog = PluginCatalog()
     catalog.refresh(discover_installed_plugins())
-    registry = PluginRegistry(catalog, connections=[])
+    registry = PluginRegistry(catalog, connections=[], settings=_SETTINGS)
 
     with pytest.raises(CapabilityNotSupported):
         registry.get("not-a-real-plugin", Searchable)
+
+
+@pytest.mark.asyncio
+async def test_registry_get_propagates_a_broken_plugins_construction_error() -> None:
+    """get() is fail-fast: a plugin that declares a capability, is enabled, but whose own
+    create_plugin() blows up (here: the module doesn't even exist) raises rather than being
+    silently swallowed — see plugin_registry.py's get() docstring."""
+    catalog = PluginCatalog()
+    catalog.refresh(
+        [
+            *discover_installed_plugins(),
+            _broken_manifest(),
+        ]
+    )
+    connection = PluginConnection(
+        project_id=uuid.uuid4(),
+        plugin_key="broken",
+        capabilities_enabled=[PluginCapability.SEARCHABLE],
+    )
+    registry = PluginRegistry(catalog, [connection], _SETTINGS)
+
+    with pytest.raises(ModuleNotFoundError):
+        registry.get("broken", Searchable)
+
+
+@pytest.mark.asyncio
+async def test_registry_all_with_capability_skips_a_broken_plugin_but_returns_the_rest() -> None:
+    """all_with_capability() is resilient by design: the same broken plugin as above must not
+    prevent the healthy `dummy` plugin from being returned alongside it — see
+    plugin_registry.py's all_with_capability() docstring."""
+    catalog = PluginCatalog()
+    catalog.refresh(
+        [
+            *discover_installed_plugins(),
+            _broken_manifest(),
+        ]
+    )
+    dummy_connection = PluginConnection(
+        project_id=uuid.uuid4(), plugin_key="dummy", capabilities_enabled=[PluginCapability.SEARCHABLE]
+    )
+    broken_connection = PluginConnection(
+        project_id=dummy_connection.project_id,
+        plugin_key="broken",
+        capabilities_enabled=[PluginCapability.SEARCHABLE],
+    )
+    registry = PluginRegistry(catalog, [dummy_connection, broken_connection], _SETTINGS)
+
+    results = registry.all_with_capability(Searchable)
+    assert len(results) == 1  # only dummy — broken was skipped, not raised
+
+
+def _broken_manifest() -> PluginManifest:
+    return PluginManifest(key="broken", interface_version="1.0", capabilities=("searchable",))
 
 
 @pytest.mark.asyncio
@@ -117,7 +185,7 @@ async def test_registry_all_with_capability_filters_correctly() -> None:
     connection = PluginConnection(
         project_id=uuid.uuid4(), plugin_key="dummy", capabilities_enabled=[PluginCapability.SEARCHABLE]
     )
-    registry = PluginRegistry(catalog, [connection])
+    registry = PluginRegistry(catalog, [connection], _SETTINGS)
 
     assert len(registry.all_with_capability(Searchable)) == 1
     assert len(registry.all_with_capability(MetricsQueryable)) == 0

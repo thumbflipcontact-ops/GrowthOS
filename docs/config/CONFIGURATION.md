@@ -51,6 +51,14 @@ LOG_LEVEL=INFO
 
 # Frontend
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+
+# OAuth2 plugin framework — see docs/auth/OAUTH2_ARCHITECTURE.md
+OAUTH_CALLBACK_BASE_URL=http://localhost:8000     # the fixed redirect_uri origin registered
+                                                   # with every OAuth-capable plugin's provider
+OAUTH_FRONTEND_REDIRECT_URL=http://localhost:3000/settings/plugins
+# {PLUGIN_KEY}_OAUTH_CLIENT_ID / _CLIENT_SECRET, one pair per installed OAuth-capable
+# plugin — read directly from the environment, not a fixed Settings field (the plugin set
+# is open-ended). E.g. REDDIT_OAUTH_CLIENT_ID / REDDIT_OAUTH_CLIENT_SECRET.
 ```
 
 `.env.example` at the repo root is kept in sync with every variable `Settings` declares —
@@ -70,8 +78,14 @@ class Settings(BaseSettings):
     credential_master_key: SecretStr
     environment: Literal["local", "staging", "production"] = "local"
     log_level: str = "INFO"
+    oauth_callback_base_url: str = "http://localhost:8000"
+    oauth_frontend_redirect_url: str = "http://localhost:3000/settings/plugins"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+
+    def oauth_client_credentials(self, plugin_key: str) -> tuple[SecretStr, SecretStr]:
+        """{PLUGIN_KEY}_OAUTH_CLIENT_ID/_CLIENT_SECRET, read from the environment directly —
+        see docs/auth/OAUTH2_ARCHITECTURE.md §6 for why these aren't fixed Settings fields."""
 ```
 
 Secrets are typed `SecretStr` so they never accidentally render in a stack trace, a repr, or

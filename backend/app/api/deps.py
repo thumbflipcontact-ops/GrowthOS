@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthenticationError, AuthorizationError, NotFoundError
+from app.core.plugin_catalog import PluginCatalog
 from app.core.security import SESSION_COOKIE_NAME, verify_session_token
 from app.models.identity import Organization, User
 from app.models.project import Project
@@ -38,6 +39,13 @@ async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
 
 def get_settings_dep() -> Settings:
     return get_settings()
+
+
+def get_plugin_catalog(request: Request) -> PluginCatalog:
+    """The process-wide catalog built at startup (app/main.py's lifespan) — read-only from
+    a request handler's perspective. See app/core/plugin_catalog.py."""
+    catalog: PluginCatalog = request.app.state.plugin_catalog
+    return catalog
 
 
 async def get_current_user(

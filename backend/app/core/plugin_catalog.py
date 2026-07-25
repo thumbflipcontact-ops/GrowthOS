@@ -24,11 +24,26 @@ logger = structlog.get_logger()
 
 ENTRY_POINT_GROUP = "growthos.plugins"
 
-# The interface version(s) this running core supports. A discovered plugin manifest
-# declaring a version outside this set fails discovery loudly (logged, excluded from the
-# catalog) rather than being silently loaded — see
-# docs/plugins/PLUGIN_ARCHITECTURE.md §Interface versioning.
-SUPPORTED_INTERFACE_VERSIONS = frozenset({"1.0"})
+# This running core's own interface version, `"{major}.{minor}"`. Bump the minor component
+# for an additive, non-breaking change to the GrowthOSPlugin/capability Protocol contract
+# (e.g. a new optional capability); bump the major component only for a genuine breaking
+# change. See docs/plugins/PLUGIN_ARCHITECTURE.md §Interface versioning.
+CORE_INTERFACE_VERSION = "1.0"
+
+
+def _interface_version_is_compatible(declared: str) -> bool:
+    """A plugin is compatible with this core if its declared major version matches the
+    core's — same-major-any-minor is accepted (by the convention above, a minor bump never
+    removes or changes existing behavior a plugin could be relying on); a different major
+    means the contract itself changed underneath the plugin, which must fail discovery
+    loudly rather than load and fail unpredictably at first use. A malformed version string
+    (not `{int}.{int}...`) is always incompatible."""
+    try:
+        declared_major = int(declared.split(".", 1)[0])
+    except (ValueError, IndexError):
+        return False
+    core_major = int(CORE_INTERFACE_VERSION.split(".", 1)[0])
+    return declared_major == core_major
 
 
 def discover_installed_plugins() -> list[PluginManifest]:
@@ -55,13 +70,22 @@ def discover_installed_plugins() -> list[PluginManifest]:
             )
             continue
 
-        if candidate.interface_version not in SUPPORTED_INTERFACE_VERSIONS:
+        if not _interface_version_is_compatible(candidate.interface_version):
             logger.error(
                 "plugin_discovery.unsupported_interface_version",
                 plugin_key=candidate.key,
                 declared=candidate.interface_version,
-                supported=sorted(SUPPORTED_INTERFACE_VERSIONS),
+                core_version=CORE_INTERFACE_VERSION,
             )
+            continue
+
+        # See docs/auth/OAUTH2_ARCHITECTURE.md §4 — an oauth2 manifest with no
+        # OAuthProviderSpec would pass every other check and only fail at the first real
+        # connection attempt; reject it here instead, the same way an unsupported
+        # interface_version is rejected above. Mirrored at test time by the shared contract
+        # suite (plugins/_shared/tests/test_plugin_contract.py).
+        if candidate.auth_type == "oauth2" and candidate.oauth is None:
+            logger.error("plugin_discovery.missing_oauth_spec", plugin_key=candidate.key)
             continue
 
         manifests.append(candidate)

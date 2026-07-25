@@ -75,16 +75,25 @@ ordering problems every time the catalog is rebuilt at startup (connections must
 allowed to be silently deleted or fail to load because the catalog rebuild is mid-flight).
 
 ### `plugin_connections`
-One row per (project, plugin). `capabilities_enabled` is explicit and separate from what the
-plugin *code* declares in `plugin_catalog.capabilities` — a project might have valid Reddit
-credentials capable of posting, but the user has deliberately not enabled `publishable` for
-it yet. This is a second, project-level safety gate on top of the plugin's own capability
-contract, checked in addition to, not instead of, the code-level structural check (see
+One row per (project, plugin, label) — `label` (default `"default"`) exists specifically so
+a project can hold more than one connection to the same plugin (two Reddit accounts, two
+Slack workspaces) without weakening the one-row-per-plugin case, which needs no special
+handling. `capabilities_enabled` is explicit and separate from what the plugin *code*
+declares in `plugin_catalog.capabilities` — a project might have valid Reddit credentials
+capable of posting, but the user has deliberately not enabled `publishable` for it yet. This
+is a second, project-level safety gate on top of the plugin's own capability contract,
+checked in addition to, not instead of, the code-level structural check (see
 `docs/plugins/PLUGIN_ARCHITECTURE.md` §"Two independent gates"). New in V2: `config` (JSONB,
 validated against `plugin_catalog.config_schema` — the subreddit allowlist, OAuth scopes,
 etc. that used to have no home and risked being duplicated into agent config) and the
 envelope-encryption columns (`credentials_encrypted` now paired with
-`credential_data_key_wrapped` — see `docs/security/SECURITY.md`).
+`credential_data_key_wrapped` — see `docs/security/SECURITY.md`). Added alongside the OAuth2
+framework (`docs/auth/OAUTH2_ARCHITECTURE.md`, ADR 0011): `token_expires_at` and
+`granted_scopes`, both **plaintext** — neither is a credential, and keeping them outside the
+encrypted envelope is what lets the refresh sweep query by expiry and a status API answer
+"what did this authorize" without any decrypt call; the `expired` status value, distinct from
+`error`, separates "will self-heal via background refresh" from "needs a human to
+reconnect."
 
 ### `agent_configs` / `agent_runs`
 `agent_configs` is the enable/schedule/config record; `agent_runs` is the append-only audit

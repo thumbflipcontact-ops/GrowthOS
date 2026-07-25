@@ -27,12 +27,18 @@ class PluginConnectionRepository(Repository[PluginConnection]):
         )
         return list(result.scalars().all())
 
-    async def get_by_project_and_key(
-        self, project_id: uuid.UUID, plugin_key: str
+    async def get_by_project_plugin_and_label(
+        self, project_id: uuid.UUID, plugin_key: str, label: str = "default"
     ) -> PluginConnection | None:
+        """`label` disambiguates multiple connections to the same plugin within one project
+        (two Reddit accounts, two Slack workspaces) — see
+        docs/auth/OAUTH2_ARCHITECTURE.md §2. Matches `plugin_connections`'s
+        `unique(project_id, plugin_key, label)` constraint exactly."""
         result = await self.session.execute(
             select(PluginConnection).where(
-                PluginConnection.project_id == project_id, PluginConnection.plugin_key == plugin_key
+                PluginConnection.project_id == project_id,
+                PluginConnection.plugin_key == plugin_key,
+                PluginConnection.label == label,
             )
         )
         return result.scalar_one_or_none()

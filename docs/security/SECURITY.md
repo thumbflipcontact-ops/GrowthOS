@@ -56,6 +56,17 @@ is small enough to actually run on a schedule or in response to a suspected leak
 This is the concrete procedure that replaces the previous version's unresolved "rotation is
 undefined" gap — it should be exercised at least once in staging before the first real
 production credential is ever stored, so it's a tested runbook, not a theoretical one.
+`app/core/crypto.py` implements the primitive this runbook needs (`rewrap_data_key`) — an
+operational rotation job/script that walks every row and calls it is not itself built yet
+(out of scope for the OAuth2 framework; see `docs/reviews/OAUTH_IMPLEMENTATION_REPORT.md`).
+
+**OAuth2 tokens use this exact mechanism, not a separate one.** `app/services/
+oauth_connection.py` calls the same `envelope_encrypt`/`envelope_decrypt` every other plugin
+credential uses — an access/refresh token pair is JSON-serialized and encrypted like any
+other credential payload. See `docs/auth/OAUTH2_ARCHITECTURE.md` §6 for OAuth-specific
+considerations layered on top of this (CSRF-protected state, PKCE, redirect URI validation,
+best-effort revocation on disconnect, refresh-race safety) — none of them change how
+credentials are actually stored at rest.
 
 ## The approval gate is the primary security control, not just a UX feature
 

@@ -50,13 +50,34 @@ addition, not a v1 requirement — see `ROADMAP.md`.
 These are different things and are stored differently. User authentication is about who's
 allowed to use GrowthOS; plugin credentials (`plugin_connections.credentials_encrypted`,
 protected by envelope encryption) are about what GrowthOS is allowed to do on external
-systems on the user's behalf. Plugin OAuth flows (connecting a Reddit/LinkedIn/etc. account)
-use the standard OAuth2 authorization-code flow, with the resulting tokens encrypted at
-rest — see `docs/security/SECURITY.md`. A compromised GrowthOS session should not, by itself,
-be enough to exfiltrate plugin credentials in plaintext; decryption happens only inside the
-plugin instance construction path (`docs/plugins/PLUGIN_ARCHITECTURE.md`), not as part of any
-read endpoint's response. Connecting, disconnecting, or reconfiguring a plugin connection
-writes an `audit_log` row.
+systems on the user's behalf. A compromised GrowthOS session should not, by itself, be
+enough to exfiltrate plugin credentials in plaintext; decryption happens only inside the
+plugin instance construction path (`app/core/plugin_registry.py`,
+`docs/plugins/PLUGIN_ARCHITECTURE.md`), not as part of any read endpoint's response.
+Connecting, disconnecting, or reconfiguring a plugin connection writes an `audit_log` row.
+
+**Plugin OAuth flows** (connecting a Reddit/LinkedIn/Slack/etc. account) use a generic,
+provider-agnostic OAuth2 subsystem (`app/core/oauth/`), not per-plugin OAuth code — see
+`docs/auth/OAUTH2_ARCHITECTURE.md` and ADR 0011 for the full design, and
+`docs/reviews/OAUTH_IMPLEMENTATION_REPORT.md` for what's actually built. Summary:
+
+- The authorization-code flow runs against whatever `authorize_url`/`token_url` a plugin's
+  manifest declares (`OAuthProviderSpec`), with optional PKCE (RFC 7636) per-provider.
+- CSRF protection is a signed, stateless, 10-minute state token (same `itsdangerous`
+  mechanism as the session cookie above, different payload and salt) — not server-side
+  session storage. The OAuth callback additionally requires the state's embedded `user_id`
+  to match the currently authenticated session.
+- The callback route (`GET /api/v1/oauth/{plugin_key}/callback`) is deliberately **not**
+  project-scoped in its path, unlike every other plugin-connection route — a provider's
+  registered `redirect_uri` must be one fixed URL; project/plugin/label identity travels
+  inside the signed state instead.
+- Resulting tokens are envelope-encrypted exactly as any other plugin credential (this
+  section, ADR 0010) — no separate encryption path for OAuth.
+- Token refresh is an internal background job (`app/jobs/oauth_refresh.py`), never triggered
+  by a user-facing request — there is no refresh endpoint.
+- A permanent refresh failure (the refresh token itself revoked/expired) transitions the
+  connection to a distinct `expired` status, separate from the general `error` status, so a
+  "needs reconnect" UI state is queryable rather than inferred from free-form error text.
 
 ## Webhook authentication
 

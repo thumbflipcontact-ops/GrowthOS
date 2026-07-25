@@ -15,6 +15,7 @@ remains fully supported and unchanged for anyone who prefers it).
 | `migrate.py` | Runs Alembic migrations against `DATABASE_URL` — `python scripts/migrate.py` (upgrade to head) or pass through any Alembic subcommand, e.g. `python scripts/migrate.py revision --autogenerate -m "..."` |
 | `seed.py` | Seeds a local database with a demo org/user/project — refuses to run unless `ENVIRONMENT=local` |
 | `lint.py` | Runs `ruff` and `mypy --strict` against `backend/` — the same checks CI runs |
+| `new_plugin.py` | Scaffolds a new plugin package at `plugins/<name>/` — manifest, `plugin.py` stub, `pyproject.toml` with the entry-point + packaging boilerplate already correct, `README.md`, `tests/`. See `docs/plugins/QUICKSTART.md`. |
 | `../backend/scripts/dev_postgres.py` | Runs a real, embedded Postgres instance for local development without Docker — prints `DATABASE_URL`, stays running until Ctrl+C. Backend-specific, so it lives under `backend/scripts/` rather than here. |
 
 ## Quickstart

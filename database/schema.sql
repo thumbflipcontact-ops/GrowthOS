@@ -79,7 +79,12 @@ create table projects (
 -- only implements a subset of these fixed four, so (unlike content type) this is a correct
 -- use of a native enum. See docs/database/SCHEMA.md.
 create type plugin_capability as enum ('searchable', 'publishable', 'webhook_receivable', 'metrics_queryable');
-create type plugin_connection_status as enum ('connected', 'error', 'disconnected');
+-- 'expired' (added alongside the OAuth2 framework, see docs/auth/OAUTH2_ARCHITECTURE.md §2
+-- and docs/decisions/0011-generic-oauth2-plugin-framework.md) is distinct from 'error': a
+-- permanent refresh failure (refresh token itself revoked/expired) needs a human to
+-- reconnect; a transient failure stays 'connected' and is retried, never surfaced as
+-- 'expired'.
+create type plugin_connection_status as enum ('connected', 'error', 'disconnected', 'expired');
 
 -- Mirrors the in-process plugin manifest scan (docs/plugins/PLUGIN_ARCHITECTURE.md
 -- §Discovery) performed at startup — refreshed on every process start, not hand-edited.
@@ -102,6 +107,11 @@ create table plugin_connections (
                                               -- application layer against the currently-installed
                                               -- catalog, not a hard FK, since the catalog is rebuilt
                                               -- at each process start (see docs/database/SCHEMA.md)
+    label                   text not null default 'default',  -- disambiguates multiple connections
+                                                                -- to the SAME plugin within one project
+                                                                -- (two Reddit accounts, two Slack
+                                                                -- workspaces) — see
+                                                                -- docs/auth/OAUTH2_ARCHITECTURE.md §2
     capabilities_enabled    plugin_capability[] not null default '{}',   -- data-level gate — see
                                                                           -- docs/plugins/PLUGIN_ARCHITECTURE.md
                                                                           -- "two independent gates"
@@ -111,14 +121,27 @@ create table plugin_connections (
     credentials_encrypted   bytea,           -- envelope-encrypted at the application layer,
                                               -- see docs/security/SECURITY.md and
                                               -- docs/decisions/0010-envelope-encryption-for-credentials.md
+                                              -- {"access_token", "refresh_token", "token_type"} for
+                                              -- auth_type="oauth2" — see docs/auth/OAUTH2_ARCHITECTURE.md
     credential_data_key_wrapped  bytea,      -- the per-connection data key, wrapped by the current
                                               -- master key — see docs/security/SECURITY.md
     status                  plugin_connection_status not null default 'disconnected',
     last_checked_at         timestamptz,
+    -- Plaintext, deliberately — neither is a credential. See
+    -- docs/auth/OAUTH2_ARCHITECTURE.md §2 for why these live outside the encrypted envelope.
+    token_expires_at        timestamptz,      -- drives the OAuth refresh sweep's query; null for
+                                               -- non-OAuth auth_types
+    granted_scopes          text[] not null default '{}',  -- what was actually authorized, which may
+                                                             -- differ from the manifest's requested scopes
     created_at              timestamptz not null default now(),
     updated_at              timestamptz not null default now(),
-    unique (project_id, plugin_key)
+    unique (project_id, plugin_key, label)
 );
+
+-- Hot-path index for the OAuth token-refresh sweep (app/jobs/oauth_refresh.py) — same
+-- partial-index pattern as idx_domain_events_undispatched below.
+create index idx_plugin_connections_oauth_refresh on plugin_connections (token_expires_at)
+    where token_expires_at is not null and status = 'connected';
 
 create table agent_configs (
     id              uuid primary key default gen_random_uuid(),

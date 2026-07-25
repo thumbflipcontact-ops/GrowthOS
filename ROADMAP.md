@@ -43,7 +43,10 @@ reworked. This ordering is what the (now-archived) V1→V2 migration plan produc
 6. **Approval Inbox + publish worker** — `ContentApprovalService` with the `version`-column
    concurrency guard included from the start, not retrofitted.
 7. **Credential encryption** — envelope encryption built as part of the plugin connection
-   flow, before real Reddit OAuth tokens are ever stored.
+   flow, before real Reddit OAuth tokens are ever stored. **Done, ahead of Reddit itself** —
+   built as part of the generic OAuth2 framework (`docs/auth/OAUTH2_ARCHITECTURE.md`, ADR
+   0011) once the Platform Readiness Review flagged OAuth as the actual blocker; see
+   `docs/reviews/OAUTH_IMPLEMENTATION_REPORT.md`.
 8. **Observability** — OpenTelemetry spans on plugin calls and agent runs, wired to
    Prometheus/Grafana per `docs/observability/OBSERVABILITY.md`. Trails steps 1–7 slightly but
    ships within Phase 1, not deferred indefinitely.

@@ -15,6 +15,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from plugins._shared.oauth import OAuthProviderSpec
+
 # The complete, closed set of capability kinds a plugin can implement — see
 # plugins/_shared/base.py. A plugin doesn't invent new capability kinds, only a new
 # combination of these four (docs/database/SCHEMA.md's core-owned-taxonomy rule).
@@ -46,6 +48,11 @@ class PluginManifest:
     content_types: tuple[ContentTypeSpec, ...] = field(default_factory=tuple)
     config_schema: type[BaseModel] | None = None
     auth_type: AuthType = "api_key"
+    # Required in practice when auth_type="oauth2" — not enforced by this frozen dataclass
+    # itself (kept a plain, unvalidated data carrier); plugin_catalog.py's discovery step
+    # rejects an oauth2 manifest with oauth=None, the same way it rejects an unsupported
+    # interface_version. See docs/auth/OAUTH2_ARCHITECTURE.md §4.
+    oauth: OAuthProviderSpec | None = None
 
     def config_json_schema(self) -> dict:
         """The JSON Schema the frontend's DynamicConnectionForm renders — see

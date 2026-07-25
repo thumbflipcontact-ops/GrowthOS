@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from plugins._shared.base import PluginQuery, PluginResult
+from plugins._shared.base import PluginQuery, PluginResult, ResolvedConnection
 from plugins.dummy.manifest import MANIFEST
 
 
 class DummyPlugin:
     manifest = MANIFEST
 
-    def __init__(self, connection: object) -> None:
+    def __init__(self, connection: ResolvedConnection) -> None:
         self._connection = connection
 
     async def search(self, query: PluginQuery) -> list[PluginResult]:
@@ -26,5 +26,5 @@ class DummyPlugin:
         return True
 
 
-def create_plugin(connection: object) -> DummyPlugin:
+def create_plugin(connection: ResolvedConnection) -> DummyPlugin:
     return DummyPlugin(connection)
