@@ -5,6 +5,58 @@ Versions before Phase 4 (multi-tenant activation) are development milestones, no
 releases — see `ROADMAP.md` for the phase plan and `ARCHITECTURE.md` for the system design
 each version builds on.
 
+## [0.5.0] - 2026-07-25 - Content Agent (Phase 2B)
+
+**Tag:** `v0.5.0-content-agent`. Full report:
+`docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md`.
+
+The first subscription-triggered agent and the first real LLM consumer: reacts to
+`knowledge_item.created`, drafts one Reddit reply per triggering item via Claude, and
+persists it as a `content_items` row — always `status="draft"`, never advanced further.
+
+### Added
+- `backend/app/core/llm/` — the generic `LLMProvider` interface (ADR 0004) plus
+  `AnthropicProvider`, the first (and so far only) implementation.
+- `agents/content_agent/` — `agent.py`, `config.py`, `prompts/reddit_reply.py` (system
+  prompt, response-JSON parsing), `subscriptions.py`.
+- `app/services/content_drafts.py` — `ContentDraftClient`, `AgentContext.content`'s first
+  concrete implementation.
+- `app/repositories/content_repository.py` — `ContentItemRepository`.
+- API: `GET /projects/{project_id}/content-items[/{id}]` (drafts, read-only).
+- 44 new tests (30 in `agents/content_agent/tests/`, 14 in `backend/tests/`).
+
+### Changed
+- `app/jobs/events.py` — `run_agent_for_event` now has a real body (was a placeholder since
+  Phase 1): loads the triggering event, auto-provisions an `agent_configs` row if needed,
+  builds a real `AgentContext`, runs the agent, records the outcome — the subscription-
+  triggered counterpart to `run_scheduled_agent`.
+- `agents/_shared/base.py` — `AgentContext.llm` tightened from `object` to the concrete
+  `LLMProvider`; added `trigger_payload` (the triggering event's payload, for subscription-
+  triggered agents) and `content` (`ContentDraftClient`).
+- `app/repositories/agent_repository.py` — added `AgentConfigRepository.get_or_create`,
+  used by both the on-demand trigger endpoint and the event-triggered job runner.
+
+### Schema
+- `knowledge_items` gained `title`, `body_excerpt`, `platform_metadata` — grounding text and
+  an opaque plugin-specific reference, captured by Conversation Finder at discovery time.
+  Nothing needed these until Content Agent did; both are null for any row discovered before
+  this migration.
+- `content_items` gained `confidence`, `reasoning`, `evidence` — the drafting agent's own
+  self-assessment, attached to every draft.
+
+### Scoping notes (see the implementation report for full reasoning)
+- **Reddit replies only.** No outreach drafts, no article drafts, no other platform — a
+  `knowledge_item` from any other platform is skipped, not an error.
+- **No `buying_intent` subscription filter.** Nothing populates that field yet (Conversation
+  Finder has no LLM integration), so `content_agent` subscribes unconditionally and gates
+  relevance inside `run()` against the triggering item's `confidence` instead.
+- **No self-check, no promotion to `pending_review`.** Every draft stays exactly at
+  `status="draft"` — the approval workflow (Phase 2C) doesn't exist yet, and this task's
+  instructions are explicit that a draft must not advance without one.
+- **Structured output via prompt + parse, not a provider-specific mechanism.** `LLMProvider`
+  is a plain-text completion API; `agents/content_agent/prompts/reddit_reply.py` asks for a
+  JSON response and parses it, matching ADR 0004's "common subset" trade-off.
+
 ## [0.4.0] - 2026-07-25 - Conversation Finder (Phase 2A)
 
 **Tag:** `v0.4.0-conversation-finder`. Full report:

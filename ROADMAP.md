@@ -44,19 +44,28 @@ reworked. This ordering is what the (now-archived) V1→V2 migration plan produc
    `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`.
 5. **Conversation Finder + Content Agent** — Conversation Finder remains schedule-triggered
    (it originates discovery); Content Agent subscribes to `knowledge_item.created` instead of
-   being placed in a sequencing config. **Conversation Finder half done** —
-   `agents/conversation_finder/`, built against the mechanisms from steps 2–4 (plugin
-   capability discovery, the event outbox, the Reddit plugin) plus the first concrete
-   `KnowledgeBaseClient` and real `run_scheduled_agent` job wiring built alongside it. Rule-
-   based ranking/scoring, not LLM-based — no LLM integration exists yet (see
-   `docs/decisions/0004-llm-provider-abstraction.md`, still config-plumbing-only), so
-   `knowledge_items.problem`/`industry`/`product`/`pain_point`/`buying_intent`/`suggested_*`
-   stay unpopulated pending a future enrichment pass. See
-   `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md` and `CHANGELOG.md`'s `[0.4.0]`
-   entry (tagged `v0.4.0-conversation-finder`). Content Agent itself is not yet built —
-   that's the remaining half of this step, tracked as Phase 2B.
+   being placed in a sequencing config. **Done, in two sub-phases:**
+   - **Phase 2A — Conversation Finder.** `agents/conversation_finder/`, built against the
+     mechanisms from steps 2–4 (plugin capability discovery, the event outbox, the Reddit
+     plugin) plus the first concrete `KnowledgeBaseClient` and real `run_scheduled_agent` job
+     wiring. Rule-based ranking/scoring, not LLM-based — no LLM integration existed yet, so
+     `knowledge_items.problem`/`industry`/`product`/`pain_point`/`buying_intent`/`suggested_*`
+     stay unpopulated pending a future enrichment pass. See
+     `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md` and `CHANGELOG.md`'s
+     `[0.4.0]` entry (tagged `v0.4.0-conversation-finder`).
+   - **Phase 2B — Content Agent.** `agents/content_agent/`, the first agent triggered by the
+     event bus's subscription path (`app/jobs/events.py`'s `run_agent_for_event`, wired for
+     real alongside it) rather than the scheduler. Also the first consumer of a real
+     `LLMProvider` (`backend/app/core/llm/`, Claude via `AnthropicProvider` — ADR 0004,
+     finally implemented). Drafts Reddit replies only, always as `content_items.status =
+     "draft"` — never advances a draft itself; that's step 6, not yet built. Required
+     extending the Phase 2A schema (`knowledge_items.title`/`body_excerpt`/
+     `platform_metadata`, `content_items.confidence`/`reasoning`/`evidence`) once a real
+     consumer needed grounding text and self-assessment fields nothing had persisted before.
+     See `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md` and `CHANGELOG.md`'s
+     `[0.5.0]` entry (tagged `v0.5.0-content-agent`).
 6. **Approval Inbox + publish worker** — `ContentApprovalService` with the `version`-column
-   concurrency guard included from the start, not retrofitted.
+   concurrency guard included from the start, not retrofitted. Tracked as **Phase 2C**.
 7. **Credential encryption** — envelope encryption built as part of the plugin connection
    flow, before real Reddit OAuth tokens are ever stored. **Done, ahead of Reddit itself** —
    built as part of the generic OAuth2 framework (`docs/auth/OAUTH2_ARCHITECTURE.md`, ADR
