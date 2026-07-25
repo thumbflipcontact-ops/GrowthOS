@@ -52,8 +52,9 @@ reworked. This ordering is what the (now-archived) V1→V2 migration plan produc
    `docs/decisions/0004-llm-provider-abstraction.md`, still config-plumbing-only), so
    `knowledge_items.problem`/`industry`/`product`/`pain_point`/`buying_intent`/`suggested_*`
    stay unpopulated pending a future enrichment pass. See
-   `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`. Content Agent itself is not
-   yet built — that's the remaining half of this step.
+   `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md` and `CHANGELOG.md`'s `[0.4.0]`
+   entry (tagged `v0.4.0-conversation-finder`). Content Agent itself is not yet built —
+   that's the remaining half of this step, tracked as Phase 2B.
 6. **Approval Inbox + publish worker** — `ContentApprovalService` with the `version`-column
    concurrency guard included from the start, not retrofitted.
 7. **Credential encryption** — envelope encryption built as part of the plugin connection

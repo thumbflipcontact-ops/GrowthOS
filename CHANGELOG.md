@@ -1,0 +1,121 @@
+# Changelog
+
+All notable changes to GrowthOS are documented in this file, in reverse chronological order.
+Versions before Phase 4 (multi-tenant activation) are development milestones, not public
+releases — see `ROADMAP.md` for the phase plan and `ARCHITECTURE.md` for the system design
+each version builds on.
+
+## [0.4.0] - 2026-07-25 - Conversation Finder (Phase 2A)
+
+**Tag:** `v0.4.0-conversation-finder`. Full report:
+`docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`.
+
+The first agent to actually run: a schedule-triggered discovery agent that searches every
+project-connected `Searchable` plugin, ranks results with a deterministic keyword-relevance
+score, deduplicates by URL, persists survivors to the knowledge base, and announces each new
+discovery with a `knowledge_item.created` domain event.
+
+### Added
+- `agents/conversation_finder/` — the agent itself (`agent.py`, `config.py`, `ranking.py`,
+  `subscriptions.py`), the first real package built against the Phase 1 agent contract.
+- `app/services/knowledge_base.py` — `KnowledgeBaseClient`, `AgentContext.knowledge_base`'s
+  first concrete implementation (dedup-then-upsert by URL).
+- `app/core/agent_registry.py` — loads an installed agent by key for execution, mirroring
+  `plugin_registry.py`'s plugin-loading convention.
+- `app/services/agent_config.py` — create/update a project's `agent_configs` row, validated
+  against the target agent's own config schema.
+- `app/repositories/knowledge_repository.py` — `KnowledgeItemRepository`.
+- API: `GET/PUT /projects/{project_id}/agent-configs[/{agent_key}]`,
+  `POST .../agent-configs/{agent_key}/runs/trigger`, `GET .../agent-configs/{agent_key}/runs`,
+  `GET /projects/{project_id}/knowledge-items`.
+- 54 new tests (27 in `agents/conversation_finder/tests/`, 27 in `backend/tests/`).
+
+### Changed
+- `app/jobs/agent_runs.py` — `run_scheduled_agent` now has a real body (was a
+  `logger.info(...)` placeholder since Phase 1): loads the agent config, builds a real
+  `AgentContext`, runs the agent, records the outcome as an `agent_runs` row.
+- `agents/_shared/base.py` — `AgentContext.knowledge_base` tightened from `object` to the
+  concrete `KnowledgeBaseClient`; added `agent_run_id: uuid.UUID | None = None`.
+- `app/api/deps.py` — added `get_arq_redis`, a lazily-created/cached Arq connection pool
+  (not eager at app startup, so routes that never enqueue a job impose no live-Redis
+  dependency on tests or requests).
+
+### Scoping notes (see the implementation report for full reasoning)
+- **No LLM integration** — none exists yet in this codebase. `knowledge_items.problem`/
+  `industry`/`product`/`pain_point`/`buying_intent`/`suggested_*` stay at schema defaults for
+  every row this agent writes; `confidence` is a deterministic keyword-match score, not an
+  LLM's judgment. A future enrichment pass (or Content Agent itself) fills these in.
+- **No new database migration** — `knowledge_items`, `agent_configs`, and `agent_runs` were
+  already part of the Phase 0/1 schema; this is the first agent to write to two of them for
+  real.
+- **Per-plugin search config (e.g. Reddit's subreddit allowlist) stays on the plugin
+  connection**, not duplicated into this agent's own config — one source of truth per
+  ADR 0009.
+
+## [0.3.1] - 2026-07-25 - Reddit Plugin
+
+Full report: `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`.
+
+The first real plugin (`plugins/dummy/` remains a discovery-mechanism test fixture, not a
+real integration) — `Searchable` + `Publishable`, authenticated entirely through the generic
+OAuth2 platform framework built in 0.3.0. Zero OAuth or Reddit-specific code anywhere outside
+`plugins/reddit/`.
+
+### Added
+- `plugins/reddit/` — `manifest.py`, `client.py` (thin `httpx` wrapper, not PRAW — avoids
+  duplicating the platform's own OAuth2 token lifecycle management), `plugin.py`, 31 tests.
+
+### Changed
+- `plugins/_shared/oauth.py` — added `OAuthProviderSpec.extra_token_headers`, a small,
+  generic, additive extension needed because Reddit requires a `User-Agent` header even on
+  its OAuth token endpoint (not just its data API). Empty-dict default; every existing
+  manifest unaffected.
+- `backend/app/core/oauth/client.py` — sends `extra_token_headers` on token-exchange and
+  revoke requests.
+
+## [0.3.0] - 2026-07-25 - Generic OAuth2 Platform
+
+Envelope encryption (ADR 0010) and the generic, provider-agnostic OAuth2 framework
+(ADR 0011) — built once real plugin credential storage was identified as the actual blocker,
+ahead of any specific OAuth-capable plugin needing it.
+
+### Added
+- `app/core/crypto.py` — envelope encryption (AES-GCM) for `plugin_connections.credentials_encrypted`.
+- `app/core/oauth/` — provider-agnostic authorize/exchange/refresh/revoke (`client.py`), PKCE
+  (`pkce.py`), signed CSRF state tokens (`state.py`), the OAuth-flow exception hierarchy
+  (`errors.py`).
+- `app/services/oauth_connection.py`, `app/jobs/oauth_refresh.py` — connect/reconnect/
+  disconnect orchestration and the periodic token-refresh sweep.
+- `app/services/plugin_connection.py`, `plugin-connections` API — the piece needed to
+  actually connect a finished plugin to a project (validated against the plugin's own
+  `config_schema`).
+
+## [0.2.0] - 2026-07-25 - Platform Foundation (Phase 1)
+
+Full report: `PHASE_1_REPORT.md`.
+
+FastAPI application, database schema, plugin/event core, background workers, and the testing
+framework — built once, in the order the (now-archived) V1→V2 migration plan specified, not
+built against V1 and reworked.
+
+### Added
+- `database/schema.sql` as SQLAlchemy 2.0 models (all 17 tables) + one Alembic migration.
+- Plugin SDK (`plugins/_shared/`) — manifest, the four segmented capability Protocols
+  (`Searchable`/`Publishable`/`WebhookReceivable`/`MetricsQueryable`), `plugins/dummy/` as the
+  discovery-mechanism proof.
+- Event core (`app/core/events.py`, `subscriptions.py`, `dispatcher.py`) — the transactional
+  outbox, `EventPublisher`, `EventDispatcher`; `agents/_shared/` (the agent SDK — `Agent`
+  Protocol, `AgentContext`, `AgentResult`, `EventSubscription`).
+- Background workers (`app/jobs/`, Arq) and scheduler (`app/scheduler.py`, cron-driven
+  `agent_configs` polling) — job *bodies* were placeholders; the queue plumbing (retries,
+  separate queues per job category) was real from the start.
+- Auth scaffold (register/login/logout/me), repository layer, dependency injection
+  (`require_project_access` as the single tenant-isolation enforcement point).
+- 67 tests against a real, embedded (Docker-free) Postgres via `pgserver`.
+
+## [0.1.0] - 2026-07-25 - Architecture Freeze (Phase 0)
+
+See `ARCHITECTURE_FREEZE.md`, `ARCHITECTURE.md`, `docs/architecture/LOCKED_DECISIONS.md`,
+`docs/reviews/DESIGN_REVIEW.md`. Design documentation and a Principal Engineer design review
+— no product code. Established the event-driven, plugin-capability-segmented, human-in-the-
+loop architecture every subsequent version builds on without redesigning.
