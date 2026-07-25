@@ -95,6 +95,29 @@ async def test_exchange_code_success(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_exchange_code_sends_extra_token_headers(monkeypatch) -> None:
+    """Discovered implementing Reddit (docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md):
+    some providers require specific headers (e.g. User-Agent) on the token endpoint itself,
+    not just the data API — extra_token_headers exists for exactly this."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["user_agent"] = request.headers.get("user-agent")
+        return httpx.Response(200, json={"access_token": "at", "expires_in": 60})
+
+    _patch_async_client(monkeypatch, handler)
+    spec = OAuthProviderSpec(
+        authorize_url=SPEC.authorize_url,
+        token_url=SPEC.token_url,
+        extra_token_headers={"User-Agent": "growthos:reddit:v1.0 (test)"},
+    )
+    client = OAuthClient(client_id="id", client_secret="secret", redirect_uri="https://growthos.invalid/cb")
+    await client.exchange_code(spec, code="c")
+
+    assert captured["user_agent"] == "growthos:reddit:v1.0 (test)"
+
+
+@pytest.mark.asyncio
 async def test_exchange_code_with_pkce_verifier(monkeypatch) -> None:
     captured: dict = {}
 
@@ -213,6 +236,27 @@ async def test_revoke_posts_token_and_never_raises_on_failure(monkeypatch) -> No
     _patch_async_client(monkeypatch, handler)
     client = OAuthClient(client_id="id", client_secret="secret", redirect_uri="https://growthos.invalid/cb")
     await client.revoke(SPEC, token="at")  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_revoke_sends_extra_token_headers(monkeypatch) -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["user_agent"] = request.headers.get("user-agent")
+        return httpx.Response(200)
+
+    _patch_async_client(monkeypatch, handler)
+    spec = OAuthProviderSpec(
+        authorize_url=SPEC.authorize_url,
+        token_url=SPEC.token_url,
+        revoke_url=SPEC.revoke_url,
+        extra_token_headers={"User-Agent": "growthos:reddit:v1.0 (test)"},
+    )
+    client = OAuthClient(client_id="id", client_secret="secret", redirect_uri="https://growthos.invalid/cb")
+    await client.revoke(spec, token="at")
+
+    assert captured["user_agent"] == "growthos:reddit:v1.0 (test)"
 
 
 @pytest.mark.asyncio

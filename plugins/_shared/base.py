@@ -8,11 +8,9 @@ structurally (`isinstance` against a `Protocol`), so a plugin that doesn't imple
 `Publishable` cannot be handed to code expecting one, independent of what its manifest
 claims.
 
-No real (non-fixture) plugin implementation exists in this repository yet by design — see
-ROADMAP.md Phase 1 ("Do NOT implement: Reddit plugin ... Any plugin-specific functionality").
-This module is the contract Phase 1 proves is real, via `plugins/dummy/` — a trivial
-test-fixture plugin (see its `README.md`), not a working integration with any real external
-system.
+`plugins/dummy/` is a trivial test-fixture plugin (see its `README.md`) proving the contract
+mechanism works, not a working integration with any real external system. `plugins/reddit/`
+is the first real one — see `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`.
 """
 
 from __future__ import annotations

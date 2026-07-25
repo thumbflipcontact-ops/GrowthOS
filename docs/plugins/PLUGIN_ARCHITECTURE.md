@@ -323,7 +323,7 @@ incident. See `docs/security/SECURITY.md` and `docs/architecture/LOCKED_DECISION
 
 | Plugin | Capabilities | Notes |
 |---|---|---|
-| `reddit` | searchable, publishable | First plugin implemented — see ADR 0005 |
+| `reddit` | searchable, publishable | **Implemented** — first plugin built, see ADR 0005 and `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`. Not yet connected to a real account or consumed by any agent. |
 | `linkedin` | searchable, publishable | |
 | `twitter` | searchable, publishable | |
 | `gsc_community` | searchable, publishable | No public API; scraping-based |

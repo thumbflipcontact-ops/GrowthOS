@@ -34,6 +34,13 @@ class OAuthProviderSpec:
     `access_type=offline&prompt=consent` on the authorize call to receive a refresh token at
     all) — declared here, merged in generically by the platform's OAuthClient, so the
     platform never special-cases a specific provider's quirks in code.
+
+    `extra_token_headers` exists for the same reason, one layer down: some providers require
+    specific HTTP headers (not body params) on every API call, including the token endpoint
+    itself — e.g. Reddit rejects requests with no descriptive `User-Agent`, a rule that
+    applies to its token/refresh/revoke endpoints, not just its data API. Discovered
+    implementing the Reddit plugin (`plugins/reddit/manifest.py`) against this framework —
+    see docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md.
     """
 
     authorize_url: str
@@ -44,6 +51,7 @@ class OAuthProviderSpec:
     token_endpoint_auth_method: TokenEndpointAuthMethod = "client_secret_basic"
     extra_authorize_params: dict[str, str] = field(default_factory=dict)
     extra_token_params: dict[str, str] = field(default_factory=dict)
+    extra_token_headers: dict[str, str] = field(default_factory=dict)
 
 
 __all__ = ["OAuthProviderSpec", "PKCEPolicy", "TokenEndpointAuthMethod"]

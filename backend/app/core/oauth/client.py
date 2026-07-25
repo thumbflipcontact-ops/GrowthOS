@@ -95,12 +95,15 @@ class OAuthClient:
         if spec.revoke_url is None:
             return
         auth = self._basic_auth(spec)
+        headers = spec.extra_token_headers or None
         try:
             async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
                 if auth is not None:
-                    await client.post(spec.revoke_url, data={"token": token}, auth=auth)
+                    await client.post(
+                        spec.revoke_url, data={"token": token}, headers=headers, auth=auth
+                    )
                 else:
-                    await client.post(spec.revoke_url, data={"token": token})
+                    await client.post(spec.revoke_url, data={"token": token}, headers=headers)
         except httpx.HTTPError:
             pass  # best-effort — the caller clears local credentials regardless
 
@@ -114,6 +117,8 @@ class OAuthClient:
             data = {**data, "client_id": self.client_id, "client_secret": self.client_secret}
         auth = self._basic_auth(spec)
 
+        headers = {"Accept": "application/json", **spec.extra_token_headers}
+
         try:
             async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
                 # httpx's `auth` parameter has no typed `None` variant (it defaults to a
@@ -122,12 +127,10 @@ class OAuthClient:
                 # `None` — hence the branch instead of always passing `auth=auth`.
                 if auth is not None:
                     response = await client.post(
-                        spec.token_url, data=data, headers={"Accept": "application/json"}, auth=auth
+                        spec.token_url, data=data, headers=headers, auth=auth
                     )
                 else:
-                    response = await client.post(
-                        spec.token_url, data=data, headers={"Accept": "application/json"}
-                    )
+                    response = await client.post(spec.token_url, data=data, headers=headers)
         except httpx.HTTPError as exc:
             raise TokenExchangeFailed(f"Could not reach token endpoint: {exc}") from exc
 

@@ -272,6 +272,7 @@ class OAuthProviderSpec:
     )
     extra_authorize_params: dict[str, str] = field(default_factory=dict)
     extra_token_params: dict[str, str] = field(default_factory=dict)
+    extra_token_headers: dict[str, str] = field(default_factory=dict)
 ```
 
 `extra_authorize_params`/`extra_token_params` exist because real providers deviate from bare
@@ -280,6 +281,13 @@ consent` on the authorize call to get a refresh token at all; HubSpot and Notion
 own quirks. Rather than the platform special-casing providers, plugins declare whatever extra
 key-value pairs their provider's docs require, and `OAuthClient` merges them in generically.
 This is what keeps the platform provider-agnostic even as it accumulates 12+ real providers.
+
+`extra_token_headers` was added implementing the Reddit plugin (not present in the original
+design this document proposed) — Reddit requires a descriptive `User-Agent` header on every
+API call, including the token endpoint itself, and the original `OAuthProviderSpec` had no
+way to declare a provider-required *header* (only body params). Same pattern, one layer
+down: declared per-provider, merged in generically by `OAuthClient`, never special-cased. See
+`docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`.
 
 ```python
 # plugins/_shared/manifest.py — one new optional field, default None

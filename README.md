@@ -100,10 +100,12 @@ Full reasoning for each choice: `docs/decisions/`.
 Phase 0 (architecture) and Phase 1 (platform foundation) are both complete — see
 [ARCHITECTURE_FREEZE.md](ARCHITECTURE_FREEZE.md) for the frozen design and
 [PHASE_1_REPORT.md](PHASE_1_REPORT.md) for what was built, tested, and verified. The backend
-now has a real FastAPI app, database schema + migrations, auth, the plugin SDK/registry, the
-event bus, and background job plumbing — all with a passing test suite. No agent or plugin
-*business logic* exists yet by design (no Reddit integration, no AI provider calls, no
-Conversation Finder/Content Agent) — see `ROADMAP.md` Phase 2 for what's next.
+has a real FastAPI app, database schema + migrations, auth, the plugin SDK/registry, a
+generic OAuth2 framework, the event bus, and background job plumbing — all with a passing
+test suite. The Reddit plugin (searchable + publishable, real OAuth2 auth) is now
+implemented — see [docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md](docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md).
+No AI provider calls, and no Conversation Finder/Content Agent, exist yet by design — see
+`ROADMAP.md` for what's next.
 
 ## Getting started
 

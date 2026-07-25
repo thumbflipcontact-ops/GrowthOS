@@ -38,6 +38,12 @@ Reasoning:
 candidates to evaluate mid-implementation. `plugins/reddit/README.md` is the concrete spec
 to build against first.
 
+**Implemented** — `plugins/reddit/` now exists (manifest, client, plugin, tests), built
+against the platform's generic OAuth2 framework and Plugin SDK rather than PRAW's own OAuth
+handling (a design decision made after this ADR was written — see ADR 0011 and
+`docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`). Not yet connected to a real account
+or exercised by any agent.
+
 **Deferred, not rejected:** GSC Community remains a strong Phase 2 candidate — its higher
 integration risk (no public API) is exactly the kind of thing better tackled once the rest
 of the system (approval flow, orchestrator, agent framework) is already proven against a
