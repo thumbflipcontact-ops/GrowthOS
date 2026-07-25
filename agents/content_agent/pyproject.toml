@@ -1,0 +1,17 @@
+[project]
+name = "growthos-agent-content-agent"
+version = "0.1.0"
+description = "GrowthOS agent: Content Agent (subscription-triggered draft generation, Phase 2B)"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.9"]
+
+[project.entry-points."growthos.agents"]
+content_agent = "agents.content_agent.subscriptions:AGENT_SUBSCRIPTIONS"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agents.content_agent", "agents.content_agent.prompts"]
+package-dir = {"agents.content_agent" = "."}

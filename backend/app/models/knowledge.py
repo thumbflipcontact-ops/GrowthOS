@@ -1,8 +1,10 @@
 """The knowledge base — institutional memory. See docs/knowledge-base/KNOWLEDGE_BASE.md.
 
-Table only in Phase 1 — no agent populates this yet (Conversation Finder is explicitly out
-of Phase 1 scope, see ROADMAP.md). The model exists because Alembic's schema must match
-database/schema.sql in full.
+Populated for real by Conversation Finder (Phase 2A) — see
+docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md. `title`/`body_excerpt`/
+`platform_metadata` were added alongside Content Agent (Phase 2B, see
+docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md) once a real consumer needed grounding
+text and a platform-specific reference that weren't being persisted anywhere.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedAtMixin, UUIDPkMixin, pg_enum
@@ -65,6 +67,12 @@ class KnowledgeItem(UUIDPkMixin, CreatedAtMixin, Base):
     discovered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    # The discovered post's own title and a capped excerpt of its body, captured verbatim at
+    # discovery time — grounding text for a later drafting agent (Content Agent) to cite from
+    # without re-fetching the platform. Both null for rows discovered before this column
+    # existed.
+    title: Mapped[str | None] = mapped_column(nullable=True)
+    body_excerpt: Mapped[str | None] = mapped_column(nullable=True)
     problem: Mapped[str | None] = mapped_column(nullable=True)
     industry: Mapped[str | None] = mapped_column(nullable=True)
     product: Mapped[str | None] = mapped_column(nullable=True)
@@ -85,4 +93,12 @@ class KnowledgeItem(UUIDPkMixin, CreatedAtMixin, Base):
         Numeric(3, 2), nullable=False, default=Decimal("0.0"), server_default=text("0.0")
     )
     outcome: Mapped[str | None] = mapped_column(nullable=True)
+    # Opaque, plugin-specific passthrough of PluginResult.platform_metadata (Reddit's
+    # subreddit/thing_id/score/num_comments, ...) — see plugins/_shared/base.py. Neither this
+    # model nor Conversation Finder ever interprets it; it exists so a platform-aware
+    # consumer (e.g. Content Agent choosing content_items.target_ref) has the plugin's own
+    # reference available without a second fetch.
+    platform_metadata: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)

@@ -9,9 +9,10 @@ after recording the row, so Arq's own retry policy (`max_tries = 3` below) still
 each attempt gets its own `agent_runs` row, which is the intended behavior: every attempt
 genuinely happened and the row is the record of it.
 
-Only wired for schedule-triggered agents so far (`conversation_finder`) —
-app/jobs/events.py's subscription-triggered `run_agent_for_event` stays a placeholder until a
-subscribing agent (`content_agent`, Phase 2B) exists.
+Wired for schedule-triggered agents (`conversation_finder`) — app/jobs/events.py's
+subscription-triggered `run_agent_for_event` is the equivalent job body for subscription-
+triggered agents (`content_agent`, Phase 2B), built alongside it against the identical
+AgentContext-construction pattern.
 """
 
 from __future__ import annotations
@@ -27,11 +28,14 @@ from app.core.agent_registry import load_agent
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.events import EventPublisher
+from app.core.llm.base import LLMProvider
+from app.core.llm.factory import build_llm_provider
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
 from app.models.project import Project
 from app.repositories.plugin_repository import PluginConnectionRepository
+from app.services.content_drafts import ContentDraftClient
 from app.services.knowledge_base import KnowledgeBaseClient
 
 logger = structlog.get_logger()
@@ -41,6 +45,7 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
     session_factory = ctx["session_factory"]
     settings = ctx["settings"]
     catalog: PluginCatalog = ctx["plugin_catalog"]
+    llm: LLMProvider = ctx["llm_provider"]
 
     async with session_factory() as session:
         config = await session.get(AgentConfig, uuid.UUID(agent_config_id))
@@ -78,8 +83,9 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
                 project=project,
                 config=config.config,
                 plugins=PluginRegistry(catalog, connections, settings),
-                llm=None,
+                llm=llm,
                 knowledge_base=KnowledgeBaseClient(session),
+                content=ContentDraftClient(session),
                 events=EventPublisher(session),
                 logger=run_logger,
                 agent_run_id=run.id,
@@ -117,6 +123,11 @@ async def startup(ctx: dict) -> None:
     catalog = PluginCatalog()
     catalog.refresh(discover_installed_plugins())
     ctx["plugin_catalog"] = catalog
+
+    # Built once per worker process, not per job — the underlying HTTP client is meant to be
+    # reused, the same reasoning app/core/db.py's engine is built once at startup rather than
+    # per request/job.
+    ctx["llm_provider"] = build_llm_provider(settings)
     logger.info("worker_agent_runs.started", plugins=[m.key for m in catalog.all()])
 
 

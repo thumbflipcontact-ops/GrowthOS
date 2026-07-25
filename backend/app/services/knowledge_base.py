@@ -28,6 +28,12 @@ class KnowledgeBaseClient:
     async def get_by_url(self, project_id: uuid.UUID, url: str) -> KnowledgeItem | None:
         return await self.items.get_by_url(project_id, url)
 
+    async def get(self, item_id: uuid.UUID) -> KnowledgeItem | None:
+        """By primary key — what a subscription-triggered agent uses to load the specific
+        item its triggering `knowledge_item.created` event refers to (see
+        `agents/content_agent/agent.py`), as opposed to `get_by_url`'s dedup-check use case."""
+        return await self.items.get(item_id)
+
     async def upsert_discovery(
         self,
         *,
@@ -36,6 +42,9 @@ class KnowledgeBaseClient:
         url: str,
         tags: list[str],
         confidence: Decimal,
+        title: str | None = None,
+        body_excerpt: str | None = None,
+        platform_metadata: dict | None = None,
         source_agent_run_id: uuid.UUID | None = None,
     ) -> tuple[KnowledgeItem, bool]:
         """Writes a newly discovered item, or refreshes the existing row for the same
@@ -46,15 +55,23 @@ class KnowledgeBaseClient:
         publishes `knowledge_item.created` for genuinely new rows — re-discovering an
         existing thread with a refreshed score is not a new fact worth another event.
 
+        `title`/`body_excerpt`/`platform_metadata` are opaque grounding text and a
+        plugin-specific reference, captured verbatim from the discovery — see
+        docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md for why they were added. This
+        client never interprets them.
+
         Deliberately does not touch `problem`/`industry`/`product`/`pain_point`/
         `buying_intent`/`suggested_*` — those are LLM-derived fields with no extraction step
-        yet (Phase 2A has no LLM integration, see ROADMAP.md); they stay at the model's
-        schema defaults until a future enrichment pass populates them.
+        yet (Conversation Finder has no LLM integration, see ROADMAP.md); they stay at the
+        model's schema defaults until a future enrichment pass populates them.
         """
         existing = await self.get_by_url(project_id, url)
         if existing is not None:
             existing.tags = tags
             existing.confidence = confidence
+            existing.title = title
+            existing.body_excerpt = body_excerpt
+            existing.platform_metadata = platform_metadata or {}
             existing.source_agent_run_id = source_agent_run_id
             await self.session.flush()
             return existing, False
@@ -66,6 +83,9 @@ class KnowledgeBaseClient:
             url=url,
             tags=tags,
             confidence=confidence,
+            title=title,
+            body_excerpt=body_excerpt,
+            platform_metadata=platform_metadata or {},
         )
         item = await self.items.add(item)
         return item, True

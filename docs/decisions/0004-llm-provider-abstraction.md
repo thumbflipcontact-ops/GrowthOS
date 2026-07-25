@@ -40,3 +40,14 @@ interface will necessarily be a common subset, not the union, of what Claude and
 support. Agent code that needs a provider-specific capability not covered by the shared
 interface is a signal to extend the interface deliberately, not to bypass it with a direct
 SDK import.
+
+**Implemented** (Phase 2B, see docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md) —
+`backend/app/core/llm/base.py` (`LLMProvider`/`LLMMessage`/`CompletionRequest`/
+`CompletionResult`) and `backend/app/core/llm/anthropic_provider.py` (`AnthropicProvider`,
+Claude). Narrower than this ADR's full scope in two ways, both left as future work rather
+than blocking Content Agent: only `complete()` exists — `embed()` is not part of the
+Protocol yet, since nothing needs `knowledge_items.embedding` populated yet; and OpenAI has
+no implementation (`app/core/llm/factory.py` raises `LLMProviderNotConfigured` for
+`llm_primary_provider="openai"`), so "OpenAI as documented fallback" is config-plumbing-ready
+but not actually failover-capable yet. Content Agent is the first real consumer, calling
+`ctx.llm.complete(...)` exactly as this ADR specifies.

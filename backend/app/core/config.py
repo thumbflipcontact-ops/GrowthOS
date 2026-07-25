@@ -23,10 +23,16 @@ class Settings(BaseSettings):
     redis_url: RedisDsn
 
     # --- LLM providers — see docs/decisions/0004-llm-provider-abstraction.md.
-    # Config plumbing only in Phase 1: no provider client is implemented yet
-    # (explicitly excluded from Phase 1 scope, see ROADMAP.md), but the settings exist so
-    # .env / .env.example stay the single source of truth for what a full deployment needs.
+    # Claude (app/core/llm/anthropic_provider.py) is the only implemented provider as of
+    # Phase 2B — see docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md. `openai_api_key`/
+    # `llm_primary_provider="openai"` remain valid config (ADR 0004 names OpenAI the
+    # secondary provider) with no implementation yet — app/core/llm/factory.py raises
+    # LLMProviderNotConfigured at first use, not here, since the value itself is legitimate.
     anthropic_api_key: SecretStr
+    anthropic_model: str = Field(
+        default="claude-sonnet-4-5",
+        description="Which Claude model app/core/llm/anthropic_provider.py requests.",
+    )
     openai_api_key: SecretStr
     llm_primary_provider: Literal["anthropic", "openai"] = "anthropic"
 

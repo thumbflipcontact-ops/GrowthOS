@@ -72,11 +72,7 @@ async def trigger_agent_run(
     on-demand run — see docs/api/API_DESIGN.md."""
     load_agent(agent_key)  # 404s for an unknown agent_key before anything else happens
 
-    configs = AgentConfigRepository(session)
-    config = await configs.get_by_project_and_key(project.id, agent_key)
-    if config is None:
-        config = await configs.add(AgentConfig(project_id=project.id, agent_key=agent_key))
-
+    config = await AgentConfigRepository(session).get_or_create(project.id, agent_key)
     await arq_redis.enqueue_job("run_scheduled_agent", str(config.id))
 
     session.add(

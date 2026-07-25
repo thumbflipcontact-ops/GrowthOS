@@ -11,6 +11,7 @@ import uuid
 
 import pytest
 from app.core.config import Settings
+from app.core.llm.factory import build_llm_provider
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
 from app.models.event import DomainEvent
@@ -65,10 +66,15 @@ async def _connect_dummy_as_searchable(db_session, project: Project) -> None:
 
 
 async def _ctx(session_factory_for) -> dict:
+    settings = _settings()
     return {
         "session_factory": session_factory_for,
-        "settings": _settings(),
+        "settings": settings,
         "plugin_catalog": _catalog(),
+        # conversation_finder never calls ctx.llm — constructing a real provider is safe
+        # here (no network call happens until .complete() is invoked) and keeps this test's
+        # fake ctx dict shaped exactly like the real worker's.
+        "llm_provider": build_llm_provider(settings),
     }
 
 
@@ -113,6 +119,9 @@ async def test_run_scheduled_agent_discovers_and_persists_a_knowledge_item(
     assert len(items) == 1
     assert items[0].platform == "dummy"
     assert items[0].source_agent_run_id == runs[0].id
+    assert items[0].title == "dummy result"
+    assert items[0].body_excerpt is not None and "indexing" in items[0].body_excerpt
+    assert items[0].platform_metadata == {}
 
     events = (
         await db_session.execute(

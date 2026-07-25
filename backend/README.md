@@ -4,10 +4,12 @@ FastAPI application — API layer, domain services, agent/plugin execution host.
 `ARCHITECTURE.md` at the repo root for how this fits into the overall system,
 `PHASE_1_REPORT.md` (repo root) for what's implemented, tested, and verified as of Phase 1,
 `docs/reviews/PLATFORM_IMPROVEMENT_REPORT.md` for the platform-developer-experience work done
-between Phase 1 and the first real plugin, and `docs/reviews/OAUTH_IMPLEMENTATION_REPORT.md`
-for the generic OAuth2 framework built after that.
+between Phase 1 and the first real plugin, `docs/reviews/OAUTH_IMPLEMENTATION_REPORT.md` for
+the generic OAuth2 framework built after that,
+`docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md` for Phase 2A, and
+`docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md` for Phase 2B.
 
-## Structure (as implemented, Phase 1 + the Platform Readiness / OAuth2 passes)
+## Structure (as implemented, through Phase 2B)
 
 ```
 backend/
@@ -31,6 +33,11 @@ backend/
 │   │   │                            credential decryption (docs/auth/OAUTH2_ARCHITECTURE.md)
 │   │   ├── agent_registry.py      Loads a specific installed agent by key, for execution —
 │   │   │                            docs/agents/AGENT_ARCHITECTURE.md
+│   │   ├── llm/                    Generic LLMProvider interface — ADR 0004
+│   │   │   ├── base.py               LLMProvider Protocol, LLMMessage/CompletionRequest/Result
+│   │   │   ├── anthropic_provider.py  AnthropicProvider — Claude, the only implemented provider
+│   │   │   ├── factory.py              build_llm_provider(settings) — resolves the primary provider
+│   │   │   └── errors.py                LLMError hierarchy
 │   │   └── oauth/                 Generic OAuth2 subsystem — docs/auth/OAUTH2_ARCHITECTURE.md
 │   │       ├── pkce.py              RFC 7636 code_verifier/code_challenge
 │   │       ├── state.py             Signed, stateless CSRF state token
@@ -43,7 +50,8 @@ backend/
 │   │   └── v1/                     health, auth, projects, plugins (catalog),
 │   │                                 plugin_connections (+ oauth/start, oauth/disconnect),
 │   │                                 oauth (the global callback route), agent_configs
-│   │                                 (+ runs/trigger, runs), knowledge_items routers
+│   │                                 (+ runs/trigger, runs), knowledge_items, content_items
+│   │                                 (drafts — list/get only) routers
 │   ├── services/
 │   │   ├── auth_service.py         Register (org+user+membership bootstrap) / authenticate
 │   │   ├── plugin_connection.py    Create/list a project's plugin connections, validating
@@ -51,17 +59,20 @@ backend/
 │   │   ├── oauth_connection.py     OAuth2 start/callback/disconnect orchestration
 │   │   ├── agent_config.py         Create/update a project's agent_configs row, validating
 │   │   │                             config against the agent's own config_schema
-│   │   └── knowledge_base.py       KnowledgeBaseClient — AgentContext.knowledge_base's first
-│   │                                 concrete implementation (dedup-then-upsert by URL)
+│   │   ├── knowledge_base.py       KnowledgeBaseClient — AgentContext.knowledge_base's first
+│   │   │                             concrete implementation (dedup-then-upsert by URL)
+│   │   └── content_drafts.py        ContentDraftClient — AgentContext.content's first concrete
+│   │                                  implementation (always writes status="draft")
 │   ├── models/                      SQLAlchemy models mirroring database/schema.sql (all 17 tables)
 │   ├── schemas/                      Pydantic request/response models
 │   ├── repositories/                  One per aggregate — org, user/membership, project,
 │   │                                    plugin (catalog/connection), agent (config/run), event,
-│   │                                    knowledge (knowledge_items)
-│   ├── jobs/                           Arq WorkerSettings: agent_runs.py (real body — loads an
-│   │                                    agent_config, builds AgentContext, runs the agent,
-│   │                                    records the outcome), events.py, publish.py,
-│   │                                    oauth_refresh.py
+│   │                                    knowledge (knowledge_items), content (content_items)
+│   ├── jobs/                           Arq WorkerSettings: agent_runs.py (schedule-triggered —
+│   │                                    real body since Phase 2A), events.py (subscription-
+│   │                                    triggered `run_agent_for_event` — real body since
+│   │                                    Phase 2B, identical AgentContext-construction pattern),
+│   │                                    publish.py (still a placeholder), oauth_refresh.py
 │   └── scheduler.py                    Scheduler process entrypoint (`python -m app.scheduler`)
 ├── migrations/                          Alembic — matches database/schema.sql
 ├── tests/
@@ -71,18 +82,18 @@ backend/
 └── pyproject.toml
 ```
 
-**Explicitly not present**, per ROADMAP.md Phase 2A scope (business logic still deferred):
-`services/content_approval.py` (Approval Inbox / publish worker — Phase 2B+), `core/llm/`
-(AI provider clients — config plumbing for them exists in `core/config.py`, no client
-implementation; `AgentContext.llm` stays typed `object` until one exists). `services/
-knowledge_base.py` **now exists** — Conversation Finder (Phase 2A) is the first agent that
-needed it; see `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`. Credential wiring
-exists for `auth_type="oauth2"` (the flow above) but not yet for `api_key`/
-`session_credentials` — no request path writes `credentials_encrypted` for those auth types.
-The publish job body in `jobs/publish.py` and the subscription-triggered `run_agent_for_event`
-in `jobs/events.py` are still placeholders — `jobs/agent_runs.py`'s schedule-triggered
-`run_scheduled_agent` is the one job body wired for real so far, because Conversation Finder
-(schedule-only, no subscriptions) is the only agent that exists.
+**Explicitly not present**, per ROADMAP.md Phase 2B scope (business logic still deferred):
+`services/content_approval.py` (the actual approve/reject state-machine service and API
+endpoints — Phase 2C). `core/llm/` and `services/knowledge_base.py`/`content_drafts.py`
+**now exist** — Conversation Finder (Phase 2A) and Content Agent (Phase 2B) are the agents
+that needed them; see their implementation reports. `core/llm/factory.py` only builds
+Claude — OpenAI (ADR 0004's documented secondary provider) has no implementation yet and
+raises `LLMProviderNotConfigured` if selected. `core/llm/base.py`'s `LLMProvider` has no
+`embed()` method yet — nothing needs `knowledge_items.embedding` populated. Credential wiring
+exists for `auth_type="oauth2"` but not yet for `api_key`/`session_credentials` — no request
+path writes `credentials_encrypted` for those auth types. `jobs/publish.py`'s body is still a
+placeholder — the only job left with no real agent to invoke it, since publishing only
+happens after `ContentApprovalService` (Phase 2C) exists.
 
 ## Where agents and plugins live
 
@@ -93,7 +104,8 @@ API/service layer" and "the independent, swappable agent/plugin units" (`ARCHITE
 §2) visible in the folder structure itself, not just in documentation. `plugins/reddit/` is
 the first real plugin (see `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`);
 `agents/conversation_finder/` is the first real agent (see
-`docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`) — loaded by
+`docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`), `agents/content_agent/` is the
+second (see `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md`) — both loaded by
 `app/core/agent_registry.py`'s import-by-key convention, the agent-side mirror of
 `app/core/plugin_registry.py`'s plugin loading. `plugins/dummy/` remains a test-only fixture
 proving the plugin discovery mechanism works (see its `README.md`, and its own `tests/`), not

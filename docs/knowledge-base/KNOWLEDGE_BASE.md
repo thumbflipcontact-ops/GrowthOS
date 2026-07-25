@@ -15,6 +15,14 @@ configured search terms — see `agents/conversation_finder/ranking.py`), not an
 of buying intent — read it accordingly until a future enrichment pass populates the
 LLM-derived fields described below.
 
+**Phase 2B note:** `title`/`body_excerpt`/`platform_metadata` were added once Content Agent
+(`docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md`) needed grounding text and a
+plugin-specific reference that nothing had persisted before — see the Structure table below.
+Content Agent's own subscription to `knowledge_item.created` does **not** filter by
+`buying_intent` (that field is always `"none"` per the Phase 2A note above) — it subscribes
+unconditionally and gates relevance inside its own `run()` against `confidence` instead. See
+§"Two ways the knowledge base gets queried" below, which this phase updated to match.
+
 ## What it is
 
 The `knowledge_items` table (`docs/database/SCHEMA.md`) is GrowthOS's answer to the vision's
@@ -29,6 +37,8 @@ someone remembering.
 | Field | Purpose |
 |---|---|
 | `platform`, `url` | Where this was found — also the dedup key (`unique(project_id, url)`) |
+| `title`, `body_excerpt` | The discovered post's own title and a capped excerpt of its body, captured verbatim at discovery time (Phase 2B) — grounding text a drafting agent cites from, without re-fetching the platform |
+| `platform_metadata` | Opaque passthrough of `PluginResult.platform_metadata` (Phase 2B) — e.g. Reddit's `subreddit`/`thing_id`; core schema never interprets it, a platform-aware *agent* may |
 | `problem`, `industry`, `product`, `pain_point` | The structured extraction an LLM call performs on the raw discovery |
 | `buying_intent` | Enum classification (`none`/`low`/`medium`/`high`) — the single field the Daily Brief sorts by first |
 | `suggested_reply`, `suggested_article`, `suggested_product_idea` | The agent's own suggestions at discovery time — not commitments, just what informed a `content_item` draft if one was created |
@@ -51,9 +61,13 @@ ICP might have found relevant. Storage is cheap; a lost data point is not recove
 1. **Point-in-time, agent-driven:** `conversation_finder` checks a URL against existing
    `knowledge_items` to avoid re-processing. `content_agent` no longer polls for "recent
    high-intent items with no linked content_item" — it subscribes to `knowledge_item.created`
-   (filtered by `buying_intent`) and is invoked by the event dispatcher when one is published,
-   reading only the specific item the event refers to. See `docs/agents/AGENT_ARCHITECTURE.md`
-   §Communication and `ARCHITECTURE.md` §7 for why this replaced the original polling design.
+   and is invoked by the event dispatcher when one is published, reading only the specific
+   item the event refers to (via `ctx.trigger_payload`/`ctx.knowledge_base.get(id)`), not a
+   query it invents itself. As implemented (Phase 2B), the subscription itself is
+   unconditional, not filtered by `buying_intent` as originally envisioned — see
+   `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md` for why. See
+   `docs/agents/AGENT_ARCHITECTURE.md` §Communication and `ARCHITECTURE.md` §7 for why this
+   replaced the original polling design.
 2. **Broad, human- or `knowledge_base_agent`-driven:** "what problems come up most often this
    quarter," "show me everything tagged `pricing-objection`," "what's similar to this thread."
    This is what the Knowledge Base Explorer frontend view and `knowledge_base_agent`'s

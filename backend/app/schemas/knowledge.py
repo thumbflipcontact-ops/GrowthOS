@@ -13,6 +13,8 @@ class KnowledgeItemResponse(BaseModel):
     platform: str
     url: str
     discovered_at: datetime
+    title: str | None
+    body_excerpt: str | None
     problem: str | None
     industry: str | None
     product: str | None
@@ -24,6 +26,7 @@ class KnowledgeItemResponse(BaseModel):
     tags: list[str]
     confidence: Decimal
     outcome: str | None
+    platform_metadata: dict
     created_at: datetime
 
     model_config = {"from_attributes": True}

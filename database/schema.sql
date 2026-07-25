@@ -206,6 +206,13 @@ create table knowledge_items (
     platform                text not null,       -- 'reddit', 'linkedin', 'gsc_community', ...
     url                     text not null,
     discovered_at           timestamptz not null default now(),
+    -- title/body_excerpt: the discovered post's own title and a capped excerpt of its body,
+    -- captured verbatim at discovery time (Conversation Finder, Phase 2A) so a later agent
+    -- (Content Agent, Phase 2B) has grounding text to draft and cite from without re-fetching
+    -- the platform. Added alongside Phase 2B, not Phase 2A: no consumer needed them until
+    -- Content Agent did. Both null for any row discovered before this column existed.
+    title                   text,
+    body_excerpt            text,
     problem                 text,
     industry                text,
     product                 text,
@@ -217,6 +224,13 @@ create table knowledge_items (
     tags                    text[] not null default '{}',
     confidence              numeric(3,2) not null default 0.0 check (confidence between 0 and 1),
     outcome                 text,                -- filled in later by an enrichment job
+    -- Opaque, plugin-specific passthrough of PluginResult.platform_metadata (Reddit's
+    -- subreddit/thing_id/score/num_comments, ...) — see plugins/_shared/base.py. Core schema
+    -- and Conversation Finder never interpret this; it exists so a platform-aware consumer
+    -- (e.g. Content Agent choosing what to set content_items.target_ref to) has the plugin's
+    -- own reference available without a second fetch. Added alongside title/body_excerpt,
+    -- same reasoning.
+    platform_metadata       jsonb not null default '{}',
     embedding               vector(1536),         -- for semantic search over the knowledge base
     created_at              timestamptz not null default now(),
     unique (project_id, url)
@@ -254,6 +268,17 @@ create table content_items (
     reviewed_at             timestamptz,
     published_at            timestamptz,
     publish_error           text,
+    -- confidence/reasoning/evidence: the drafting agent's own self-assessment, added
+    -- alongside Content Agent (Phase 2B, see agents/content_agent/README.md) — no consumer
+    -- needed these until an agent actually drafted content. `confidence` mirrors
+    -- knowledge_items.confidence's shape (a 0-1 score, meaning here "how good the agent
+    -- judges its own draft to be," not a platform-search-relevance score). `evidence` is a
+    -- JSON array of short quotes/citations from the source knowledge_item the draft is
+    -- grounded in — never free-form prose, so a human reviewer (Phase 2C) can scan it
+    -- quickly.
+    confidence              numeric(3,2) not null default 0.0 check (confidence between 0 and 1),
+    reasoning               text,
+    evidence                jsonb not null default '[]',
     -- Optimistic concurrency guard on the approve/reject transition (design review
     -- §3.2 / LOCKED_DECISIONS L12) — ContentApprovalService's update includes
     -- `where version = :expected_version`, incrementing it on every transition. A racing

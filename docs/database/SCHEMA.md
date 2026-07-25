@@ -130,6 +130,13 @@ enrich the existing row (e.g. update `outcome`), not create a duplicate. Every i
 publishes a `knowledge_item.created` domain event in the same transaction — see
 `docs/knowledge-base/KNOWLEDGE_BASE.md`.
 
+`title`/`body_excerpt`/`platform_metadata` were added in Phase 2B (see
+`docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md`), alongside Conversation Finder's own
+Phase 2A columns above — not part of the original V2 design, because no consumer needed
+grounding text or a plugin-specific reference until Content Agent existed to draft from one.
+`platform_metadata` is an opaque passthrough of `PluginResult.platform_metadata`
+(`plugins/_shared/base.py`); core schema and Conversation Finder never interpret it.
+
 ### `content_items`
 The approval gate — see `ARCHITECTURE.md` §8 for the state machine itself.
 `type` changed from a native enum to `text` in V2 — see the design-principles note above and
@@ -141,6 +148,12 @@ closing design review §3.2. The `review_fields_consistent` check constraint rem
 at the database level in addition to the service layer: this is the one invariant where
 "the application code should always get this right" isn't a strong enough guarantee for what
 it protects (proof that a human, specifically, approved this content).
+
+`confidence`/`reasoning`/`evidence` were added in Phase 2B alongside Content Agent — the
+drafting agent's own self-assessment (`confidence` mirrors `knowledge_items.confidence`'s
+0-1 shape but means "how good the agent judges its own draft to be"), and a JSON array of
+short quotes (`evidence`) grounding the draft in its source `knowledge_item`, for a human
+reviewer to scan quickly. See `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md`.
 
 ### `companies` / `contacts`
 Deliberately CRM-*lite*. This is what Customer Finder and Outreach Assistant need to track

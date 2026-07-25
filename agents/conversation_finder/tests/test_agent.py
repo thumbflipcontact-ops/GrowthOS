@@ -60,11 +60,22 @@ class _FakeKnowledgeBase:
         url: str,
         tags: list[str],
         confidence: Decimal,
+        title: str | None = None,
+        body_excerpt: str | None = None,
+        platform_metadata: dict[str, Any] | None = None,
     ) -> tuple[SimpleNamespace, bool]:
         created = url not in self.existing_urls
         self.existing_urls.add(url)
         self.saved_calls.append(
-            {"platform": platform, "url": url, "tags": tags, "confidence": confidence}
+            {
+                "platform": platform,
+                "url": url,
+                "tags": tags,
+                "confidence": confidence,
+                "title": title,
+                "body_excerpt": body_excerpt,
+                "platform_metadata": platform_metadata,
+            }
         )
         item = SimpleNamespace(
             id=uuid.uuid4(),
@@ -114,8 +125,9 @@ def _ctx(
         project=project or _project(),  # type: ignore[arg-type]
         config=config,
         plugins=_FakeRegistry(plugins),  # type: ignore[arg-type]
-        llm=None,
+        llm=None,  # type: ignore[arg-type]  # conversation_finder never calls ctx.llm
         knowledge_base=kb,  # type: ignore[arg-type]
+        content=None,  # type: ignore[arg-type]  # conversation_finder never calls ctx.content
         events=ev,  # type: ignore[arg-type]
         logger=structlog.get_logger(),
         agent_run_id=uuid.uuid4(),
@@ -123,8 +135,16 @@ def _ctx(
     return ctx, kb, ev
 
 
-def _result(url: str, *, title: str = "", body: str = "") -> PluginResult:
-    return PluginResult(url=url, title=title, body=body, author=None)
+def _result(
+    url: str,
+    *,
+    title: str = "",
+    body: str = "",
+    platform_metadata: dict[str, Any] | None = None,
+) -> PluginResult:
+    return PluginResult(
+        url=url, title=title, body=body, author=None, platform_metadata=platform_metadata or {}
+    )
 
 
 def test_key_and_config_schema() -> None:
@@ -260,3 +280,39 @@ async def test_summary_reports_platforms_and_counts() -> None:
     assert result.summary["platforms_searched"] == ["dummy"]
     assert result.summary["results_found"] == 2
     assert result.summary["unique_urls"] == 2
+
+
+@pytest.mark.asyncio
+async def test_passes_title_body_excerpt_and_platform_metadata_through_verbatim() -> None:
+    plugin = _FakePlugin(
+        key="reddit",
+        results=[
+            _result(
+                "https://x.invalid/1",
+                title="Crawl budget question",
+                body="Full post body about crawl budget.",
+                platform_metadata={"subreddit": "SEO", "thing_id": "t3_abc123"},
+            )
+        ],
+    )
+    ctx, kb, _ = _ctx(plugins=[plugin], config={"keywords": ["crawl budget"]})
+
+    await ConversationFinderAgent().run(ctx)
+
+    saved = kb.saved_calls[0]
+    assert saved["title"] == "Crawl budget question"
+    assert saved["body_excerpt"] == "Full post body about crawl budget."
+    assert saved["platform_metadata"] == {"subreddit": "SEO", "thing_id": "t3_abc123"}
+
+
+@pytest.mark.asyncio
+async def test_body_excerpt_is_capped() -> None:
+    long_body = "x" * 5000
+    plugin = _FakePlugin(
+        key="reddit", results=[_result("https://x.invalid/1", title="crawl budget", body=long_body)]
+    )
+    ctx, kb, _ = _ctx(plugins=[plugin], config={"keywords": ["crawl budget"]})
+
+    await ConversationFinderAgent().run(ctx)
+
+    assert len(kb.saved_calls[0]["body_excerpt"]) == 2000

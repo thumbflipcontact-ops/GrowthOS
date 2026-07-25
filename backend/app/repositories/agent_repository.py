@@ -39,6 +39,18 @@ class AgentConfigRepository(Repository[AgentConfig]):
         )
         return result.scalar_one_or_none()
 
+    async def get_or_create(self, project_id: uuid.UUID, agent_key: str) -> AgentConfig:
+        """Auto-provisions a default (disabled schedule, empty config, enabled) row the
+        first time something needs one for this (project, agent_key) pair — used by the
+        on-demand trigger endpoint and by the event-triggered job runner
+        (app/jobs/events.py), since `agent_runs.agent_config_id` is a required FK and a
+        subscription-only agent (e.g. content_agent) has no schedule to have already
+        created one via a scheduling UI."""
+        existing = await self.get_by_project_and_key(project_id, agent_key)
+        if existing is not None:
+            return existing
+        return await self.add(AgentConfig(project_id=project_id, agent_key=agent_key))
+
 
 class AgentRunRepository(Repository[AgentRun]):
     model = AgentRun

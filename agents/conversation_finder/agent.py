@@ -7,6 +7,11 @@ survivors to the knowledge base, and announce each new one with a `knowledge_ite
 domain event. Deliberately does NOT call an LLM or populate
 problem/industry/product/pain_point/buying_intent/suggested_* — see README.md §"What Phase
 2A does not do" — that's a future enrichment pass.
+
+Also persists `title`/a capped `body_excerpt`/opaque `platform_metadata` alongside every
+discovery (added alongside Content Agent, Phase 2B) — grounding text and a plugin-specific
+reference a later drafting agent needs, that nothing previously stored anywhere. This agent
+still never interprets `platform_metadata`'s contents — it passes it through verbatim.
 """
 
 from __future__ import annotations
@@ -22,6 +27,11 @@ from plugins._shared.base import PluginQuery, Searchable
 
 if TYPE_CHECKING:
     from app.models.project import Project
+
+# A capped excerpt, not the full body — knowledge_items.body_excerpt exists to give a later
+# drafting agent enough grounding text to cite from, not to duplicate the platform's own copy
+# of a post verbatim and unbounded.
+_BODY_EXCERPT_MAX_CHARS = 2000
 
 
 class ConversationFinderAgent:
@@ -83,6 +93,9 @@ class ConversationFinderAgent:
                     url=plugin_result.url,
                     tags=matched_terms,
                     confidence=Decimal(str(score)),
+                    title=plugin_result.title,
+                    body_excerpt=plugin_result.body[:_BODY_EXCERPT_MAX_CHARS],
+                    platform_metadata=plugin_result.platform_metadata,
                 )
                 if created:
                     result.knowledge_items_created += 1

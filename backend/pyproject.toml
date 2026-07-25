@@ -25,6 +25,8 @@ dependencies = [
     # is the OAuth2 framework (docs/auth/OAUTH2_ARCHITECTURE.md); the standard, well-audited
     # choice for authenticated encryption in Python, not something worth hand-rolling.
     "cryptography>=43,<44",
+    # Claude — the primary LLMProvider per ADR 0004. See app/core/llm/anthropic_provider.py.
+    "anthropic>=0.120,<0.121",
 ]
 
 [project.optional-dependencies]
