@@ -1,0 +1,117 @@
+# Local/production service topology for GrowthOS — Version 2.
+# See docs/deployment/DEPLOYMENT.md for the reasoning behind this shape.
+# NOTE: backend/ and frontend/ application code is not yet implemented (see ROADMAP.md
+# Phase 1) — this file documents the intended topology and will not build until it exists.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: growthos
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-growthos_dev}
+      POSTGRES_DB: growthos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U growthos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app/backend
+      - ../agents:/app/agents
+      - ../plugins:/app/plugins
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    env_file: ../.env
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend:/app
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    command: ["python", "-m", "app.scheduler"]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-agents:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    command: ["arq", "app.jobs.agent_runs.WorkerSettings"]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+
+  worker-events:
+    # Event dispatch — reads undispatched domain_events rows and enqueues one job per
+    # subscribed agent handler. See docs/jobs/BACKGROUND_JOBS.md and ARCHITECTURE.md §7.
+    # Kept as its own pool (not folded into worker-agents) so a backlog of agent-run work
+    # never delays event dispatch latency, which matters for webhook-triggered reactivity.
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    command: ["arq", "app.jobs.events.WorkerSettings"]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-publish:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    command: ["arq", "app.jobs.publish.WorkerSettings"]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

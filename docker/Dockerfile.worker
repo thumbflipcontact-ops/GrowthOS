@@ -1,0 +1,9 @@
+# Arq worker image — same dependency set as the backend, different entrypoint.
+# Built FROM the backend image so agent/plugin code and dependencies never drift between
+# the API process and the workers that run agent code. See docs/jobs/BACKGROUND_JOBS.md.
+FROM growthos-backend:latest AS backend
+
+WORKDIR /app/backend
+
+# Command is set per-service in docker-compose.yml (worker-agents vs worker-publish run
+# different Arq WorkerSettings targeting different queues).
