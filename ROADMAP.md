@@ -136,6 +136,35 @@ observability, a CI/CD pipeline, and backup/process-supervision automation remai
 out of scope for this phase — see the hardening report's "remaining known production risks"
 for the complete list of what's still open.
 
+## Internal Beta Preparation
+
+Turns the platform (feature-complete and hardened as of Phase 2D) into something an operator
+can actually install, configure, run, and debug against real accounts — deliberately no new
+business logic, per this task's own instruction. Not lettered "2E" — this isn't a further
+hardening pass over existing code, it's the operational tooling and documentation layer
+around it: `scripts/check_env.py` (environment doctor), `scripts/status.py` (read-only
+operational dashboard), `scripts/onboard.py` (interactive org/user/project setup wizard),
+`docs/examples/` (schema-validated example configs), and `docs/beta/` (Setup Guide,
+Deployment Guide, Troubleshooting Guide, First Run Checklist, Known Limitations, Beta Test
+Plan). See `docs/reviews/INTERNAL_BETA_READINESS_REPORT.md` and `CHANGELOG.md`'s `[0.8.0]`
+entry (tagged `v0.8.0-internal-beta`).
+
+Building tooling that actually *executes* the documented setup process, rather than just
+describing it, surfaced two genuine, previously-unknown bugs sitting in this project's own
+documented Quickstart since Phase 1: `scripts/migrate.py` never actually loaded `.env`
+(alembic read the raw environment directly), and every script documented as
+`python scripts/<name>.py` failed under the system Python since it imports `backend/app` code
+that only exists in `backend/.venv`. Both fixed — see the readiness report §2.
+
+**Exit criterion:** an operator can follow `docs/beta/FIRST_RUN_CHECKLIST.md` and reach a
+running, verifiably-healthy system using their own accounts, with a documented recovery path
+for every failure mode encountered while actually testing that checklist. **Met, with the one
+caveat the readiness report is explicit about**: every step through project/agent/plugin
+configuration was verified against a real database; the final steps (a real Reddit OAuth
+connection, a real Anthropic-drafted reply, an actual publish) had not yet been exercised as
+of that report — commissioning that live run end to end, with a real operator, is the
+immediate next step this phase hands off to.
+
 ## Phase 2 — Full agent roster, one project
 
 - Remaining agents: Customer Finder, Competitor Watch, Outreach Assistant, Knowledge Base

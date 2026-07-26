@@ -5,6 +5,59 @@ Versions before Phase 4 (multi-tenant activation) are development milestones, no
 releases — see `ROADMAP.md` for the phase plan and `ARCHITECTURE.md` for the system design
 each version builds on.
 
+## [0.8.0] - 2026-07-26 - Internal Beta Preparation
+
+**Tag:** `v0.8.0-internal-beta`. Full report:
+`docs/reviews/INTERNAL_BETA_READINESS_REPORT.md`.
+
+Turns the platform (feature-complete and hardened as of Phase 2D) into something an operator
+can actually install, configure, run, and debug against real accounts — no business logic
+changed. Everything below was verified by actually doing it against a real embedded Postgres
+instance, not just written to look plausible.
+
+### Added
+- `scripts/check_env.py` — environment doctor: validates `.env`, tests real Postgres/Redis
+  connectivity, checks the database is at the expected migration revision, confirms the
+  plugin catalog loads, flags placeholder secrets and API keys.
+- `scripts/status.py` — read-only operational dashboard: plugin connections, agent configs,
+  recent runs, content-item counts by status, publish failures needing attention,
+  event-dispatch backlog.
+- `scripts/onboard.py` — interactive wizard creating a real org/user/project, printing
+  tailored next-step commands with real IDs filled in.
+- `scripts/_bootstrap.py` — shared re-exec-under-the-right-interpreter helper (see Fixed,
+  below).
+- `docs/examples/` — schema-validated, ready-to-use request bodies for connecting Reddit and
+  configuring both agents.
+- `docs/beta/` — Setup Guide, Deployment Guide, Troubleshooting Guide, First Run Checklist,
+  Known Limitations, and a phased Beta Test Plan.
+
+### Fixed
+Building tooling that actually *runs* the documented setup process, rather than just
+describing it, surfaced two genuine, previously-unknown bugs that had been sitting in this
+project's own documented Quickstart:
+- `scripts/migrate.py` never actually loaded `.env` — it only shells out to `alembic`, whose
+  `env.py` reads `os.environ` directly, never `.env` itself. A fresh checkout's
+  `python scripts/migrate.py` failed with a confusing
+  `Can't load plugin: sqlalchemy.dialects:driver` error (alembic silently fell back to
+  `alembic.ini`'s placeholder URL). Fixed with a minimal, dependency-free `.env` parser.
+- Every script documented as `python scripts/<name>.py` (e.g. `seed.py`) failed under the
+  system Python with `ModuleNotFoundError: No module named 'pydantic_settings'` — these
+  scripts import `backend/app` code, which only exists in `backend/.venv`. Fixed via
+  `scripts/_bootstrap.py`, which re-execs a script under the right interpreter if it isn't
+  already running there.
+- `getpass.getpass()` hangs indefinitely in Git Bash on Windows (mintty provides no native
+  console for it to read from, so the read blocks forever instead of erroring) —
+  `onboard.py`'s password prompt now detects this (`MSYSTEM` env var) and falls back to
+  visible input with a printed warning.
+
+### Scoping notes
+- **No business logic changed.** Nothing in `agents/`, `plugins/`, or any API route's
+  behavior was touched.
+- **Still explicitly unverified**: no real Reddit account has been connected via this
+  project's OAuth flow, and no real Anthropic API call has drafted a real reply, outside of
+  mocked/contract tests — that remains the beta's actual purpose, not something this phase
+  claims to have already done.
+
 ## [0.7.0] - 2026-07-26 - Production Hardening (Phase 2D)
 
 **Tag:** `v0.7.0-production-hardening`. Full reports:
