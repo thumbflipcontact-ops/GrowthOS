@@ -1,0 +1,8 @@
+{
+  "plugin_key": "reddit",
+  "config": {
+    "subreddits": ["SEO", "bigseo", "TechSEO"]
+  },
+  "capabilities_enabled": ["searchable", "publishable"],
+  "label": "default"
+}

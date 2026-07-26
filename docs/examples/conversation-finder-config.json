@@ -1,0 +1,10 @@
+{
+  "config": {
+    "keywords": ["seo audit", "site not indexed", "crawl budget"],
+    "lookback_hours": 168,
+    "max_results_per_platform": 25,
+    "min_score_to_save": 0.2
+  },
+  "schedule_cron": "0 7 * * *",
+  "enabled": true
+}

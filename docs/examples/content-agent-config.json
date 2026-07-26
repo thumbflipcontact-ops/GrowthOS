@@ -1,0 +1,11 @@
+{
+  "config": {
+    "min_confidence_for_reply": 0.4,
+    "max_reply_length": 8000,
+    "temperature": 0.7,
+    "max_tokens": 1024,
+    "banned_phrases": ["as an ai", "click here", "buy now"]
+  },
+  "schedule_cron": null,
+  "enabled": true
+}

@@ -49,4 +49,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    from _bootstrap import ensure_running_under_backend_venv
+
+    ensure_running_under_backend_venv(__file__)
     asyncio.run(main())
