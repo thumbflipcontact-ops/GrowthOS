@@ -6,10 +6,12 @@ FastAPI application — API layer, domain services, agent/plugin execution host.
 `docs/reviews/PLATFORM_IMPROVEMENT_REPORT.md` for the platform-developer-experience work done
 between Phase 1 and the first real plugin, `docs/reviews/OAUTH_IMPLEMENTATION_REPORT.md` for
 the generic OAuth2 framework built after that,
-`docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md` for Phase 2A, and
-`docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md` for Phase 2B.
+`docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md` for Phase 2A,
+`docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md` for Phase 2B, and
+`docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md` +
+`docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md` for Phase 2C.
 
-## Structure (as implemented, through Phase 2B)
+## Structure (as implemented, through Phase 2C)
 
 ```
 backend/
@@ -51,7 +53,8 @@ backend/
 │   │                                 plugin_connections (+ oauth/start, oauth/disconnect),
 │   │                                 oauth (the global callback route), agent_configs
 │   │                                 (+ runs/trigger, runs), knowledge_items, content_items
-│   │                                 (drafts — list/get only) routers
+│   │                                 (list/get, + approve/reject/archive/retry-publish/
+│   │                                 publish-attempts since Phase 2C) routers
 │   ├── services/
 │   │   ├── auth_service.py         Register (org+user+membership bootstrap) / authenticate
 │   │   ├── plugin_connection.py    Create/list a project's plugin connections, validating
@@ -61,18 +64,32 @@ backend/
 │   │   │                             config against the agent's own config_schema
 │   │   ├── knowledge_base.py       KnowledgeBaseClient — AgentContext.knowledge_base's first
 │   │   │                             concrete implementation (dedup-then-upsert by URL)
-│   │   └── content_drafts.py        ContentDraftClient — AgentContext.content's first concrete
-│   │                                  implementation (always writes status="draft")
-│   ├── models/                      SQLAlchemy models mirroring database/schema.sql (all 17 tables)
+│   │   ├── content_drafts.py        ContentDraftClient — AgentContext.content's first concrete
+│   │   │                              implementation. `create_draft` always writes
+│   │   │                              status="draft"; `submit_for_review` (Phase 2C) is the
+│   │   │                              separate, explicit self-check/auto-advance step an agent
+│   │   │                              calls right after — see content_self_check.py below.
+│   │   ├── content_self_check.py     run_self_check() — length/banned-phrase gate a draft must
+│   │   │                              pass before ContentDraftClient.submit_for_review advances
+│   │   │                              it to pending_review. Phase 2C.
+│   │   └── content_approval.py       ContentApprovalService — approve/reject/archive, one
+│   │                                    version-guarded atomic UPDATE per transition
+│   │                                    (ARCHITECTURE.md §8). Phase 2C.
+│   ├── models/                      SQLAlchemy models mirroring database/schema.sql (all 18
+│   │                                  tables — content_publish_attempts is new in Phase 2C)
 │   ├── schemas/                      Pydantic request/response models
 │   ├── repositories/                  One per aggregate — org, user/membership, project,
 │   │                                    plugin (catalog/connection), agent (config/run), event,
-│   │                                    knowledge (knowledge_items), content (content_items)
+│   │                                    knowledge (knowledge_items), content (content_items,
+│   │                                    + ContentPublishAttemptRepository since Phase 2C)
 │   ├── jobs/                           Arq WorkerSettings: agent_runs.py (schedule-triggered —
 │   │                                    real body since Phase 2A), events.py (subscription-
 │   │                                    triggered `run_agent_for_event` — real body since
 │   │                                    Phase 2B, identical AgentContext-construction pattern),
-│   │                                    publish.py (still a placeholder), oauth_refresh.py
+│   │                                    publish.py (real body since Phase 2C — the only caller
+│   │                                    of any plugin's `Publishable.publish()`, retried up to
+│   │                                    3 times, idempotency-keyed by content_item.id),
+│   │                                    oauth_refresh.py
 │   └── scheduler.py                    Scheduler process entrypoint (`python -m app.scheduler`)
 ├── migrations/                          Alembic — matches database/schema.sql
 ├── tests/
@@ -82,18 +99,17 @@ backend/
 └── pyproject.toml
 ```
 
-**Explicitly not present**, per ROADMAP.md Phase 2B scope (business logic still deferred):
-`services/content_approval.py` (the actual approve/reject state-machine service and API
-endpoints — Phase 2C). `core/llm/` and `services/knowledge_base.py`/`content_drafts.py`
-**now exist** — Conversation Finder (Phase 2A) and Content Agent (Phase 2B) are the agents
-that needed them; see their implementation reports. `core/llm/factory.py` only builds
-Claude — OpenAI (ADR 0004's documented secondary provider) has no implementation yet and
-raises `LLMProviderNotConfigured` if selected. `core/llm/base.py`'s `LLMProvider` has no
-`embed()` method yet — nothing needs `knowledge_items.embedding` populated. Credential wiring
-exists for `auth_type="oauth2"` but not yet for `api_key`/`session_credentials` — no request
-path writes `credentials_encrypted` for those auth types. `jobs/publish.py`'s body is still a
-placeholder — the only job left with no real agent to invoke it, since publishing only
-happens after `ContentApprovalService` (Phase 2C) exists.
+**Explicitly not present**, per ROADMAP.md Phase 2C scope: `services/content_approval.py`,
+`jobs/publish.py`'s real body, and the approval/publish API routes **now exist** — see
+`docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md` and
+`docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md`. What's still genuinely deferred:
+`core/llm/factory.py` only builds Claude — OpenAI (ADR 0004's documented secondary provider)
+has no implementation yet and raises `LLMProviderNotConfigured` if selected. `core/llm/base.py`'s
+`LLMProvider` has no `embed()` method yet — nothing needs `knowledge_items.embedding`
+populated. Credential wiring exists for `auth_type="oauth2"` but not yet for
+`api_key`/`session_credentials` — no request path writes `credentials_encrypted` for those
+auth types. No scheduling, no LinkedIn/X/Slack/email plugins, no frontend, no analytics
+dashboards — see `ROADMAP.md` for what's actually next (Phase 3, Production Readiness).
 
 ## Where agents and plugins live
 

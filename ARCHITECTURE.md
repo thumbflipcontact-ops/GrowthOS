@@ -303,6 +303,26 @@ exactly one place this can be gotten wrong:
   all — enforced structurally by the type system (§5), not just by a runtime capability
   check.
 
+**Implemented** (Phase 2C, see `docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md` and
+`docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md`) — `app/services/
+content_approval.py` (`ContentApprovalService`), `app/services/content_drafts.py`'s
+`submit_for_review` (the self-check + auto-advance step), and `app/jobs/publish.py` (the
+real publish worker). The concurrency guard is the optimistic `version` column, not `SELECT
+... FOR UPDATE` — a single atomic `UPDATE ... WHERE status IN (...) AND version = :expected`
+does both the state-transition check and the concurrency check in one round trip; a
+mismatch on either affects zero rows and raises `InvalidStateTransition`, never a silent
+double-transition.
+
+**One addition beyond this section's original diagram: `archived`.** A fifth
+`content_items.status` value, reachable from `draft` or `pending_review` only (never from
+anything already decided or published) — a human choosing "no longer relevant" without
+formally rejecting the content itself. Added because Phase 2B's Content Agent produces
+`draft` rows that fail the self-check (too long, a banned phrase) with no path back into the
+flow above otherwise; without `archived`, such a row would simply sit in `draft` forever
+with no way to close it out. This is additive to the diagram, not a change to any rule
+listed above it — `pending_review → approved`/`rejected` and `approved → published` are
+exactly as specified.
+
 ## 9. Credential encryption
 
 Plugin credentials are protected by **envelope encryption**, not a single static key — see

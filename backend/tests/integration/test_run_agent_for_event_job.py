@@ -14,20 +14,20 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from sqlalchemy import select
+
 from app.core.config import Settings
 from app.core.events import EventPublisher
 from app.core.llm.anthropic_provider import AnthropicProvider
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
 from app.models.content import ContentItem
-from app.models.event import DomainEvent
 from app.models.identity import Organization
 from app.models.project import Project
 from app.repositories.agent_repository import AgentConfigRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.project_repository import ProjectRepository
 from app.services.knowledge_base import KnowledgeBaseClient
-from sqlalchemy import select
 
 pytestmark = pytest.mark.integration
 
@@ -159,7 +159,11 @@ async def test_run_agent_for_event_drafts_and_persists_a_content_item(
     ).scalars().all()
     assert len(drafts) == 1
     draft = drafts[0]
-    assert draft.status.value == "draft"
+    # Auto-advanced by the self-check (Phase 2C) — see
+    # docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md. A short, banned-phrase-free
+    # reply passes, matching ARCHITECTURE.md §8's "immediately auto-advanced ... once the
+    # agent's own self-check passes."
+    assert draft.status.value == "pending_review"
     assert draft.type == "reddit_reply"
     assert draft.body == "Here's a suggestion based on your crawl budget issue."
     assert draft.confidence == Decimal("0.75")
@@ -288,7 +292,42 @@ async def test_run_agent_for_event_skips_a_low_confidence_item_without_calling_t
 
     assert calls == []  # below the default min_confidence_for_reply — never called the LLM
 
+
+@pytest.mark.asyncio
+async def test_run_agent_for_event_leaves_a_too_long_reply_in_draft(
+    db_session, session_factory_for
+) -> None:
+    """End-to-end proof (not just the agent-level unit test) that a failing self-check
+    really does leave the row in `draft` via the real ContentDraftClient.submit_for_review —
+    see docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md."""
+    from app.jobs.events import run_agent_for_event
+
+    project = await _make_project(db_session)
+    _, event = await _make_knowledge_item_and_event(db_session, project)
+    # Pre-create the content_agent config so run_agent_for_event's get_or_create finds this
+    # one instead of auto-provisioning an empty-config default.
+    await AgentConfigRepository(db_session).add(
+        AgentConfig(
+            project_id=project.id, agent_key="content_agent", config={"max_reply_length": 50}
+        )
+    )
+
+    long_reply = "x" * 200
+    llm = _llm_provider_returning(_draft_json(reply=long_reply))
+    await run_agent_for_event(
+        _ctx(session_factory_for, llm_provider=llm), "content_agent", str(event.id)
+    )
+
+    drafts = (
+        await db_session.execute(select(ContentItem).where(ContentItem.project_id == project.id))
+    ).scalars().all()
+    assert len(drafts) == 1
+    assert drafts[0].status.value == "draft"
+
     runs = (
         await db_session.execute(select(AgentRun).where(AgentRun.project_id == project.id))
     ).scalars().all()
-    assert runs[0].summary["content_items_created"] == 0
+    # content_items_created counts the draft's creation, not self-check success — the
+    # self-check only gates promotion to pending_review, not whether a row was written.
+    assert runs[0].summary["content_items_created"] == 1
+    assert runs[0].summary["details"]["self_check_passed"] is False

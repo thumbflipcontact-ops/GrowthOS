@@ -30,7 +30,11 @@ the event-dispatch mechanism (below), reinforcing rather than complicating this 
    on the next cycle; nothing is lost.
 3. **On-demand agent runs.** Enqueued directly by the API when a user clicks "re-run now."
 4. **Publish jobs.** Enqueued when a `content_item` transitions to `approved` — the only
-   trigger for a publish attempt (`ARCHITECTURE.md` §8).
+   trigger for a publish attempt (`ARCHITECTURE.md` §8). **Implemented in Phase 2C** —
+   `app/jobs/publish.py`'s `publish_content_item`, enqueued by
+   `app/api/v1/content_items.py`'s `approve` endpoint (and re-enqueueable via
+   `retry-publish` for a previously-exhausted-retries item) — see
+   `docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md`.
 5. **Enrichment/maintenance jobs.** Knowledge Base Agent's periodic enrichment pass, plugin
    `health_check()` polling, `plugin_catalog` refresh on startup, and — implemented alongside
    the OAuth2 framework (`docs/auth/OAUTH2_ARCHITECTURE.md`) — `app/jobs/oauth_refresh.py`,
@@ -58,9 +62,13 @@ sensitive path for webhook-triggered reactivity — see `docs/plugins/PLUGIN_ARC
   `conversation_finder` run re-encountering a thread it already partially processed upserts
   rather than duplicates.
 - Publish jobs: retried up to 3 times, then the `content_item` stays `approved` with
-  `publish_error` populated and surfaces in the dashboard for manual retry — never silently
-  dropped, and never auto-transitioned to any other status by a failure (a failed publish is
-  not a rejection; a human should decide what happens next).
+  `publish_error` populated and surfaces via the API for manual retry
+  (`POST .../content-items/{id}/retry-publish`) — never silently dropped, and never
+  auto-transitioned to any other status by a failure (a failed publish is not a rejection; a
+  human should decide what happens next). Every attempt — success or failure, whether
+  triggered by approval, an Arq retry, or a manual retry — is recorded as its own
+  `content_publish_attempts` row, independent of the single current-state
+  `publish_error` column.
 - All jobs carry a deterministic idempotency key (e.g. `content_item.id` for publish jobs) so
   a duplicate enqueue (e.g. from an API retry with the same `Idempotency-Key`, see
   `docs/api/API_DESIGN.md`) is a no-op if the job already ran successfully.

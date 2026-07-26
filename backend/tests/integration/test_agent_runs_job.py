@@ -10,6 +10,8 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from sqlalchemy import select
+
 from app.core.config import Settings
 from app.core.llm.factory import build_llm_provider
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
@@ -22,7 +24,6 @@ from app.models.project import Project
 from app.repositories.agent_repository import AgentConfigRepository
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.project_repository import ProjectRepository
-from sqlalchemy import select
 
 pytestmark = pytest.mark.integration
 

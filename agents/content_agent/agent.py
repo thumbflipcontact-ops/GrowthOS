@@ -1,10 +1,14 @@
 """Content Agent — see README.md.
 
-Subscription-triggered (see subscriptions.py) by `knowledge_item.created`. Phase 2B scope:
-load the triggering `knowledge_item`, draft ONE Reddit reply for it via the configured LLM
-provider, and persist it as a `content_items` row in `draft` status — never further. Does
-NOT draft outreach copy, standalone articles, or anything for a platform other than Reddit —
-see README.md §"What Phase 2B does not do".
+Subscription-triggered (see subscriptions.py) by `knowledge_item.created`. Loads the
+triggering `knowledge_item`, drafts ONE Reddit reply for it via the configured LLM provider,
+persists it as a `content_items` row (`ctx.content.create_draft`), then immediately runs the
+self-check and auto-advance (`ctx.content.submit_for_review`) — matching ARCHITECTURE.md
+§8's documented flow: created `draft`, advanced to `pending_review` once the self-check
+passes. Never advances a draft any further than that itself — `ContentApprovalService`
+(Phase 2C) owns every transition past `pending_review`. Does NOT draft outreach copy,
+standalone articles, or anything for a platform other than Reddit — see README.md
+§"What this agent does not do".
 
 Imports `app.core.llm.base`'s plain dataclasses at runtime (not just under TYPE_CHECKING) to
 construct the `CompletionRequest` it hands `ctx.llm.complete(...)` — an accepted, narrow
@@ -123,6 +127,17 @@ class ContentAgent:
         result.content_items_created = 1
         result.summary["content_item_id"] = str(saved.id)
         result.summary["draft_confidence"] = draft.confidence
+
+        check = await ctx.content.submit_for_review(
+            saved,
+            org_id=ctx.project.org_id,
+            max_length=config.max_reply_length,
+            banned_phrases=config.banned_phrases,
+        )
+        result.summary["self_check_passed"] = check.passed
+        if not check.passed:
+            result.summary["self_check_reasons"] = check.reasons
+        result.summary["content_item_status"] = saved.status.value
         return result
 
 

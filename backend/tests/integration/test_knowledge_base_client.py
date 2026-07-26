@@ -8,6 +8,7 @@ import uuid
 from decimal import Decimal
 
 import pytest
+
 from app.models.identity import Organization
 from app.models.project import Project
 from app.repositories.organization_repository import OrganizationRepository

@@ -13,6 +13,8 @@ from typing import Any
 import pytest
 import structlog
 from app.core.llm.base import CompletionRequest, CompletionResult
+from app.models.content import ContentItemStatus
+from app.services.content_self_check import SelfCheckResult, run_self_check
 
 from agents._shared.base import AgentContext
 from agents.content_agent.agent import AGENT, ContentAgent
@@ -51,10 +53,25 @@ class _FakeKnowledgeBase:
 @dataclass
 class _FakeContentDraftClient:
     created: list[dict[str, Any]] = field(default_factory=list)
+    submitted: list[dict[str, Any]] = field(default_factory=list)
 
     async def create_draft(self, **kwargs: Any) -> SimpleNamespace:
         self.created.append(kwargs)
-        return SimpleNamespace(id=uuid.uuid4(), **kwargs)
+        return SimpleNamespace(id=uuid.uuid4(), status=ContentItemStatus.DRAFT, **kwargs)
+
+    async def submit_for_review(
+        self,
+        item: SimpleNamespace,
+        *,
+        org_id: uuid.UUID,
+        max_length: int,
+        banned_phrases: tuple[str, ...] = (),
+    ) -> SelfCheckResult:
+        check = run_self_check(item.body, max_length=max_length, banned_phrases=banned_phrases)
+        if check.passed:
+            item.status = ContentItemStatus.PENDING_REVIEW
+        self.submitted.append({"item_id": item.id, "org_id": org_id, "passed": check.passed})
+        return check
 
 
 @dataclass
@@ -90,7 +107,7 @@ def _draft_json(
 
 
 def _project() -> SimpleNamespace:
-    return SimpleNamespace(id=uuid.uuid4(), brand_voice={})
+    return SimpleNamespace(id=uuid.uuid4(), org_id=uuid.uuid4(), brand_voice={})
 
 
 def _ctx(
@@ -205,6 +222,11 @@ async def test_creates_a_draft_from_a_successful_completion() -> None:
     assert draft["target_ref"] == "t3_abc123"
     assert draft["knowledge_item_id"] == item.id
     assert draft["source_agent_run_id"] == ctx.agent_run_id
+    assert result.summary["self_check_passed"] is True
+    assert result.summary["content_item_status"] == "pending_review"
+    assert len(content.submitted) == 1
+    assert content.submitted[0]["passed"] is True
+    assert content.submitted[0]["org_id"] == ctx.project.org_id
 
 
 @pytest.mark.asyncio
@@ -254,3 +276,40 @@ async def test_result_summary_reports_the_triggering_item_and_draft() -> None:
     assert result.summary["platform"] == "reddit"
     assert "content_item_id" in result.summary
     assert result.summary["draft_confidence"] == 0.75
+
+
+@pytest.mark.asyncio
+async def test_a_reply_exceeding_max_reply_length_fails_the_self_check_and_stays_in_draft() -> None:
+    item = _knowledge_item()
+    long_reply = "x" * 200
+    ctx, content, _ = _ctx(
+        item=item,
+        llm_response_text=_draft_json(reply=long_reply),
+        config={"max_reply_length": 50},
+    )
+
+    result = await ContentAgent().run(ctx)
+
+    # The draft is still created and counted — the self-check only gates promotion, not
+    # creation — but it stays in draft, and content_item_status/self_check reflect that.
+    assert result.content_items_created == 1
+    assert result.summary["self_check_passed"] is False
+    assert result.summary["content_item_status"] == "draft"
+    assert any("max_length" in reason for reason in result.summary["self_check_reasons"])
+    assert content.submitted[0]["passed"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_reply_containing_a_banned_phrase_fails_the_self_check() -> None:
+    item = _knowledge_item()
+    ctx, content, _ = _ctx(
+        item=item,
+        llm_response_text=_draft_json(reply="Buy our product now, guaranteed results!"),
+        config={"banned_phrases": ["guaranteed results"]},
+    )
+
+    result = await ContentAgent().run(ctx)
+
+    assert result.summary["self_check_passed"] is False
+    assert result.summary["content_item_status"] == "draft"
+    assert any("banned phrase" in reason for reason in result.summary["self_check_reasons"])

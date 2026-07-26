@@ -9,6 +9,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+
 from app.core.errors import NotFoundError, ValidationError
 from app.models.audit import AuditLog
 from app.models.identity import Organization, User

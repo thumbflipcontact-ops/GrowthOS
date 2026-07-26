@@ -155,6 +155,18 @@ drafting agent's own self-assessment (`confidence` mirrors `knowledge_items.conf
 short quotes (`evidence`) grounding the draft in its source `knowledge_item`, for a human
 reviewer to scan quickly. See `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md`.
 
+`content_item_status` gained a fifth value, `archived`, in Phase 2C — see `ARCHITECTURE.md`
+§8's implementation note and `docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md`.
+`ContentApprovalService` (Phase 2C) is the first and only code that ever writes `approved`/
+`rejected`/`archived`; the publish worker (`app/jobs/publish.py`) is the first and only code
+that ever writes `published`.
+
+### `content_publish_attempts`
+New in Phase 2C — one row per publish *attempt*, not just the current outcome.
+`content_items.publish_error` only ever holds the most recent failure; a human asking "how
+many times has this been retried, and what happened each time" needs this table, not just
+the single current-state column. See `docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md`.
+
 ### `companies` / `contacts`
 Deliberately CRM-*lite*. This is what Customer Finder and Outreach Assistant need to track
 ICP-matched targets and outreach status — it is not trying to be a full CRM. `contacts` links

@@ -244,8 +244,14 @@ create index idx_knowledge_items_embedding on knowledge_items using hnsw (embedd
 -- Content items — the human-approval gate (see ARCHITECTURE.md §8)
 -- ============================================================================
 
+-- `archived` added in Phase 2C (see docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md)
+-- — a genuine fifth terminal state, not in ARCHITECTURE.md §8's original diagram. Distinct
+-- from `rejected`: archiving means "no longer relevant" (the opportunity passed, a human
+-- changed their mind), not "the content itself was bad." Reachable only from `draft` or
+-- `pending_review` — an already-`approved`/`rejected`/`published` item is not archived in
+-- this phase.
 create type content_item_status as enum (
-    'draft', 'pending_review', 'approved', 'rejected', 'published'
+    'draft', 'pending_review', 'approved', 'rejected', 'published', 'archived'
 );
 
 create table content_items (
@@ -298,6 +304,22 @@ create table content_items (
 );
 
 create index idx_content_items_project_status on content_items (project_id, status);
+
+-- Publish history (Phase 2C) — one row per publish *attempt*, not just the current outcome.
+-- content_items.publish_error only ever holds the most recent failure; this table is what
+-- "error handling and retry support" is actually queryable against — see
+-- docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md.
+create table content_publish_attempts (
+    id                uuid primary key default gen_random_uuid(),
+    content_item_id   uuid not null references content_items(id) on delete cascade,
+    attempt_number    integer not null,
+    success           boolean not null,
+    published_url     text,
+    error             text,
+    created_at        timestamptz not null default now()
+);
+
+create index idx_content_publish_attempts_item on content_publish_attempts (content_item_id, attempt_number);
 
 -- ============================================================================
 -- Security audit trail (see docs/security/SECURITY.md, design review §5.3)

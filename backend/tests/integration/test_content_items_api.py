@@ -1,5 +1,6 @@
-"""End-to-end tests for the content-items read API — see docs/api/API_DESIGN.md and
-app/api/v1/content_items.py.
+"""End-to-end tests for the content-items API — see docs/api/API_DESIGN.md,
+app/api/v1/content_items.py, docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md, and
+docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md.
 """
 
 from __future__ import annotations
@@ -9,21 +10,40 @@ from decimal import Decimal
 
 import pytest
 import pytest_asyncio
-from app.services.content_drafts import ContentDraftClient
 from httpx import ASGITransport, AsyncClient
+
+from app.models.content import ContentItemStatus
+from app.services.content_drafts import ContentDraftClient
 
 pytestmark = pytest.mark.integration
 
 
+class _FakeArqRedis:
+    def __init__(self) -> None:
+        self.enqueued: list[tuple[str, tuple, dict]] = []
+
+    async def enqueue_job(self, name: str, *args: object, **kwargs: object) -> None:
+        self.enqueued.append((name, args, kwargs))
+
+
+@pytest.fixture
+def fake_arq_redis() -> _FakeArqRedis:
+    return _FakeArqRedis()
+
+
 @pytest_asyncio.fixture
-async def api_client(db_session, _migrated_db):
-    from app.api.deps import get_db
+async def api_client(db_session, _migrated_db, fake_arq_redis: _FakeArqRedis):
+    from app.api.deps import get_arq_redis, get_db
     from app.main import app
 
     async def override_get_db():
         yield db_session
 
+    async def override_get_arq_redis():
+        return fake_arq_redis
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_arq_redis] = override_get_arq_redis
     try:
         async with app.router.lifespan_context(app):
             transport = ASGITransport(app=app)
@@ -146,3 +166,163 @@ async def test_get_content_item_404s_for_an_item_belonging_to_another_project(
 async def test_content_items_require_project_access(api_client: AsyncClient) -> None:
     r = await api_client.get(f"/api/v1/projects/{uuid.uuid4()}/content-items")
     assert r.status_code == 401
+
+
+async def _make_pending_review_item(db_session, project_id: str):
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=uuid.UUID(project_id),
+        type="reddit_reply",
+        body="A helpful reply.",
+        confidence=Decimal("0.75"),
+        target_platform="reddit",
+        target_ref="t3_abc123",
+    )
+    item.status = ContentItemStatus.PENDING_REVIEW
+    await db_session.flush()
+    return item
+
+
+@pytest.mark.asyncio
+async def test_approve_transitions_to_approved_and_enqueues_a_publish_job(
+    api_client: AsyncClient, project_id: str, db_session, fake_arq_redis: _FakeArqRedis
+) -> None:
+    item = await _make_pending_review_item(db_session, project_id)
+    original_version = item.version  # read before the API call refreshes this same object
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/approve",
+        json={"version": original_version},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "approved"
+    assert body["version"] == original_version + 1
+
+    assert len(fake_arq_redis.enqueued) == 1
+    job_name, args, kwargs = fake_arq_redis.enqueued[0]
+    assert job_name == "publish_content_item"
+    assert args == (str(item.id),)
+    assert kwargs["_job_id"] == f"publish-{item.id}"
+
+
+@pytest.mark.asyncio
+async def test_approve_rejects_a_draft_item_with_409(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=uuid.UUID(project_id), type="reddit_reply", body="hi", confidence=Decimal("0.5")
+    )
+    await db_session.flush()
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/approve",
+        json={"version": item.version},
+    )
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "invalid_state_transition"
+
+
+@pytest.mark.asyncio
+async def test_approve_rejects_a_stale_version_with_409(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    item = await _make_pending_review_item(db_session, project_id)
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/approve",
+        json={"version": item.version + 1},
+    )
+    assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_reject_requires_a_reason(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    item = await _make_pending_review_item(db_session, project_id)
+
+    missing_reason = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/reject",
+        json={"version": item.version},
+    )
+    assert missing_reason.status_code == 422
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/reject",
+        json={"version": item.version, "reason": "Too promotional."},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_archive_works_from_draft_without_a_reason(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=uuid.UUID(project_id), type="reddit_reply", body="hi", confidence=Decimal("0.5")
+    )
+    await db_session.flush()
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/archive",
+        json={"version": item.version},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "archived"
+
+
+@pytest.mark.asyncio
+async def test_retry_publish_requires_approved_status(
+    api_client: AsyncClient, project_id: str, db_session, fake_arq_redis: _FakeArqRedis
+) -> None:
+    item = await _make_pending_review_item(db_session, project_id)
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/retry-publish"
+    )
+    assert r.status_code == 409
+    assert fake_arq_redis.enqueued == []
+
+
+@pytest.mark.asyncio
+async def test_retry_publish_enqueues_a_job_for_an_approved_item(
+    api_client: AsyncClient, project_id: str, db_session, fake_arq_redis: _FakeArqRedis
+) -> None:
+    item = await _make_pending_review_item(db_session, project_id)
+    item.status = ContentItemStatus.APPROVED
+    item.publish_error = "a previous attempt failed"
+    await db_session.flush()
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/retry-publish"
+    )
+    assert r.status_code == 202
+    assert len(fake_arq_redis.enqueued) == 1
+    assert fake_arq_redis.enqueued[0][2]["_job_id"] == f"publish-{item.id}"
+
+
+@pytest.mark.asyncio
+async def test_publish_attempts_list_is_empty_before_any_publish_attempt(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    item = await _make_pending_review_item(db_session, project_id)
+
+    r = await api_client.get(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/publish-attempts"
+    )
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+@pytest.mark.asyncio
+async def test_publish_attempts_404s_for_an_unknown_item(
+    api_client: AsyncClient, project_id: str
+) -> None:
+    r = await api_client.get(
+        f"/api/v1/projects/{project_id}/content-items/{uuid.uuid4()}/publish-attempts"
+    )
+    assert r.status_code == 404

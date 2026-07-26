@@ -7,6 +7,7 @@ an injectable stub.
 from __future__ import annotations
 
 import pytest
+
 from app.core.agent_registry import load_agent
 from app.core.errors import NotFoundError
 

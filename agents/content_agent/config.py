@@ -33,3 +33,12 @@ class ContentAgentConfig(BaseModel):
     )
     temperature: float = Field(default=0.7, ge=0.0, le=1.0)
     max_tokens: int = Field(default=1024, ge=1)
+    banned_phrases: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Case-insensitive substrings that fail the self-check "
+            "(app/services/content_self_check.py) if present in a drafted reply — see "
+            "ARCHITECTURE.md §8's 'banned-phrase filter' example. Empty by default: no "
+            "phrase is banned unless a project configures one."
+        ),
+    )

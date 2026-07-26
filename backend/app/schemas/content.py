@@ -4,7 +4,25 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class ApproveContentItemRequest(BaseModel):
+    """See app/services/content_approval.py. `version` is the value the client last read —
+    the optimistic-concurrency guard rejects (409) if it doesn't match the row's current
+    version, per docs/api/API_DESIGN.md."""
+
+    version: int = Field(ge=1)
+
+
+class RejectContentItemRequest(BaseModel):
+    version: int = Field(ge=1)
+    reason: str = Field(min_length=1)
+
+
+class ArchiveContentItemRequest(BaseModel):
+    version: int = Field(ge=1)
+    reason: str | None = None
 
 
 class ContentItemResponse(BaseModel):
@@ -27,5 +45,17 @@ class ContentItemResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PublishAttemptResponse(BaseModel):
+    id: uuid.UUID
+    content_item_id: uuid.UUID
+    attempt_number: int
+    success: bool
+    published_url: str | None
+    error: str | None
+    created_at: datetime
 
     model_config = {"from_attributes": True}

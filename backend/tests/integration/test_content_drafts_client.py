@@ -8,7 +8,11 @@ import uuid
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import select
+
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
+from app.models.audit import AuditLog
+from app.models.content import ContentItemStatus
 from app.models.identity import Organization
 from app.models.project import Project
 from app.repositories.agent_repository import AgentConfigRepository, AgentRunRepository
@@ -102,3 +106,76 @@ async def test_create_draft_defaults_reasoning_and_evidence(db_session) -> None:
     assert item.target_ref is None
     assert item.knowledge_item_id is None
     assert item.created_by_agent_run_id is None
+
+
+@pytest.mark.asyncio
+async def test_submit_for_review_advances_a_passing_draft_and_writes_an_audit_row(
+    db_session,
+) -> None:
+    project = await _make_project(db_session)
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=project.id, type="reddit_reply", body="A short, clean reply.",
+        confidence=Decimal("0.75"),
+    )
+
+    check = await client.submit_for_review(item, org_id=project.org_id, max_length=1000)
+
+    assert check.passed is True
+    assert check.reasons == []
+    assert item.status == ContentItemStatus.PENDING_REVIEW
+    # Not a human review — this is a system auto-advance, per ARCHITECTURE.md §8.
+    assert item.reviewed_by_user_id is None
+    assert item.reviewed_at is None
+
+    audit = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.action == "content_item.submitted_for_review")
+        )
+    ).scalar_one_or_none()
+    assert audit is not None
+    assert audit.target == str(item.id)
+    assert audit.actor_user_id is None
+
+
+@pytest.mark.asyncio
+async def test_submit_for_review_leaves_a_failing_draft_in_draft_with_no_audit_row(
+    db_session,
+) -> None:
+    project = await _make_project(db_session)
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=project.id, type="reddit_reply", body="x" * 200, confidence=Decimal("0.75")
+    )
+
+    check = await client.submit_for_review(item, org_id=project.org_id, max_length=100)
+
+    assert check.passed is False
+    assert any("max_length" in reason for reason in check.reasons)
+    assert item.status == ContentItemStatus.DRAFT
+
+    audit = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.action == "content_item.submitted_for_review")
+        )
+    ).scalar_one_or_none()
+    assert audit is None
+
+
+@pytest.mark.asyncio
+async def test_submit_for_review_checks_banned_phrases(db_session) -> None:
+    project = await _make_project(db_session)
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=project.id,
+        type="reddit_reply",
+        body="Buy now, guaranteed results!",
+        confidence=Decimal("0.75"),
+    )
+
+    check = await client.submit_for_review(
+        item, org_id=project.org_id, max_length=1000, banned_phrases=["guaranteed results"]
+    )
+
+    assert check.passed is False
+    assert item.status == ContentItemStatus.DRAFT

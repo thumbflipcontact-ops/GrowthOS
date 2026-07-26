@@ -20,6 +20,7 @@ EXPECTED_TABLES = {
     "domain_events",
     "knowledge_items",
     "content_items",
+    "content_publish_attempts",
     "audit_log",
     "companies",
     "contacts",

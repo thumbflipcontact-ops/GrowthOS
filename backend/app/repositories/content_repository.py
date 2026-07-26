@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy import select
 
-from app.models.content import ContentItem
+from app.models.content import ContentItem, ContentPublishAttempt
 from app.repositories.base import Repository
 
 
@@ -41,3 +41,20 @@ class ContentItemRepository(Repository[ContentItem]):
             )
         )
         return result.scalar_one_or_none()
+
+
+class ContentPublishAttemptRepository(Repository[ContentPublishAttempt]):
+    model = ContentPublishAttempt
+
+    async def list_by_content_item(
+        self, content_item_id: uuid.UUID
+    ) -> list[ContentPublishAttempt]:
+        result = await self.session.execute(
+            select(ContentPublishAttempt)
+            .where(ContentPublishAttempt.content_item_id == content_item_id)
+            .order_by(ContentPublishAttempt.attempt_number)
+        )
+        return list(result.scalars().all())
+
+    async def next_attempt_number(self, content_item_id: uuid.UUID) -> int:
+        return len(await self.list_by_content_item(content_item_id)) + 1

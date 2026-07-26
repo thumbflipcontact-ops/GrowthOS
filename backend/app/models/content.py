@@ -1,11 +1,15 @@
 """The human-approval gate. See ARCHITECTURE.md §8.
 
-Populated for real by Content Agent (Phase 2B, see
-docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md) — always as `draft`, never advanced by
-any agent code; ContentApprovalService (the actual state-machine enforcement moving
-`draft`/`pending_review` on to `approved`/`rejected`/`published`) is still out of scope as
-Phase 2C business logic. The `version` concurrency-guard column and `review_fields_consistent`
-constraint have been in place since Phase 1, ahead of that service being built.
+Populated for real by Content Agent (Phase 2B) — created `draft`, then immediately
+auto-advanced to `pending_review` by `ContentDraftClient.submit_for_review`'s self-check
+(Phase 2C), matching ARCHITECTURE.md §8's documented flow exactly. `ContentApprovalService`
+(Phase 2C, see docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md) enforces
+`pending_review → approved`/`rejected`, and `draft`/`pending_review → archived` (a fifth
+status, added in Phase 2C — not in the original diagram, see `ContentItemStatus.ARCHIVED`).
+The publish worker (`app/jobs/publish.py`, see
+docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md) enforces `approved → published`.
+The `version` concurrency-guard column and `review_fields_consistent` constraint have been
+in place since Phase 1, ahead of the service that finally uses them.
 `confidence`/`reasoning`/`evidence` were added alongside Content Agent — see below.
 """
 
@@ -20,7 +24,7 @@ from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, te
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin, UUIDPkMixin, pg_enum
+from app.models.base import Base, CreatedAtMixin, TimestampMixin, UUIDPkMixin, pg_enum
 
 
 class ContentItemStatus(str, enum.Enum):
@@ -29,6 +33,11 @@ class ContentItemStatus(str, enum.Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     PUBLISHED = "published"
+    # Added in Phase 2C — a genuine fifth terminal state, not in ARCHITECTURE.md §8's
+    # original diagram. Distinct from REJECTED: archiving means "no longer relevant" (the
+    # opportunity passed, a human changed their mind), not "the content itself was bad."
+    # Reachable only from DRAFT or PENDING_REVIEW — see ContentApprovalService.archive().
+    ARCHIVED = "archived"
 
 
 class ContentItem(UUIDPkMixin, TimestampMixin, Base):
@@ -84,3 +93,24 @@ class ContentItem(UUIDPkMixin, TimestampMixin, Base):
     # Optimistic concurrency guard on the approve/reject transition — see
     # docs/reviews/DESIGN_REVIEW.md §3.2 and docs/architecture/LOCKED_DECISIONS.md L12.
     version: Mapped[int] = mapped_column(nullable=False, default=1, server_default=text("1"))
+
+
+class ContentPublishAttempt(UUIDPkMixin, CreatedAtMixin, Base):
+    """One row per publish *attempt* — added in Phase 2C alongside the real publish worker.
+    `content_items.publish_error` only ever holds the most recent failure; this table is the
+    actual "publish history"/retry record. See
+    docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md.
+    """
+
+    __tablename__ = "content_publish_attempts"
+    __table_args__ = (
+        Index("idx_content_publish_attempts_item", "content_item_id", "attempt_number"),
+    )
+
+    content_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("content_items.id", ondelete="CASCADE"), nullable=False
+    )
+    attempt_number: Mapped[int] = mapped_column(nullable=False)
+    success: Mapped[bool] = mapped_column(nullable=False)
+    published_url: Mapped[str | None] = mapped_column(nullable=True)
+    error: Mapped[str | None] = mapped_column(nullable=True)

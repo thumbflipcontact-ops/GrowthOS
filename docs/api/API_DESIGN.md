@@ -69,7 +69,24 @@ crossing the schema design goes out of its way to avoid.
 /api/v1/projects/{project_id}/content-items
 /api/v1/projects/{project_id}/content-items/{id}
 /api/v1/projects/{project_id}/content-items/{id}/approve                  POST
-/api/v1/projects/{project_id}/content-items/{id}/reject                   POST
+/api/v1/projects/{project_id}/content-items/{id}/reject                   POST { "version": 1, "reason": "..." }
+/api/v1/projects/{project_id}/content-items/{id}/archive                  POST — not in the
+                                                                             original design;
+                                                                             added in Phase 2C,
+                                                                             see ARCHITECTURE.md
+                                                                             §8's implementation
+                                                                             note. { "version": 1,
+                                                                             "reason": "..."? }
+/api/v1/projects/{project_id}/content-items/{id}/retry-publish            POST — manually
+                                                                             re-enqueues the
+                                                                             publish job for an
+                                                                             `approved` item whose
+                                                                             automatic retries are
+                                                                             exhausted
+/api/v1/projects/{project_id}/content-items/{id}/publish-attempts         GET — the publish
+                                                                             history table, see
+                                                                             docs/database/SCHEMA.md's
+                                                                             content_publish_attempts
 /api/v1/projects/{project_id}/companies
 /api/v1/projects/{project_id}/contacts
 /api/v1/projects/{project_id}/competitors
@@ -102,6 +119,13 @@ These are the only two endpoints in the entire API that can move a `content_item
 
 No endpoint exists to directly set `content_items.status = 'published'` — that transition
 only happens inside the publish worker, which isn't reachable via the public API at all.
+
+**Implemented in Phase 2C** exactly as specified above — see
+`docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md`. `archive` (not in this section's
+original two-endpoint framing) follows the identical contract: version-guarded, 409 on a
+state/version mismatch, writes `reviewed_by_user_id`/`reviewed_at` — the field names mean "a
+human reviewed this," not specifically "approved," so archiving (also a human review
+decision) uses them too.
 
 ## Pagination, filtering, sorting
 

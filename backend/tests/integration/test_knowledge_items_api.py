@@ -8,8 +8,9 @@ from decimal import Decimal
 
 import pytest
 import pytest_asyncio
-from app.services.knowledge_base import KnowledgeBaseClient
 from httpx import ASGITransport, AsyncClient
+
+from app.services.knowledge_base import KnowledgeBaseClient
 
 pytestmark = pytest.mark.integration
 
