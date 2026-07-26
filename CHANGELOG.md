@@ -5,6 +5,79 @@ Versions before Phase 4 (multi-tenant activation) are development milestones, no
 releases — see `ROADMAP.md` for the phase plan and `ARCHITECTURE.md` for the system design
 each version builds on.
 
+## [0.6.0] - 2026-07-26 - Approval & Publishing Workflow (Phase 2C)
+
+**Tag:** `v0.6.0-approval-publishing`. Full reports:
+`docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md` and
+`docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md`.
+
+Closes the loop the first time: a Content Agent draft can now be reviewed, approved or
+rejected or archived by a human, and — once approved — actually published through the Reddit
+plugin, with an audit row for every transition and a durable per-attempt publish history.
+Every state change enforces ARCHITECTURE.md §8's state machine and its optimistic-concurrency
+`version` guard.
+
+### Added
+- `app/services/content_approval.py` — `ContentApprovalService` (`approve`/`reject`/
+  `archive`), each a single atomic `UPDATE ... WHERE status IN (...) AND version = :expected`
+  that does the state-transition check and the concurrency check in one round trip; a
+  zero-row result raises `InvalidStateTransition` (409), covering both an illegal transition
+  and a stale `version` with the same guard.
+- `app/services/content_self_check.py` — `run_self_check()`: a length limit and a
+  case-insensitive banned-phrase filter, the "agent's own self-check" ARCHITECTURE.md §8 has
+  always specified. Content-type-agnostic; duplicate-content detection is explicitly not
+  implemented (future work).
+- `ContentDraftClient.submit_for_review` — the missing auto-advance step: runs the self-check
+  and, if it passes, moves the item `draft → pending_review` and writes an audit row.
+  Deliberately a separate method from `create_draft` (unchanged, still only ever writes
+  `draft`) so each method's guarantee stays precise while the agent's overall workflow matches
+  "always created in draft, immediately auto-advanced" as documented.
+- `app/jobs/publish.py` — real `publish_content_item`: resolves the project's `Publishable`
+  plugin via `PluginRegistry.get`, calls `plugin.publish(item)`, records a
+  `content_publish_attempts` row for every attempt (success or failure), and on success
+  publishes a `content_item.published` domain event. On failure, sets `publish_error` and
+  raises to trigger Arq's retry (up to 3 attempts) — the item stays `approved`, never
+  auto-transitioned, since a failed publish is not a rejection.
+- `app/repositories/content_repository.py` — `ContentPublishAttemptRepository`.
+- API: `POST .../content-items/{id}/approve` (enqueues the publish job with a deterministic
+  `_job_id`), `.../reject` (`reason` required), `.../archive` (`reason` optional — the fifth
+  status, not in the original 4-state diagram), `.../retry-publish` (re-enqueues the same
+  idempotency-keyed job for a previously-exhausted-retries item), `GET .../publish-attempts`
+  (the durable publish history).
+- 41 new tests: `test_content_approval_service.py` (10), `test_publish_worker.py` (7),
+  `test_content_self_check.py` (9), plus additions to `test_content_items_api.py` (+9),
+  `test_content_drafts_client.py` (+3), `test_run_agent_for_event_job.py` (+1), and
+  `agents/content_agent/tests/test_agent.py` (+2). Full suite: 269 backend tests + 106
+  agents/plugins tests = 375 total, all passing.
+
+### Schema
+- `content_item_status` gained `archived` — a genuine fifth terminal state, not an alias for
+  `rejected`, added via its own migration (`ALTER TYPE ... ADD VALUE`, since Postgres can't use
+  a freshly-added enum value in the same transaction that added it).
+- New table `content_publish_attempts` — one row per publish *attempt*, distinct from the
+  single current-state `content_items.publish_error` column, for real publish history and
+  retry visibility.
+
+### Architecture note
+- Building `ContentApprovalService` against ARCHITECTURE.md §8 exposed a genuine gap: Phase
+  2B's Content Agent (per that phase's own explicit scope) left every draft in `draft`
+  forever, with nothing to promote it to `pending_review` — the only state `approve`/`reject`
+  can act on per the frozen design. Per this phase's instruction to stop and ask before a
+  breaking change, this was resolved by user decision rather than by guessing: build the
+  missing auto-advance step now (rather than having the service accept `draft` directly, which
+  would have deviated from the documented state machine), and add `archived` as a real new
+  enum value (rather than aliasing it to `rejected`). See ARCHITECTURE.md §8's implementation
+  note for the full reasoning.
+
+### Scoping notes (see the implementation reports for full reasoning)
+- **No automatic publishing without approval, no scheduling.** The publish job's only trigger
+  is the `approve` transition (or a manual `retry-publish`) — nothing else ever enqueues it.
+- **No bulk approve, no frontend, no LinkedIn/X/Slack/email.** Out of scope for this phase; see
+  `ROADMAP.md`.
+- **Code-complete, not yet real-world-verified.** Every step of discover → draft → approve →
+  publish now has a real, tested implementation, but nothing has exercised it against an
+  actual connected Reddit account with a real Anthropic API key.
+
 ## [0.5.0] - 2026-07-25 - Content Agent (Phase 2B)
 
 **Tag:** `v0.5.0-content-agent`. Full report:

@@ -37,10 +37,10 @@ reworked. This ordering is what the (now-archived) V1→V2 migration plan produc
 4. **Reddit plugin** — `plugins/reddit/`, against the mechanism built in step 2, not a
    hand-registered one-off. See `plugins/reddit/README.md` and
    `docs/decisions/0005-first-plugin-reddit.md`. **Done** — implemented against the platform
-   mechanisms built in steps 2 and 7 (manifest/discovery, and the OAuth2 framework/envelope
+   mechanisms built in steps 2 and 6 (manifest/discovery, and the OAuth2 framework/envelope
    encryption respectively), including its own unit + contract test suite. Not yet connected
-   to a real account, and not yet exercised end-to-end (that needs step 5's Conversation
-   Finder + Content Agent, still to come) — see
+   to a real account — the one thing step 5's Conversation Finder, Content Agent, and
+   approval/publish workflow still don't change; see
    `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`.
 5. **Conversation Finder + Content Agent** — Conversation Finder remains schedule-triggered
    (it originates discovery); Content Agent subscribes to `knowledge_item.created` instead of
@@ -57,28 +57,43 @@ reworked. This ordering is what the (now-archived) V1→V2 migration plan produc
      event bus's subscription path (`app/jobs/events.py`'s `run_agent_for_event`, wired for
      real alongside it) rather than the scheduler. Also the first consumer of a real
      `LLMProvider` (`backend/app/core/llm/`, Claude via `AnthropicProvider` — ADR 0004,
-     finally implemented). Drafts Reddit replies only, always as `content_items.status =
-     "draft"` — never advances a draft itself; that's step 6, not yet built. Required
-     extending the Phase 2A schema (`knowledge_items.title`/`body_excerpt`/
-     `platform_metadata`, `content_items.confidence`/`reasoning`/`evidence`) once a real
-     consumer needed grounding text and self-assessment fields nothing had persisted before.
-     See `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md` and `CHANGELOG.md`'s
-     `[0.5.0]` entry (tagged `v0.5.0-content-agent`).
-6. **Approval Inbox + publish worker** — `ContentApprovalService` with the `version`-column
-   concurrency guard included from the start, not retrofitted. Tracked as **Phase 2C**.
-7. **Credential encryption** — envelope encryption built as part of the plugin connection
+     finally implemented). Drafts Reddit replies only, created `draft` then auto-advanced to
+     `pending_review` by its own self-check (see the Phase 2C sub-bullet below — built
+     alongside it once ARCHITECTURE.md §8's documented flow required it). Required
+     extending the Phase 2A schema (`knowledge_items.title`/`body_excerpt`/`platform_metadata`,
+     `content_items.confidence`/`reasoning`/`evidence`) once a real consumer needed
+     grounding text and self-assessment fields nothing had persisted before. See
+     `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md` and `CHANGELOG.md`'s `[0.5.0]`
+     entry (tagged `v0.5.0-content-agent`).
+   - **Phase 2C — Approval + publish worker.** `ContentApprovalService`
+     (`approve`/`reject`/`archive`, atomic version-guarded transitions per ARCHITECTURE.md
+     §8), the self-check/auto-advance step (`ContentDraftClient.submit_for_review`, built
+     here rather than in Phase 2B once ARCHITECTURE.md §8's documented flow proved it was
+     needed for approve/reject to have anything to act on), the real publish worker
+     (`app/jobs/publish.py`, the only caller of any plugin's `Publishable.publish()`), and a
+     new `archived` status (a fifth terminal state beyond the original diagram — see
+     ARCHITECTURE.md §8's implementation note). See
+     `docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md`,
+     `docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md`, and `CHANGELOG.md`'s
+     `[0.6.0]` entry (tagged `v0.6.0-approval-publishing`).
+6. **Credential encryption** — envelope encryption built as part of the plugin connection
    flow, before real Reddit OAuth tokens are ever stored. **Done, ahead of Reddit itself** —
    built as part of the generic OAuth2 framework (`docs/auth/OAUTH2_ARCHITECTURE.md`, ADR
    0011) once the Platform Readiness Review flagged OAuth as the actual blocker; see
    `docs/reviews/OAUTH_IMPLEMENTATION_REPORT.md`.
-8. **Observability** — OpenTelemetry spans on plugin calls and agent runs, wired to
-   Prometheus/Grafana per `docs/observability/OBSERVABILITY.md`. Trails steps 1–7 slightly but
-   ships within Phase 1, not deferred indefinitely.
+7. **Observability** — OpenTelemetry spans on plugin calls and agent runs, wired to
+   Prometheus/Grafana per `docs/observability/OBSERVABILITY.md`. Trails steps 1–6 slightly but
+   ships within Phase 1, not deferred indefinitely. **Not yet built** — the one remaining
+   item in this list.
 
 **Exit criterion:** a real Reddit thread gets discovered, a reply gets drafted, you approve
-it in the dashboard, and it posts to Reddit for real. This is the smallest slice that proves
-the entire trust model (human-in-the-loop, approval state machine, plugin capability
-contract, event-driven reactivity) works, not just on paper.
+it via the API, and it posts to Reddit for real. **Code-complete, not yet real-world-
+verified** — every step of discover → draft → approve → publish now has a real, tested
+implementation (steps 1–6 above), but nothing has exercised it against an actual connected
+Reddit account with a real Anthropic API key; see each phase's implementation report's
+"remaining work" section. "You approve" deliberately means via the API, not "in the
+dashboard" — no frontend exists yet (Phase 2+ per `ARCHITECTURE.md` §3's layer diagram) and
+building one isn't part of this phase.
 
 ## Phase 2 — Full agent roster, one project
 
