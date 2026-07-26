@@ -5,6 +5,70 @@ Versions before Phase 4 (multi-tenant activation) are development milestones, no
 releases — see `ROADMAP.md` for the phase plan and `ARCHITECTURE.md` for the system design
 each version builds on.
 
+## [0.7.0] - 2026-07-26 - Production Hardening (Phase 2D)
+
+**Tag:** `v0.7.0-production-hardening`. Full reports:
+`docs/reviews/PRODUCTION_READINESS_REVIEW.md` (the audit) and
+`docs/reviews/PRODUCTION_HARDENING_REPORT.md` (what was fixed).
+
+An adversarial production-readiness review of the entire platform (foundation through Phase
+2C) surfaced one platform-wide correctness bug and a cluster of operational gaps that would
+turn any transient failure into either silent data loss or a permanent, invisible outage. This
+release fixes every Critical/High-severity finding, in priority order, with a regression test
+for each one — no architecture changes, no ADRs touched.
+
+### Fixed
+- **Retry was silently non-functional across every background job.** Every job set
+  `max_tries = 3`, but Arq only retries a job that raises its own `arq.worker.Retry` — a plain
+  exception (what every job actually raised) is a permanent failure after one attempt,
+  regardless of `max_tries`. `app/core/job_retry.py` (new) is now the one place the correct
+  exception type and a shared exponential-backoff formula live; `publish.py`, `agent_runs.py`,
+  and `events.py` all raise it correctly now.
+- **Event dispatch could double-deliver.** `EventDispatcher.dispatch_pending` now commits
+  `dispatched_at` per event instead of once per batch, and `app/jobs/events.py`'s enqueue call
+  carries a deterministic job id (`event.id` + `agent_key`) — a dispatcher crash-and-redispatch
+  no longer re-processes an already-handled event/subscriber pair.
+- **A narrow crash window in the publish worker could duplicate a real Reddit post.** Before
+  calling a plugin, the job now checks for a prior successful `content_publish_attempts` row
+  and reconciles instead of posting again if one exists.
+- **`GET /health` always returned `{"status": "ok"}`** regardless of database or Redis
+  reachability. Now checks both and returns 503 with per-check detail on failure.
+- **Nothing verified a connected database was at the expected migration revision.**
+  `app/core/migration_check.py` (new) — every process now refuses to start against a stale
+  schema instead of failing confusingly at the first query touching new schema.
+- **Zero error-tracking existed anywhere.** `app/core/observability.py` (new) — an optional,
+  `SENTRY_DSN`-gated integration wired into the API and every background worker; a no-op if
+  unset.
+- **Login had no rate limiting**, despite `docs/security/SECURITY.md` claiming it did.
+  `app/core/rate_limit.py` (new, generic token-bucket) now gates `POST /auth/login` both per
+  source IP and per account.
+- **The OAuth token-refresh worker (`app/jobs/oauth_refresh.py`) was a real, tested job that
+  nothing ever ran.** `docker/docker-compose.yml` gained its missing service definition; the
+  non-Docker run command is now documented in `docs/deployment/DEPLOYMENT.md`.
+- **The connection-pool budget was unmanaged** — six processes at default pooling already
+  summed to ~90 connections against Postgres's default `max_connections=100`. `Settings.
+  db_pool_size`/`db_max_overflow` (new, defaulting to prior implicit behavior) make it
+  explicit and tunable.
+- Several docs/docstrings that made false claims (retry, idempotency, login rate limiting,
+  the CSRF double-submit check) were corrected to describe actual behavior — see
+  `docs/reviews/PRODUCTION_HARDENING_REPORT.md` §1.10.
+
+### Added
+- `docs/deployment/DEPLOYMENT.md`: a "Non-Docker deployment" section (this project's actual
+  mode of operation) with concrete run commands for every process, a concrete `pg_dump`/
+  `pg_restore` backup runbook, a process-supervision requirement (generic, not
+  systemd-specific), and TLS/domain guidance — all previously undocumented gaps.
+- `docs/scalability/SCALABILITY.md`: a "Database connection budget" section with the actual
+  connection-count formula and concrete next steps before adding worker replicas.
+- 25 new tests (400 total, up from 375) — one regression test per bug fixed.
+
+### Deliberately not fixed this phase (see the hardening report §4 for the full list)
+Medium/low-severity findings — CSRF verification, the master-key KDF, session revocation,
+`MembershipRole` enforcement, a dependency lockfile, missing composite indexes, and others —
+plus backup/process-supervision *automation* specifically (documented as a manual procedure
+by explicit decision, since the real hosting target isn't chosen yet). None of these were
+required to safely resolve a Critical/High-severity issue.
+
 ## [0.6.0] - 2026-07-26 - Approval & Publishing Workflow (Phase 2C)
 
 **Tag:** `v0.6.0-approval-publishing`. Full reports:

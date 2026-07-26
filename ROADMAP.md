@@ -83,8 +83,11 @@ reworked. This ordering is what the (now-archived) V1→V2 migration plan produc
    `docs/reviews/OAUTH_IMPLEMENTATION_REPORT.md`.
 7. **Observability** — OpenTelemetry spans on plugin calls and agent runs, wired to
    Prometheus/Grafana per `docs/observability/OBSERVABILITY.md`. Trails steps 1–6 slightly but
-   ships within Phase 1, not deferred indefinitely. **Not yet built** — the one remaining
-   item in this list.
+   ships within Phase 1, not deferred indefinitely. **Still not built as designed** — Phase 2D
+   (below) added a narrower, more urgent piece instead (optional Sentry-based error tracking,
+   wired into the API and every background worker) without building the full OTel/Prometheus
+   stack this item describes; that remains the one item in this list with no real
+   implementation yet.
 
 **Exit criterion:** a real Reddit thread gets discovered, a reply gets drafted, you approve
 it via the API, and it posts to Reddit for real. **Code-complete, not yet real-world-
@@ -94,6 +97,44 @@ Reddit account with a real Anthropic API key; see each phase's implementation re
 "remaining work" section. "You approve" deliberately means via the API, not "in the
 dashboard" — no frontend exists yet (Phase 2+ per `ARCHITECTURE.md` §3's layer diagram) and
 building one isn't part of this phase.
+
+## Phase 2D — Production Hardening
+
+A cross-cutting hardening pass over the *entire* platform (foundation through Phase 2C)
+before onboarding a second real user or resuming feature work — not a continuation of step
+5's Conversation Finder/Content Agent work above, hence a standalone section rather than a
+fourth sub-bullet nested under it. (The "2A"–"2D" letters name sub-phases of Phase 1's own
+step 5 and this hardening pass respectively; the plain "Phase 2" below is the next whole
+epoch and is unrelated to this lettering.)
+
+Triggered by an adversarial Production Readiness Review
+(`docs/reviews/PRODUCTION_READINESS_REVIEW.md`) of the entire platform, assuming real users
+with real OAuth credentials and real publishing workflows soon. Fixed every Critical/High-
+severity finding: retry was silently non-functional across every background job (Arq requires
+its own `Retry` exception, not a plain re-raise — this defeated `max_tries` everywhere,
+unnoticed through three prior phases' own test suites, since a job always raised *something*,
+just never the type Arq actually listens for); event dispatch could double-deliver; a narrow
+crash window in the publish worker could duplicate a real Reddit post; `GET /health` always
+said "ok" regardless of real DB/Redis state; nothing verified a connected database was
+actually migrated; zero error-tracking existed anywhere; login had no rate limiting despite
+`docs/security/SECURITY.md` claiming it did; the OAuth token-refresh worker
+(`app/jobs/oauth_refresh.py`) was a real, tested job nothing ever actually ran; and the
+database connection-pool budget was unmanaged across six processes already summing to ~90
+connections against Postgres's default 100-connection limit. See
+`docs/reviews/PRODUCTION_HARDENING_REPORT.md` for what was fixed, how, tests added, and what
+was deliberately left open (medium/low-severity findings — CSRF double-submit verification,
+the master-key KDF, session revocation, `MembershipRole` enforcement, a dependency lockfile,
+missing composite indexes, and others — plus backup/process-supervision *automation*
+specifically, documented as a concrete manual procedure since the real hosting target isn't
+chosen yet). See `CHANGELOG.md`'s `[0.7.0]` entry (tagged `v0.7.0-production-hardening`).
+
+**Exit criterion:** every Critical/High-severity finding from the readiness review is fixed,
+each with a regression test proving the fix, and every finding left open is explicitly
+documented rather than silently dropped. **Met** — 400 tests total (up from 375), `ruff`/
+`mypy --strict` clean, no architecture change, no ADR touched. Full OpenTelemetry/Prometheus
+observability, a CI/CD pipeline, and backup/process-supervision automation remain explicitly
+out of scope for this phase — see the hardening report's "remaining known production risks"
+for the complete list of what's still open.
 
 ## Phase 2 — Full agent roster, one project
 
