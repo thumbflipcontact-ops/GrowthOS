@@ -21,6 +21,8 @@ from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.migration_check import verify_database_is_migrated
+from app.core.observability import init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins, sync_catalog_to_db
 
 logger = structlog.get_logger()
@@ -30,8 +32,14 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings)
+    init_error_tracking(settings, process_name="backend")
 
-    engine = create_engine(str(settings.database_url))
+    engine = create_engine(
+        str(settings.database_url),
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
+    await verify_database_is_migrated(engine)
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
 

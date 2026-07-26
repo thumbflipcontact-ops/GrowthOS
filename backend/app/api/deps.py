@@ -19,10 +19,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.errors import AuthenticationError, AuthorizationError, NotFoundError
 from app.core.plugin_catalog import PluginCatalog
+from app.core.rate_limit import RateLimiter
 from app.core.security import SESSION_COOKIE_NAME, verify_session_token
 from app.models.identity import Organization, User
 from app.models.project import Project
 from app.repositories.user_repository import MembershipRepository, UserRepository
+
+# Process-local, in-memory login rate limiters — see app/core/rate_limit.py and
+# docs/reviews/PRODUCTION_READINESS_REVIEW.md S1. Module-level singletons (one process = one
+# set of buckets), exposed as overridable dependencies (like get_arq_redis below) so tests can
+# substitute a small-capacity instance without affecting every other test that happens to hit
+# POST /auth/login as setup.
+_login_ip_limiter = RateLimiter(capacity=10, refill_rate=10 / 300)  # 10 attempts / 5 min / IP
+# 5 attempts / 15 min / account
+_login_account_limiter = RateLimiter(capacity=5, refill_rate=5 / 900)
+
+
+def get_login_ip_limiter() -> RateLimiter:
+    return _login_ip_limiter
+
+
+def get_login_account_limiter() -> RateLimiter:
+    return _login_account_limiter
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:

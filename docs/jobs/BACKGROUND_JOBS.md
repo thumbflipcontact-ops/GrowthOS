@@ -56,25 +56,44 @@ sensitive path for webhook-triggered reactivity — see `docs/plugins/PLUGIN_ARC
 
 ## Retries & idempotency
 
-- Agent runs: retried up to 3 times with exponential backoff on transient failures (network
-  errors, rate-limit responses from a plugin). An agent run must be safe to retry from
-  scratch — this is why `knowledge_items` has `unique(project_id, url)`: a retried
-  `conversation_finder` run re-encountering a thread it already partially processed upserts
-  rather than duplicates.
+**Implemented for real as of Phase 2D** (docs/reviews/PRODUCTION_HARDENING_REPORT.md) — every
+claim below is now verified against the code, not just the design intent. Previously, every
+job re-raised a plain exception on failure intending Arq's `max_tries` to retry it; Arq only
+retries a job that raises its own `arq.worker.Retry`, so none of this ever actually happened
+— see docs/reviews/PRODUCTION_READINESS_REVIEW.md §3.1 for the full finding. `app/core/
+job_retry.py` is the one place the correct exception type and the shared backoff formula live.
+
+- Agent runs: retried up to 3 times with exponential backoff (`retry_backoff_seconds`, capped
+  at 60s) on transient failures (network errors, rate-limit responses from a plugin). An
+  agent run must be safe to retry from scratch — this is why `knowledge_items` has
+  `unique(project_id, url)`: a retried `conversation_finder` run re-encountering a thread it
+  already partially processed upserts rather than duplicates.
 - Publish jobs: retried up to 3 times, then the `content_item` stays `approved` with
   `publish_error` populated and surfaces via the API for manual retry
   (`POST .../content-items/{id}/retry-publish`) — never silently dropped, and never
   auto-transitioned to any other status by a failure (a failed publish is not a rejection; a
   human should decide what happens next). Every attempt — success or failure, whether
   triggered by approval, an Arq retry, or a manual retry — is recorded as its own
-  `content_publish_attempts` row, independent of the single current-state
-  `publish_error` column.
-- All jobs carry a deterministic idempotency key (e.g. `content_item.id` for publish jobs) so
-  a duplicate enqueue (e.g. from an API retry with the same `Idempotency-Key`, see
-  `docs/api/API_DESIGN.md`) is a no-op if the job already ran successfully.
-- Event dispatch: each subscriber handler job is keyed by `(domain_event.id, subscriber_key)`,
-  so a dispatcher retry (or a crash mid-cycle before `dispatched_at` is set) re-enqueues
-  without double-triggering a subscriber that already ran successfully for that event.
+  `content_publish_attempts` row, independent of the single current-state `publish_error`
+  column. Before ever calling a plugin, the job also checks for a prior *successful* attempt
+  already recorded (closing docs/reviews/PRODUCTION_READINESS_REVIEW.md R2 — a crash between
+  a plugin call succeeding and that success being committed could otherwise cause a duplicate
+  post on the next attempt); finding one reconciles the item to `published` instead of
+  posting again.
+- Publish jobs and event-dispatch jobs (below) carry a deterministic idempotency key so a
+  duplicate enqueue is a no-op while the original is queued/running. **Not yet true of every
+  job**: the on-demand agent-trigger endpoint (`POST .../agent-configs/{agent_key}/runs/
+  trigger`) and the scheduler's own periodic enqueue (`app/scheduler.py`) do not pass a
+  `_job_id` yet — a network retry or double-click there can enqueue two independent agent
+  runs. Tracked as remaining work (docs/reviews/PRODUCTION_READINESS_REVIEW.md R3), not fixed
+  in Phase 2D (medium severity, scoped out in favor of the higher-severity findings).
+- Event dispatch: each subscriber handler job is keyed by `event.id` + `agent_key`
+  (`app/jobs/events.py`'s `_event_job_id`), so a dispatcher crash-and-redispatch re-enqueues
+  without double-triggering a subscriber job still queued/running for that event. The
+  dispatcher itself also now commits `dispatched_at` per event rather than once for the whole
+  batch (`app/core/dispatcher.py`), narrowing a crash's blast radius to the one event that was
+  mid-flight instead of silently re-processing everything already handled in that cycle — see
+  docs/reviews/PRODUCTION_READINESS_REVIEW.md R1.
 
 ## Observability
 

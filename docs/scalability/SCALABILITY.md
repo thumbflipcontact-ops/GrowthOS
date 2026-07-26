@@ -71,6 +71,31 @@ solo-founder scale is external API rate limits (per-plugin, see
 Reddit's rate limit is the constraint, so capacity planning here means monitoring
 plugin-level throttling (`docs/observability/OBSERVABILITY.md`), not just worker CPU.
 
+**Before scaling any worker's replica count, check the database connection budget below** —
+it's the actual limiting factor a naive "just add more replicas" instinct runs into first.
+
+## Database connection budget
+
+Each process (`backend`, `scheduler`, and each of the four `worker-*` types) creates its own
+SQLAlchemy async engine, sized by `Settings.db_pool_size`/`db_max_overflow` (default 5 + 10 =
+15 connections/process — SQLAlchemy's own prior implicit defaults, unchanged unless tuned;
+see `app/core/db.py` and docs/reviews/PRODUCTION_READINESS_REVIEW.md SC2). Total connections
+against Postgres is therefore roughly:
+
+```
+sum over every running process of (db_pool_size + db_max_overflow)
+```
+
+against Postgres's default `max_connections = 100`. At the defaults, six single-instance
+processes already use ~90 connections — one more replica of any worker type (or
+`worker-agents` at 2 replicas, as `docker/docker-compose.yml` already declares) is enough to
+approach or exceed the limit. Before adding replicas: either lower `db_pool_size`/
+`db_max_overflow` per-process via the environment (no code change needed), raise Postgres's
+own `max_connections` (with the memory-overhead tradeoff that implies), or introduce a
+connection pooler (PgBouncer) in front of Postgres — a pooler is the standard fix once process
+count genuinely needs to grow past what direct connections comfortably support, not something
+to reach for prematurely at today's single-operator scale.
+
 ## Redis contention
 
 Redis backs three distinct uses — the Arq broker (job execution *and*, since V2, event

@@ -105,6 +105,47 @@ async def test_dispatcher_is_a_no_op_with_no_pending_events(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_crash_partway_through_a_batch_only_loses_the_undispatched_tail(
+    db_session,
+) -> None:
+    """Regression test for docs/reviews/PRODUCTION_READINESS_REVIEW.md R1:
+    dispatch_pending used to commit `dispatched_at` for the whole batch only once, at the
+    end — a crash partway through meant every event in the batch, including ones already
+    fully enqueued, would be re-dispatched next cycle. It now commits per event, so only the
+    event that was mid-flight when the crash happened (and anything after it) is left
+    undispatched; everything already processed stays durably marked dispatched."""
+    project = await _make_project(db_session)
+    publisher = EventPublisher(db_session)
+    event1 = await publisher.publish(
+        project_id=project.id, event_type="knowledge_item.created", payload={"buying_intent": "high"}
+    )
+    event2 = await publisher.publish(
+        project_id=project.id, event_type="knowledge_item.created", payload={"buying_intent": "high"}
+    )
+
+    registry = SubscriptionRegistry()
+    registry.refresh(
+        [AgentSubscriptions("content_agent", (EventSubscription("knowledge_item.created"),))]
+    )
+
+    processed_ids: list = []
+
+    async def enqueue(agent_key: str, event) -> None:
+        processed_ids.append(event.id)
+        if event.id == event2.id:
+            raise RuntimeError("simulated crash mid-batch")
+
+    dispatcher = EventDispatcher(db_session, registry)
+    with pytest.raises(RuntimeError, match="simulated crash mid-batch"):
+        await dispatcher.dispatch_pending(enqueue)
+
+    await db_session.refresh(event1)
+    await db_session.refresh(event2)
+    assert event1.dispatched_at is not None  # already enqueued and committed before the crash
+    assert event2.dispatched_at is None  # crashed mid-enqueue — correctly left for next cycle
+
+
+@pytest.mark.asyncio
 async def test_event_with_no_subscribers_is_still_marked_dispatched(db_session) -> None:
     project = await _make_project(db_session)
     publisher = EventPublisher(db_session)

@@ -11,11 +11,23 @@ that item is already queued/running — see docs/reviews/PUBLISHING_WORKFLOW_IMP
 
 Every attempt — success or failure — is recorded as its own `content_publish_attempts` row
 (the durable "publish history"), independent of whether Arq itself later retries. A failed
-attempt leaves `content_items.status` at `approved` with `publish_error` set and re-raises,
-so Arq's own retry/backoff policy (`WorkerSettings.max_tries` below) applies; after the final
-retry is exhausted, the item stays `approved`+`publish_error`-populated — visible via the API
-for a human to trigger a manual retry (`POST .../content-items/{id}/retry-publish`), never
-silently dropped and never auto-transitioned to any other status by a failure.
+attempt leaves `content_items.status` at `approved` with `publish_error` set and raises
+`arq.worker.Retry` so Arq's own retry/backoff policy (`WorkerSettings.max_tries` below)
+actually applies (see docs/reviews/PRODUCTION_READINESS_REVIEW.md §3.1 —
+`app/core/job_retry.py`'s docstring explains why a plain exception here would not have
+retried at all); after the final retry is exhausted, the item stays
+`approved`+`publish_error`-populated — visible via the API for a human to trigger a manual
+retry (`POST .../content-items/{id}/retry-publish`), never silently dropped and never
+auto-transitioned to any other status by a failure.
+
+Before ever calling a plugin, this job also checks for a prior *successful* attempt already
+recorded for this item (see `_prior_successful_attempt` below) — closing
+docs/reviews/PRODUCTION_READINESS_REVIEW.md's R2: if a worker process crashes between a
+plugin call succeeding (a real, external, irreversible Reddit post) and the transaction that
+records that success committing, a naive re-run would call the plugin a second time and post
+a duplicate comment. Finding a prior successful attempt means "this already posted, we just
+never got to record the item's own status" — the job reconciles the item to `published` using
+that attempt's own recorded URL, instead of posting again.
 """
 
 from __future__ import annotations
@@ -25,6 +37,7 @@ from datetime import UTC, datetime
 
 import structlog
 from arq.connections import RedisSettings
+from arq.worker import Retry
 from plugins._shared.base import Publishable
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +45,9 @@ from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.errors import CapabilityNotSupported
 from app.core.events import EventPublisher
+from app.core.job_retry import retry_backoff_seconds
+from app.core.migration_check import verify_database_is_migrated
+from app.core.observability import capture_exception, init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
 from app.models.audit import AuditLog
@@ -41,11 +57,6 @@ from app.repositories.content_repository import ContentPublishAttemptRepository
 from app.repositories.plugin_repository import PluginConnectionRepository
 
 logger = structlog.get_logger()
-
-
-class PublishAttemptFailed(Exception):
-    """Raised after a failed attempt has already been recorded, purely to trigger Arq's
-    retry policy — never propagates past this module."""
 
 
 async def publish_content_item(ctx: dict, content_item_id: str) -> None:
@@ -76,7 +87,45 @@ async def publish_content_item(ctx: dict, content_item_id: str) -> None:
             return
 
         attempts = ContentPublishAttemptRepository(session)
-        attempt_number = await attempts.next_attempt_number(item.id)
+        existing_attempts = await attempts.list_by_content_item(item.id)
+
+        prior_success = next((a for a in existing_attempts if a.success), None)
+        if prior_success is not None:
+            # See module docstring (R2): a crash between a plugin call succeeding and the
+            # commit that would have recorded it can leave the item `approved` even though it
+            # already posted. Reconcile using the prior attempt's own record instead of
+            # calling the plugin again — never post the same content twice.
+            logger.warning(
+                "publish.recovered_from_prior_successful_attempt",
+                content_item_id=content_item_id,
+                attempt_number=prior_success.attempt_number,
+            )
+            item.status = ContentItemStatus.PUBLISHED
+            item.published_at = datetime.now(UTC)
+            item.publish_error = None
+            await session.flush()
+            await EventPublisher(session).publish(
+                project_id=item.project_id,
+                event_type="content_item.published",
+                payload={
+                    "content_item_id": str(item.id),
+                    "target_platform": item.target_platform,
+                    "published_url": prior_success.published_url,
+                },
+            )
+            session.add(
+                AuditLog(
+                    org_id=project.org_id,
+                    actor_user_id=None,
+                    action="content_item.published",
+                    target=str(item.id),
+                    metadata_={"recovered_from_attempt": prior_success.attempt_number},
+                )
+            )
+            await session.commit()
+            return
+
+        attempt_number = len(existing_attempts) + 1
 
         if item.target_platform is None:
             # A structurally impossible-to-retry-into-success state (no plugin was ever
@@ -104,7 +153,8 @@ async def publish_content_item(ctx: dict, content_item_id: str) -> None:
             item.publish_error = str(exc)
             await session.commit()
             logger.error("publish.capability_not_supported", content_item_id=content_item_id)
-            raise PublishAttemptFailed(str(exc)) from exc
+            capture_exception(exc)
+            raise Retry(defer=retry_backoff_seconds(ctx.get("job_try", 1))) from exc
 
         await _record_attempt(
             session,
@@ -133,7 +183,8 @@ async def publish_content_item(ctx: dict, content_item_id: str) -> None:
                 attempt_number=attempt_number,
                 error=result.error,
             )
-            raise PublishAttemptFailed(result.error or "publish failed")
+            capture_exception(RuntimeError(f"publish failed: {result.error or 'unknown error'}"))
+            raise Retry(defer=retry_backoff_seconds(ctx.get("job_try", 1)))
 
         item.status = ContentItemStatus.PUBLISHED
         item.published_at = datetime.now(UTC)
@@ -186,7 +237,14 @@ async def _record_attempt(
 
 async def startup(ctx: dict) -> None:
     settings = get_settings()
-    engine = create_engine(str(settings.database_url))
+    init_error_tracking(settings, process_name="worker-publish")
+
+    engine = create_engine(
+        str(settings.database_url),
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
+    await verify_database_is_migrated(engine)
     ctx["engine"] = engine
     ctx["session_factory"] = create_session_factory(engine)
     ctx["settings"] = settings

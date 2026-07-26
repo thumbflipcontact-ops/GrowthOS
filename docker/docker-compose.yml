@@ -120,5 +120,23 @@ services:
       redis:
         condition: service_healthy
 
+  worker-oauth-refresh:
+    # Periodic sweep that refreshes any OAuth connection nearing token expiry — see
+    # app/jobs/oauth_refresh.py and docs/auth/OAUTH2_ARCHITECTURE.md §7. Previously missing
+    # from this file entirely (docs/reviews/PRODUCTION_READINESS_REVIEW.md O12) — a real,
+    # tested job with nothing that ever ran it. Without this service, every connected OAuth
+    # plugin (Reddit) eventually degrades to `expired` purely because nothing invoked the
+    # refresh it was built for.
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    command: ["arq", "app.jobs.oauth_refresh.WorkerSettings"]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:

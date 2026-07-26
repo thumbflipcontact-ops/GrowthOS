@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from arq.worker import Retry
 from sqlalchemy import select
 
 from app.core.config import Settings
@@ -187,7 +188,12 @@ async def test_run_scheduled_agent_records_a_failed_run_and_reraises_when_the_ag
 
     monkeypatch.setattr(agent_module.ConversationFinderAgent, "run", _boom)
 
-    with pytest.raises(RuntimeError, match="agent blew up"):
+    # Regression test for docs/reviews/PRODUCTION_READINESS_REVIEW.md §3.1: a plain re-raise
+    # here never actually triggered Arq's retry policy, regardless of max_tries — Arq only
+    # retries a job that raises its own arq.worker.Retry. Asserting the raised type (not just
+    # "some exception") is what actually proves the fix, since the job always raised
+    # *something*; the bug was in *what*.
+    with pytest.raises(Retry):
         await run_scheduled_agent(await _ctx(session_factory_for), str(config.id))
 
     runs = (

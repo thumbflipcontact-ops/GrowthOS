@@ -10,6 +10,14 @@ need it. It auto-provisions an `agent_configs` row the same way the on-demand tr
 endpoint does (see AgentConfigRepository.get_or_create) — a subscription-only agent has no
 schedule to have already created one via a scheduling UI, but `agent_runs.agent_config_id` is
 a required FK regardless of trigger kind.
+
+The `enqueue` closure below passes a deterministic `_job_id` keyed by `(event.id, agent_key)`
+— see docs/reviews/PRODUCTION_READINESS_REVIEW.md R1: without it, a dispatcher crash between
+enqueuing a subscriber's job and `EventDispatcher.dispatch_pending`'s per-event commit (see
+app/core/dispatcher.py) could re-enqueue the same event/subscriber pair with a fresh random
+job id on the next cycle, double-processing it. A deterministic id makes the re-enqueue a
+no-op while the original job is still queued/running, the same pattern
+app/api/v1/content_items.py's publish-job enqueue already used correctly.
 """
 
 from __future__ import annotations
@@ -21,14 +29,18 @@ import structlog
 from agents._shared.base import AgentContext
 from arq import cron
 from arq.connections import RedisSettings
+from arq.worker import Retry
 
 from app.core.agent_registry import load_agent
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.dispatcher import EventDispatcher
 from app.core.events import EventPublisher
+from app.core.job_retry import retry_backoff_seconds
 from app.core.llm.base import LLMProvider
 from app.core.llm.factory import build_llm_provider
+from app.core.migration_check import verify_database_is_migrated
+from app.core.observability import capture_exception, init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
 from app.core.subscriptions import SubscriptionRegistry, discover_agent_subscriptions
@@ -43,6 +55,10 @@ from app.services.knowledge_base import KnowledgeBaseClient
 logger = structlog.get_logger()
 
 
+def _event_job_id(event_id: uuid.UUID, agent_key: str) -> str:
+    return f"event-{event_id}-{agent_key}"
+
+
 async def dispatch_domain_events(ctx: dict) -> int:
     session_factory = ctx["session_factory"]
     registry: SubscriptionRegistry = ctx["subscription_registry"]
@@ -51,7 +67,12 @@ async def dispatch_domain_events(ctx: dict) -> int:
         dispatcher = EventDispatcher(session, registry)
 
         async def enqueue(agent_key: str, event: DomainEvent) -> None:
-            await ctx["redis"].enqueue_job("run_agent_for_event", agent_key, str(event.id))
+            await ctx["redis"].enqueue_job(
+                "run_agent_for_event",
+                agent_key,
+                str(event.id),
+                _job_id=_event_job_id(event.id, agent_key),
+            )
 
         processed = await dispatcher.dispatch_pending(enqueue)
         if processed:
@@ -126,7 +147,8 @@ async def run_agent_for_event(ctx: dict, agent_key: str, event_id: str) -> None:
             run.error = str(exc)
             await session.commit()
             run_logger.error("agent_run_for_event.failed", exc_info=True)
-            raise  # let Arq's retry policy (WorkerSettings.max_tries) apply
+            capture_exception(exc)
+            raise Retry(defer=retry_backoff_seconds(ctx.get("job_try", 1))) from exc
 
         run.status = AgentRunStatus.SUCCEEDED
         run.finished_at = datetime.now(UTC)
@@ -144,7 +166,14 @@ async def run_agent_for_event(ctx: dict, agent_key: str, event_id: str) -> None:
 
 async def startup(ctx: dict) -> None:
     settings = get_settings()
-    engine = create_engine(str(settings.database_url))
+    init_error_tracking(settings, process_name="worker-events")
+
+    engine = create_engine(
+        str(settings.database_url),
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
+    await verify_database_is_migrated(engine)
     ctx["engine"] = engine
     ctx["session_factory"] = create_session_factory(engine)
     ctx["settings"] = settings

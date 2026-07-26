@@ -27,6 +27,9 @@ dependencies = [
     "cryptography>=43,<44",
     # Claude — the primary LLMProvider per ADR 0004. See app/core/llm/anthropic_provider.py.
     "anthropic>=0.120,<0.121",
+    # Optional error tracking (no-ops unless SENTRY_DSN is set) — see
+    # app/core/observability.py and docs/reviews/PRODUCTION_READINESS_REVIEW.md O8/O9.
+    "sentry-sdk>=2.18,<3",
 ]
 
 [project.optional-dependencies]

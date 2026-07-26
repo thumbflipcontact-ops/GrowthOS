@@ -13,6 +13,8 @@ import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.core.observability import capture_exception
+
 logger = structlog.get_logger()
 
 
@@ -86,6 +88,14 @@ class AuthorizationError(GrowthOSError):
     status_code = status.HTTP_403_FORBIDDEN
 
 
+class TooManyRequests(GrowthOSError):
+    """Raised by an in-process rate limiter (app/core/rate_limit.py) — see
+    docs/reviews/PRODUCTION_READINESS_REVIEW.md S1, first used by POST /auth/login."""
+
+    code = "too_many_requests"
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """The single place every domain exception is mapped to the API error envelope
     documented in docs/errors/ERROR_HANDLING.md."""
@@ -97,6 +107,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             logger.error(
                 "unhandled_domain_error", code=exc.code, request_id=request_id, exc_info=exc
             )
+            capture_exception(exc)
         else:
             logger.info("domain_error", code=exc.code, request_id=request_id)
         return JSONResponse(
@@ -114,6 +125,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
         request_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
         logger.error("unexpected_error", request_id=request_id, exc_info=exc)
+        capture_exception(exc)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={

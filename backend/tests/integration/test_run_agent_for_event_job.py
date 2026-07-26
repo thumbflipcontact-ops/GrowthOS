@@ -14,6 +14,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from arq.worker import Retry
 from sqlalchemy import select
 
 from app.core.config import Settings
@@ -229,7 +230,11 @@ async def test_run_agent_for_event_records_a_failed_run_when_the_llm_call_fails(
     _, event = await _make_knowledge_item_and_event(db_session, project)
 
     llm = _llm_provider_returning("", status_code=500)
-    with pytest.raises(Exception):  # noqa: B017 - LLMRequestFailed, re-raised for Arq's retry
+    # Regression test for docs/reviews/PRODUCTION_READINESS_REVIEW.md §3.1: asserting the
+    # specific arq.worker.Retry type (not just "some exception") is what proves Arq's retry
+    # policy actually applies now — a plain re-raise always raised *something*, just never the
+    # one type Arq listens for.
+    with pytest.raises(Retry):
         await run_agent_for_event(
             _ctx(session_factory_for, llm_provider=llm), "content_agent", str(event.id)
         )
@@ -331,3 +336,45 @@ async def test_run_agent_for_event_leaves_a_too_long_reply_in_draft(
     # self-check only gates promotion to pending_review, not whether a row was written.
     assert runs[0].summary["content_items_created"] == 1
     assert runs[0].summary["details"]["self_check_passed"] is False
+
+
+class _FakeRedisCapturingEnqueues:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple, dict]] = []
+
+    async def enqueue_job(self, name: str, *args: object, **kwargs: object) -> None:
+        self.calls.append((name, args, kwargs))
+
+
+@pytest.mark.asyncio
+async def test_dispatch_domain_events_enqueues_with_a_deterministic_job_id(
+    db_session, session_factory_for
+) -> None:
+    """Regression test for docs/reviews/PRODUCTION_READINESS_REVIEW.md R1: dispatch_pending's
+    enqueue closure used to call enqueue_job with no `_job_id`, so a dispatcher crash-and-
+    redispatch would enqueue a brand-new job for an event/subscriber pair that may already
+    have been processed. A deterministic id (event.id + agent_key) makes a re-enqueue for the
+    same pair a no-op while the original is still queued/running."""
+    from app.core.subscriptions import SubscriptionRegistry, discover_agent_subscriptions
+    from app.jobs.events import _event_job_id, dispatch_domain_events
+
+    project = await _make_project(db_session)
+    _, event = await _make_knowledge_item_and_event(db_session, project)
+
+    registry = SubscriptionRegistry()
+    registry.refresh(discover_agent_subscriptions())
+
+    fake_redis = _FakeRedisCapturingEnqueues()
+    ctx = {
+        "session_factory": session_factory_for,
+        "subscription_registry": registry,
+        "redis": fake_redis,
+    }
+
+    await dispatch_domain_events(ctx)
+
+    assert fake_redis.calls, "content_agent should have been enqueued for knowledge_item.created"
+    name, args, kwargs = fake_redis.calls[0]
+    assert name == "run_agent_for_event"
+    assert args == ("content_agent", str(event.id))
+    assert kwargs.get("_job_id") == _event_job_id(event.id, "content_agent")

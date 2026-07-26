@@ -32,6 +32,11 @@ python scripts/seed.py
 python scripts/lint.py
 ```
 
+To actually run the app — the backend API, the scheduler, and the four background workers —
+see `docs/deployment/DEPLOYMENT.md`'s "Non-Docker deployment" section for the exact commands;
+none of them are wrapped in a script here since they're all plain, already-short
+`uvicorn`/`python -m`/`arq` invocations.
+
 ## Status
 
 Implemented as of Phase 1 — see `ARCHITECTURE_FREEZE.md` and `ROADMAP.md` Phase 1 for what

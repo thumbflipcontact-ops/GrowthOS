@@ -14,6 +14,7 @@ import uuid
 from decimal import Decimal
 
 import pytest
+from arq.worker import Retry
 from plugins._shared.base import PublishResult
 from plugins._shared.manifest import PluginManifest
 from sqlalchemy import select
@@ -133,18 +134,17 @@ def _ctx(session_factory_for) -> dict:
 def publish_job(_migrated_db: str):
     """Imports app.jobs.publish lazily, after `_migrated_db` has already set DATABASE_URL in
     the environment — its WorkerSettings resolves get_settings() at module-import time,
-    which would otherwise fail before that fixture runs. Returns
-    (publish_content_item, PublishAttemptFailed) so every test needs only one fixture."""
-    from app.jobs.publish import PublishAttemptFailed, publish_content_item
+    which would otherwise fail before that fixture runs."""
+    from app.jobs.publish import publish_content_item
 
-    return publish_content_item, PublishAttemptFailed
+    return publish_content_item
 
 
 @pytest.mark.asyncio
 async def test_publish_succeeds_and_transitions_to_published(
     db_session, session_factory_for, publish_job
 ) -> None:
-    publish_content_item, _ = publish_job
+    publish_content_item = publish_job
     _STATE["published_url"] = "https://example.invalid/posted/1"
     project = await _make_project(db_session)
     await _connect_fake_publish_plugin(db_session, project)
@@ -185,17 +185,22 @@ async def test_publish_succeeds_and_transitions_to_published(
 
 
 @pytest.mark.asyncio
-async def test_publish_failure_leaves_item_approved_with_error_and_reraises(
+async def test_publish_failure_leaves_item_approved_with_error_and_raises_arq_retry(
     db_session, session_factory_for, publish_job
 ) -> None:
-    publish_content_item, PublishAttemptFailed = publish_job
+    """Also the regression test for docs/reviews/PRODUCTION_READINESS_REVIEW.md §3.1: this
+    job used to re-raise a plain `PublishAttemptFailed` on failure, which Arq treats as a
+    permanent failure after one attempt regardless of `max_tries` — only `arq.worker.Retry`
+    actually triggers a retry. Asserting the raised type (not just "raises something") is
+    what proves the fix."""
+    publish_content_item = publish_job
     _STATE["success"] = False
     _STATE["error"] = "Reddit rejected the request: RATELIMIT"
     project = await _make_project(db_session)
     await _connect_fake_publish_plugin(db_session, project)
     item = await _make_approved_item(db_session, project)
 
-    with pytest.raises(PublishAttemptFailed):
+    with pytest.raises(Retry):
         await publish_content_item(_ctx(session_factory_for), str(item.id))
 
     await db_session.refresh(item)
@@ -223,14 +228,14 @@ async def test_publish_failure_leaves_item_approved_with_error_and_reraises(
 async def test_retrying_after_a_failure_increments_the_attempt_number(
     db_session, session_factory_for, publish_job
 ) -> None:
-    publish_content_item, PublishAttemptFailed = publish_job
+    publish_content_item = publish_job
     _STATE["success"] = False
     _STATE["error"] = "transient error"
     project = await _make_project(db_session)
     await _connect_fake_publish_plugin(db_session, project)
     item = await _make_approved_item(db_session, project)
 
-    with pytest.raises(PublishAttemptFailed):
+    with pytest.raises(Retry):
         await publish_content_item(_ctx(session_factory_for), str(item.id))
 
     _STATE["success"] = True
@@ -255,7 +260,7 @@ async def test_retrying_after_a_failure_increments_the_attempt_number(
 async def test_publish_skips_an_item_that_is_not_approved(
     db_session, session_factory_for, publish_job
 ) -> None:
-    publish_content_item, _ = publish_job
+    publish_content_item = publish_job
     project = await _make_project(db_session)
     await _connect_fake_publish_plugin(db_session, project)
     item = await _make_approved_item(db_session, project)
@@ -277,7 +282,7 @@ async def test_publish_skips_an_item_that_is_not_approved(
 async def test_publish_is_a_noop_for_a_missing_item(
     db_session, session_factory_for, publish_job
 ) -> None:
-    publish_content_item, _ = publish_job
+    publish_content_item = publish_job
     await publish_content_item(_ctx(session_factory_for), str(uuid.uuid4()))
 
 
@@ -285,7 +290,7 @@ async def test_publish_is_a_noop_for_a_missing_item(
 async def test_publish_fails_clearly_when_target_platform_is_not_set(
     db_session, session_factory_for, publish_job
 ) -> None:
-    publish_content_item, _ = publish_job
+    publish_content_item = publish_job
     project = await _make_project(db_session)
     item = await _make_approved_item(db_session, project, target_platform=None)
 
@@ -308,14 +313,75 @@ async def test_publish_fails_clearly_when_target_platform_is_not_set(
 async def test_publish_fails_when_the_project_has_no_connection_for_the_target_platform(
     db_session, session_factory_for, publish_job
 ) -> None:
-    publish_content_item, PublishAttemptFailed = publish_job
+    publish_content_item = publish_job
     project = await _make_project(db_session)
     # deliberately not connecting the plugin
     item = await _make_approved_item(db_session, project)
 
-    with pytest.raises(PublishAttemptFailed):
+    with pytest.raises(Retry):
         await publish_content_item(_ctx(session_factory_for), str(item.id))
 
     await db_session.refresh(item)
     assert item.status == ContentItemStatus.APPROVED
     assert item.publish_error is not None
+
+
+@pytest.mark.asyncio
+async def test_publish_recovers_from_a_prior_successful_attempt_without_posting_again(
+    db_session, session_factory_for, publish_job
+) -> None:
+    """Regression test for docs/reviews/PRODUCTION_READINESS_REVIEW.md R2: if a worker
+    process crashes between a plugin's publish() call succeeding (a real, irreversible
+    external post) and the transaction that would have recorded that success committing, the
+    item is left `approved` even though it already posted. Simulated here by pre-inserting a
+    successful ContentPublishAttempt row for an item that's still `approved` — exactly the
+    state a crash in that window would leave behind. Re-running the job must reconcile using
+    the recorded attempt, never call the plugin again."""
+    publish_content_item = publish_job
+    project = await _make_project(db_session)
+    await _connect_fake_publish_plugin(db_session, project)
+    item = await _make_approved_item(db_session, project)
+
+    db_session.add(
+        ContentPublishAttempt(
+            content_item_id=item.id,
+            attempt_number=1,
+            success=True,
+            published_url="https://example.invalid/posted/already",
+            error=None,
+        )
+    )
+    await db_session.flush()
+
+    await publish_content_item(_ctx(session_factory_for), str(item.id))
+
+    assert _STATE["calls"] == []  # never called the plugin a second time
+
+    await db_session.refresh(item)
+    assert item.status == ContentItemStatus.PUBLISHED
+    assert item.publish_error is None
+
+    # No second attempt row was created — the prior one is the only record, exactly as it
+    # would be if the crash had never interrupted the original attempt's bookkeeping.
+    attempts = (
+        await db_session.execute(
+            select(ContentPublishAttempt).where(ContentPublishAttempt.content_item_id == item.id)
+        )
+    ).scalars().all()
+    assert len(attempts) == 1
+
+    events = (
+        await db_session.execute(
+            select(DomainEvent).where(DomainEvent.event_type == "content_item.published")
+        )
+    ).scalars().all()
+    assert len(events) == 1
+    assert events[0].payload["published_url"] == "https://example.invalid/posted/already"
+
+    audit = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.action == "content_item.published")
+        )
+    ).scalar_one_or_none()
+    assert audit is not None
+    assert audit.metadata_["recovered_from_attempt"] == 1

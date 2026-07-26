@@ -18,6 +18,15 @@ from app.core.oauth.errors import OAuthClientNotConfigured
 class Settings(BaseSettings):
     # --- Database ---
     database_url: PostgresDsn
+    # SQLAlchemy async-engine pooling, explicit rather than left at the library default — see
+    # docs/reviews/PRODUCTION_READINESS_REVIEW.md SC2 and docs/scalability/SCALABILITY.md's
+    # connection-budget note: a separate engine exists per process (the API, the scheduler,
+    # and each of the four Arq worker types), so (pool_size + max_overflow) × process_count
+    # must stay comfortably under Postgres's max_connections. The defaults below match
+    # SQLAlchemy's own prior implicit defaults (5 + 10 = 15/process) — unchanged behavior
+    # unless explicitly tuned down before adding more worker replicas.
+    db_pool_size: int = Field(default=5, ge=1)
+    db_max_overflow: int = Field(default=10, ge=0)
 
     # --- Redis (Arq broker, cache, rate limiting, event dispatch) ---
     redis_url: RedisDsn
@@ -54,6 +63,12 @@ class Settings(BaseSettings):
     # project-scoped/templated.
     oauth_callback_base_url: str = Field(default="http://localhost:8000")
     oauth_frontend_redirect_url: str = Field(default="http://localhost:3000/settings/plugins")
+
+    # --- Error tracking — see app/core/observability.py and
+    # docs/reviews/PRODUCTION_READINESS_REVIEW.md O8/O9. Optional: every process runs exactly
+    # as before if this is unset. Not the full docs/observability/OBSERVABILITY.md stack —
+    # a narrower, more urgent "don't fail silently in a background worker" gap.
+    sentry_dsn: str | None = Field(default=None)
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -93,3 +93,23 @@ def test_oauth_settings_have_sane_local_defaults() -> None:
     settings = Settings(**_base_env())
     assert settings.oauth_callback_base_url == "http://localhost:8000"
     assert settings.oauth_frontend_redirect_url == "http://localhost:3000/settings/plugins"
+
+
+def test_db_pool_settings_default_to_sqlalchemys_own_prior_implicit_defaults() -> None:
+    # See docs/reviews/PRODUCTION_READINESS_REVIEW.md SC2 — these defaults must match what
+    # SQLAlchemy's async engine already did implicitly, so an operator who never sets these
+    # env vars sees no behavior change.
+    settings = Settings(**_base_env())
+    assert settings.db_pool_size == 5
+    assert settings.db_max_overflow == 10
+
+
+def test_db_pool_settings_are_tunable() -> None:
+    settings = Settings(**_base_env(), db_pool_size=20, db_max_overflow=40)
+    assert settings.db_pool_size == 20
+    assert settings.db_max_overflow == 40
+
+
+def test_sentry_dsn_is_optional_and_unset_by_default() -> None:
+    settings = Settings(**_base_env())
+    assert settings.sentry_dsn is None

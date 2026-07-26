@@ -65,7 +65,10 @@ since `message` is allowed to change for clarity without being a breaking change
 Transient failures (network timeouts, `RateLimited`) are retried with exponential backoff at
 the job level (see `docs/jobs/BACKGROUND_JOBS.md`), not scattered as ad hoc `try/except`
 retry loops inside agent or plugin code — retry policy is a job-execution concern, defined
-once.
+once. **Genuinely implemented as of Phase 2D** — every job re-raises `arq.worker.Retry`
+(`app/core/job_retry.py`) rather than a plain exception, which is what Arq actually requires
+to retry a job at all; see docs/reviews/PRODUCTION_READINESS_REVIEW.md §3.1 for the gap this
+closed (this section's claim predates the fix and was, until Phase 2D, not true).
 
 ## User-facing errors (frontend)
 

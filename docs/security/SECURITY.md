@@ -108,13 +108,18 @@ happens, not an enhancement to add later once it's already happening. See
 
 ## Authentication hardening
 
-- **Brute-force protection.** Login attempts are rate-limited per account and per source IP
-  (exact mechanism — sliding-window limiter vs. progressive lockout — left as an
-  implementation detail; see `docs/architecture/LOCKED_DECISIONS.md` §2). Given a
-  compromised session is a path to every connected plugin's credentials (mediated through
-  envelope encryption, not directly, but still reachable via the running application), "good
-  password hashing" alone (Argon2id, `docs/auth/AUTHENTICATION.md`) was judged insufficient
-  on its own.
+- **Brute-force protection — implemented as of Phase 2D**
+  (docs/reviews/PRODUCTION_HARDENING_REPORT.md; previously documented here but not actually
+  built, see docs/reviews/PRODUCTION_READINESS_REVIEW.md S1). `POST /auth/login` is
+  rate-limited both per source IP (10 attempts / 5 minutes) and per account (5 attempts / 15
+  minutes) via an in-process token-bucket limiter (`app/core/rate_limit.py`), checked before
+  the (deliberately slow) Argon2id password verify runs at all. **Known limitation**:
+  process-local only, like `plugins/_shared/rate_limit.py`'s equivalent for outbound plugin
+  calls — a future multi-replica backend deployment would need a shared (Redis) backend
+  behind the same interface. Given a compromised session is a path to every connected
+  plugin's credentials (mediated through envelope encryption, not directly, but still
+  reachable via the running application), "good password hashing" alone (Argon2id,
+  `docs/auth/AUTHENTICATION.md`) was judged insufficient on its own.
 - **Security audit log.** The `audit_log` table (`docs/database/SCHEMA.md`) records
   account-level security events — login, plugin connect/disconnect, credential rotation,
   settings changes — separately from `content_items`' human-approval trail, which exists for
@@ -146,9 +151,12 @@ it — see `docs/decisions/0001-multi-tenancy.md`.
 
 The frontend and API are the only components exposed to the public internet; Postgres, Redis,
 and the worker processes are internal-network-only in every environment. Webhook ingress
-(`/webhooks/{plugin_key}`) is the one unauthenticated-at-the-HTTP-layer endpoint, secured by
-per-provider payload verification (`docs/plugins/PLUGIN_ARCHITECTURE.md`) and rate-limited to
-mitigate abuse of the endpoint itself.
+(`/webhooks/{plugin_key}`) is planned as the one unauthenticated-at-the-HTTP-layer endpoint,
+to be secured by per-provider payload verification (`docs/plugins/PLUGIN_ARCHITECTURE.md`)
+and rate-limited to mitigate abuse of the endpoint itself — **not yet built** (no plugin
+implements `WebhookReceivable` yet, so there's nothing to secure); see
+docs/reviews/PRODUCTION_READINESS_REVIEW.md S10. Design this section's protections in when
+the first webhook-receiving plugin is actually built, not before.
 
 ## Incident response
 

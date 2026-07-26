@@ -15,7 +15,9 @@ from arq.connections import RedisSettings
 
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
+from app.core.migration_check import verify_database_is_migrated
 from app.core.oauth.refresh import OAuthRefreshSweep
+from app.core.observability import init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 
 logger = structlog.get_logger()
@@ -36,7 +38,14 @@ async def refresh_oauth_tokens(ctx: dict) -> int:
 
 async def startup(ctx: dict) -> None:
     settings = get_settings()
-    engine = create_engine(str(settings.database_url))
+    init_error_tracking(settings, process_name="worker-oauth-refresh")
+
+    engine = create_engine(
+        str(settings.database_url),
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
+    await verify_database_is_migrated(engine)
     ctx["engine"] = engine
     ctx["session_factory"] = create_session_factory(engine)
 

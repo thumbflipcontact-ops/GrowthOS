@@ -32,6 +32,8 @@ plugin author, not by core or by whichever agent happens to use that plugin.
 ```bash
 # Database
 DATABASE_URL=postgresql+asyncpg://growthos:***@localhost:5432/growthos
+DB_POOL_SIZE=5                           # async engine pool_size, per process — see
+DB_MAX_OVERFLOW=10                       # docs/scalability/SCALABILITY.md's connection budget
 
 # Redis (cache, Arq broker)
 REDIS_URL=redis://localhost:6379/0
@@ -48,6 +50,8 @@ CREDENTIAL_MASTER_KEY=***                # envelope-encryption master key — wr
                                           # see docs/security/SECURITY.md
 ENVIRONMENT=local                        # local | staging | production
 LOG_LEVEL=INFO
+SENTRY_DSN=                              # optional — see app/core/observability.py; every
+                                          # process behaves identically whether this is set
 
 # Frontend
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000

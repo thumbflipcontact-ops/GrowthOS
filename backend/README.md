@@ -9,9 +9,11 @@ the generic OAuth2 framework built after that,
 `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md` for Phase 2A,
 `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md` for Phase 2B, and
 `docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md` +
-`docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md` for Phase 2C.
+`docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md` for Phase 2C, and
+`docs/reviews/PRODUCTION_READINESS_REVIEW.md` + `docs/reviews/PRODUCTION_HARDENING_REPORT.md`
+for Phase 2D.
 
-## Structure (as implemented, through Phase 2C)
+## Structure (as implemented, through Phase 2D)
 
 ```
 backend/
@@ -25,16 +27,26 @@ backend/
 │   │   ├── security.py           Password hashing, session tokens — docs/auth/
 │   │   ├── crypto.py              Envelope encryption (ADR 0010) — the actual encrypt/decrypt
 │   │   │                            primitive; OAuth2 is its first real consumer
-│   │   ├── db.py                  Async engine/session factory
+│   │   ├── db.py                  Async engine/session factory — pool_size/max_overflow now
+│   │   │                            explicit params (Phase 2D, docs/scalability/SCALABILITY.md)
 │   │   ├── events.py              EventPublisher (transactional outbox) — ARCHITECTURE.md §7
 │   │   ├── subscriptions.py       Agent subscription discovery (mirrors plugin_catalog.py)
-│   │   ├── dispatcher.py          EventDispatcher core logic — ARCHITECTURE.md §7
+│   │   ├── dispatcher.py          EventDispatcher core logic — ARCHITECTURE.md §7. Commits
+│   │   │                            dispatched_at per event since Phase 2D, not once per batch
 │   │   ├── scheduler.py           Cron due-check logic — docs/jobs/BACKGROUND_JOBS.md
 │   │   ├── plugin_catalog.py      Manifest discovery/scanning — docs/plugins/
 │   │   ├── plugin_registry.py     Per-project capability-checked plugin resolution +
 │   │   │                            credential decryption (docs/auth/OAUTH2_ARCHITECTURE.md)
 │   │   ├── agent_registry.py      Loads a specific installed agent by key, for execution —
 │   │   │                            docs/agents/AGENT_ARCHITECTURE.md
+│   │   ├── job_retry.py            arq.worker.Retry + shared backoff formula every job body
+│   │   │                            re-raises with — Phase 2D, docs/reviews/
+│   │   │                            PRODUCTION_READINESS_REVIEW.md §3.1
+│   │   ├── migration_check.py      Fail-fast startup check that the DB is at the code's
+│   │   │                            expected Alembic head — Phase 2D
+│   │   ├── observability.py        Optional (SENTRY_DSN-gated) error tracking — Phase 2D
+│   │   ├── rate_limit.py            Generic in-process token-bucket limiter — Phase 2D, first
+│   │   │                             used by POST /auth/login
 │   │   ├── llm/                    Generic LLMProvider interface — ADR 0004
 │   │   │   ├── base.py               LLMProvider Protocol, LLMMessage/CompletionRequest/Result
 │   │   │   ├── anthropic_provider.py  AnthropicProvider — Claude, the only implemented provider
@@ -48,8 +60,10 @@ backend/
 │   │       └── errors.py            OAuth-flow exception hierarchy
 │   ├── api/
 │   │   ├── deps.py                get_db, get_current_user, require_project_access/org_access,
-│   │   │                             get_plugin_catalog, get_settings_dep, get_arq_redis
-│   │   └── v1/                     health, auth, projects, plugins (catalog),
+│   │   │                             get_plugin_catalog, get_settings_dep, get_arq_redis,
+│   │   │                             get_login_ip_limiter/get_login_account_limiter (Phase 2D)
+│   │   └── v1/                     health (now checks DB+Redis, Phase 2D), auth (login now
+│   │                                 rate-limited, Phase 2D), projects, plugins (catalog),
 │   │                                 plugin_connections (+ oauth/start, oauth/disconnect),
 │   │                                 oauth (the global callback route), agent_configs
 │   │                                 (+ runs/trigger, runs), knowledge_items, content_items
@@ -85,11 +99,14 @@ backend/
 │   ├── jobs/                           Arq WorkerSettings: agent_runs.py (schedule-triggered —
 │   │                                    real body since Phase 2A), events.py (subscription-
 │   │                                    triggered `run_agent_for_event` — real body since
-│   │                                    Phase 2B, identical AgentContext-construction pattern),
-│   │                                    publish.py (real body since Phase 2C — the only caller
-│   │                                    of any plugin's `Publishable.publish()`, retried up to
-│   │                                    3 times, idempotency-keyed by content_item.id),
-│   │                                    oauth_refresh.py
+│   │                                    Phase 2B, identical AgentContext-construction pattern;
+│   │                                    dispatch_domain_events' enqueue is job-id-keyed since
+│   │                                    Phase 2D), publish.py (real body since Phase 2C — the
+│   │                                    only caller of any plugin's `Publishable.publish()`,
+│   │                                    genuinely retried up to 3 times since Phase 2D — see
+│   │                                    job_retry.py above — idempotency-keyed by
+│   │                                    content_item.id, and reconciles rather than re-posts
+│   │                                    if a prior successful attempt is found), oauth_refresh.py
 │   └── scheduler.py                    Scheduler process entrypoint (`python -m app.scheduler`)
 ├── migrations/                          Alembic — matches database/schema.sql
 ├── tests/
@@ -99,17 +116,15 @@ backend/
 └── pyproject.toml
 ```
 
-**Explicitly not present**, per ROADMAP.md Phase 2C scope: `services/content_approval.py`,
-`jobs/publish.py`'s real body, and the approval/publish API routes **now exist** — see
-`docs/reviews/APPROVAL_WORKFLOW_IMPLEMENTATION_REPORT.md` and
-`docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md`. What's still genuinely deferred:
-`core/llm/factory.py` only builds Claude — OpenAI (ADR 0004's documented secondary provider)
-has no implementation yet and raises `LLMProviderNotConfigured` if selected. `core/llm/base.py`'s
-`LLMProvider` has no `embed()` method yet — nothing needs `knowledge_items.embedding`
-populated. Credential wiring exists for `auth_type="oauth2"` but not yet for
-`api_key`/`session_credentials` — no request path writes `credentials_encrypted` for those
-auth types. No scheduling, no LinkedIn/X/Slack/email plugins, no frontend, no analytics
-dashboards — see `ROADMAP.md` for what's actually next (Phase 3, Production Readiness).
+**Explicitly not present**: `core/llm/factory.py` only builds Claude — OpenAI (ADR 0004's
+documented secondary provider) has no implementation yet and raises
+`LLMProviderNotConfigured` if selected. `core/llm/base.py`'s `LLMProvider` has no `embed()`
+method yet — nothing needs `knowledge_items.embedding` populated. Credential wiring exists
+for `auth_type="oauth2"` but not yet for `api_key`/`session_credentials` — no request path
+writes `credentials_encrypted` for those auth types. No scheduling, no LinkedIn/X/Slack/email
+plugins, no frontend, no analytics dashboards, no full OpenTelemetry/Prometheus stack (a
+narrower baseline error-tracking integration exists instead, see
+`docs/reviews/PRODUCTION_HARDENING_REPORT.md`) — see `ROADMAP.md` for what's actually next.
 
 ## Where agents and plugins live
 

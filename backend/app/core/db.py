@@ -18,13 +18,20 @@ from sqlalchemy.ext.asyncio import (
 )
 
 
-def create_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
+def create_engine(
+    database_url: str, *, echo: bool = False, pool_size: int = 5, max_overflow: int = 10
+) -> AsyncEngine:
     # pydantic's PostgresDsn renders the driverless "postgresql://" scheme; asyncpg needs
     # the explicit "postgresql+asyncpg://" driver prefix.
     url = str(database_url)
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return create_async_engine(url, echo=echo, pool_pre_ping=True)
+    # pool_size/max_overflow default to SQLAlchemy's own prior implicit defaults — passing
+    # them explicitly (sourced from Settings.db_pool_size/db_max_overflow at every real call
+    # site) is what makes them tunable; see docs/reviews/PRODUCTION_READINESS_REVIEW.md SC2.
+    return create_async_engine(
+        url, echo=echo, pool_pre_ping=True, pool_size=pool_size, max_overflow=max_overflow
+    )
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

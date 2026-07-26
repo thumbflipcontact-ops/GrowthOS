@@ -9,6 +9,14 @@ ones — answer an aggregate question like that badly. This document is the real
 that closes that gap, not a documentation-only addition; see
 `docs/architecture/LOCKED_DECISIONS.md` §2 for its implementation timing.
 
+**Everything below remains the target design — 0% of it is built.** A narrower, more urgent
+piece was pulled forward in Phase 2D instead: `app/core/observability.py`, an optional
+(`SENTRY_DSN`-gated) error-tracking integration wired into the FastAPI app and all four
+`worker-*` processes — see docs/reviews/PRODUCTION_READINESS_REVIEW.md O8/O9 and
+docs/reviews/PRODUCTION_HARDENING_REPORT.md. It answers "did something just fail
+unexpectedly in a background worker" — nothing about spans, per-plugin metrics, or dispatch
+lag, which is what the rest of this document still describes as unbuilt.
+
 ## What gets instrumented
 
 **Every plugin capability call** (`search()`, `publish()`, `handle_webhook()`,

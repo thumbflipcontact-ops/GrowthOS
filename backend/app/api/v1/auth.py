@@ -6,11 +6,19 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_settings_dep
+from app.api.deps import (
+    get_current_user,
+    get_db,
+    get_login_account_limiter,
+    get_login_ip_limiter,
+    get_settings_dep,
+)
 from app.core.config import Settings
+from app.core.errors import TooManyRequests
+from app.core.rate_limit import RateLimiter
 from app.core.security import (
     CSRF_COOKIE_NAME,
     SESSION_COOKIE_NAME,
@@ -73,10 +81,23 @@ async def register(
 @router.post("/login", response_model=UserResponse)
 async def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     session: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
+    ip_limiter: RateLimiter = Depends(get_login_ip_limiter),
+    account_limiter: RateLimiter = Depends(get_login_account_limiter),
 ) -> User:
+    # Both per-source-IP (volumetric abuse) and per-account (distributed credential-stuffing
+    # against one target) must independently allow the attempt — see
+    # docs/reviews/PRODUCTION_READINESS_REVIEW.md S1. Checked before any password work so a
+    # locked-out caller never even reaches the (deliberately slow) Argon2id verify.
+    client_ip = request.client.host if request.client else "unknown"
+    if not ip_limiter.try_acquire(f"ip:{client_ip}"):
+        raise TooManyRequests("Too many login attempts from this address. Try again shortly.")
+    if not account_limiter.try_acquire(f"account:{body.email.lower()}"):
+        raise TooManyRequests("Too many login attempts for this account. Try again shortly.")
+
     service = AuthService(session)
     user = await service.authenticate(email=body.email, password=body.password)
     _set_session_cookies(response, str(user.id), settings)

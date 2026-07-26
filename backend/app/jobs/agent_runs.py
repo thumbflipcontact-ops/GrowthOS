@@ -4,10 +4,12 @@ Phase 2A wires this up for real: `run_scheduled_agent` loads the `agent_configs`
 a concrete `AgentContext` (a `PluginRegistry` scoped to the project's connections, the
 concrete `KnowledgeBaseClient`, the transactional `EventPublisher`), invokes the agent's
 `run()`, and records the outcome as an `agent_runs` row — the durable, per-attempt audit
-trail docs/jobs/BACKGROUND_JOBS.md's "Observability" section describes. A failure re-raises
-after recording the row, so Arq's own retry policy (`max_tries = 3` below) still applies —
-each attempt gets its own `agent_runs` row, which is the intended behavior: every attempt
-genuinely happened and the row is the record of it.
+trail docs/jobs/BACKGROUND_JOBS.md's "Observability" section describes. A failure records the
+row, then raises `arq.worker.Retry` so Arq's own retry policy (`max_tries = 3` below) actually
+applies (see docs/reviews/PRODUCTION_READINESS_REVIEW.md §3.1 and app/core/job_retry.py — a
+plain re-raise here never retried at all, regardless of `max_tries`) — each attempt gets its
+own `agent_runs` row, which is the intended behavior: every attempt genuinely happened and the
+row is the record of it.
 
 Wired for schedule-triggered agents (`conversation_finder`) — app/jobs/events.py's
 subscription-triggered `run_agent_for_event` is the equivalent job body for subscription-
@@ -23,13 +25,17 @@ from datetime import UTC, datetime
 import structlog
 from agents._shared.base import AgentContext
 from arq.connections import RedisSettings
+from arq.worker import Retry
 
 from app.core.agent_registry import load_agent
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.events import EventPublisher
+from app.core.job_retry import retry_backoff_seconds
 from app.core.llm.base import LLMProvider
 from app.core.llm.factory import build_llm_provider
+from app.core.migration_check import verify_database_is_migrated
+from app.core.observability import capture_exception, init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
@@ -97,7 +103,8 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
             run.error = str(exc)
             await session.commit()
             run_logger.error("agent_run.failed", exc_info=True)
-            raise  # let Arq's retry policy (WorkerSettings.max_tries) apply
+            capture_exception(exc)
+            raise Retry(defer=retry_backoff_seconds(ctx.get("job_try", 1))) from exc
 
         run.status = AgentRunStatus.SUCCEEDED
         run.finished_at = datetime.now(UTC)
@@ -115,7 +122,14 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
 
 async def startup(ctx: dict) -> None:
     settings = get_settings()
-    engine = create_engine(str(settings.database_url))
+    init_error_tracking(settings, process_name="worker-agent-runs")
+
+    engine = create_engine(
+        str(settings.database_url),
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
+    await verify_database_is_migrated(engine)
     ctx["engine"] = engine
     ctx["session_factory"] = create_session_factory(engine)
     ctx["settings"] = settings

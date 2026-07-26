@@ -16,15 +16,28 @@ from httpx import ASGITransport, AsyncClient
 pytestmark = pytest.mark.integration
 
 
+class _FakeArqRedis:
+    """A minimal stand-in with a working `ping()` — real enough for /health's redis check
+    (see test_health.py for dedicated healthy/degraded coverage) without requiring a real
+    Redis in every test that merely boots the app."""
+
+    async def ping(self) -> bool:
+        return True
+
+
 @pytest_asyncio.fixture
 async def api_client(db_session, _migrated_db):
-    from app.api.deps import get_db
+    from app.api.deps import get_arq_redis, get_db
     from app.main import app
 
     async def override_get_db():
         yield db_session
 
+    async def override_get_arq_redis():
+        return _FakeArqRedis()
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_arq_redis] = override_get_arq_redis
     try:
         async with app.router.lifespan_context(app):
             transport = ASGITransport(app=app)
@@ -38,7 +51,7 @@ async def api_client(db_session, _migrated_db):
 async def test_health(api_client: AsyncClient) -> None:
     r = await api_client.get("/api/v1/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    assert r.json() == {"status": "ok", "checks": {"database": "ok", "redis": "ok"}}
 
 
 @pytest.mark.asyncio

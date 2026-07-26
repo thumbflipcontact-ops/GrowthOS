@@ -1,9 +1,17 @@
 """Password hashing and session token signing — see docs/auth/AUTHENTICATION.md.
 
 Argon2id for passwords, a signed (not encrypted — the payload is just a user id, not
-sensitive) timed token for sessions, held in an HTTP-only cookie. CSRF protection is a
-standard double-submit token, generated alongside the session and checked on state-changing
-requests.
+sensitive) timed token for sessions, held in an HTTP-only cookie.
+
+**CSRF cookie is generated but not yet verified anywhere** — see
+docs/reviews/PRODUCTION_READINESS_REVIEW.md S2. `generate_csrf_token()` below is set
+alongside the session cookie (app/api/v1/auth.py), intended as one half of a standard
+double-submit pattern, but no dependency or middleware compares it against a request header
+yet — this docstring previously (incorrectly) claimed it was "checked on state-changing
+requests." In practice, `SameSite=Lax` on the session cookie mitigates the classic cross-site
+form-POST case; the double-submit check itself remains a real gap, tracked but not
+implemented in Phase 2D (medium severity, scoped out in favor of higher-severity findings —
+see docs/reviews/PRODUCTION_HARDENING_REPORT.md).
 """
 
 from __future__ import annotations
