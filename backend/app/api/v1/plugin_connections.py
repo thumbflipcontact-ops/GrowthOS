@@ -21,6 +21,7 @@ from app.api.deps import (
     get_db,
     get_plugin_catalog,
     get_settings_dep,
+    require_active_subscription,
     require_project_access,
 )
 from app.core.config import Settings
@@ -53,7 +54,10 @@ async def list_plugin_connections(
 @router.post("", response_model=PluginConnectionResponse, status_code=201)
 async def create_plugin_connection(
     body: CreatePluginConnectionRequest,
-    project: Project = Depends(require_project_access),
+    # Connecting a new plugin account is where paid, metered API usage starts (a connection
+    # is what search()/publish() get called against) — gated on an active subscription/trial,
+    # not just project membership. See app/api/deps.py's require_active_subscription.
+    project: Project = Depends(require_active_subscription),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
     catalog: PluginCatalog = Depends(get_plugin_catalog),

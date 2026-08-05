@@ -71,6 +71,33 @@ create table projects (
 );
 
 -- ============================================================================
+-- Billing (Phase 4 — multi-tenant activation)
+-- ============================================================================
+
+-- Org-level, not project-level (billing covers the whole org, like memberships) — mirrored
+-- from Polar via webhooks (app/services/billing_service.py); `status` is always whatever
+-- Polar's own subscription object last reported, never computed locally. One row per org for
+-- launch — see docs/billing/BILLING_ARCHITECTURE.md's "why one plan, not tiers"; modeling
+-- subscription *history* per org is complexity this MVP doesn't need yet.
+create type subscription_status as enum ('incomplete', 'trialing', 'active', 'past_due', 'canceled');
+
+create table subscriptions (
+    id                        uuid primary key default gen_random_uuid(),
+    org_id                    uuid not null references organizations(id) on delete cascade,
+    polar_customer_id         text not null,
+    polar_subscription_id     text not null,
+    polar_product_id          text not null,
+    status                    subscription_status not null,
+    trial_ends_at             timestamptz,
+    current_period_end        timestamptz,
+    canceled_at               timestamptz,
+    created_at                timestamptz not null default now(),
+    updated_at                timestamptz not null default now(),
+    unique (org_id),
+    unique (polar_subscription_id)
+);
+
+-- ============================================================================
 -- Plugin catalog, connections & agents (configuration + execution audit trail)
 -- ============================================================================
 

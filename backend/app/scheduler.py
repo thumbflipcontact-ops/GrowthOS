@@ -50,8 +50,17 @@ async def main() -> None:
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+    except NotImplementedError:
+        # Windows' default ProactorEventLoop doesn't implement add_signal_handler at all
+        # (asyncio's docs mark it POSIX-only) — reproduced live running this process
+        # standalone on Windows for the first time, not a hypothetical gap. Ctrl+C still
+        # raises KeyboardInterrupt there in the normal synchronous way; the try/finally
+        # below still runs its cleanup regardless of which platform's mechanism triggered
+        # the stop, so behavior converges either way even though the trigger differs.
+        pass
 
     logger.info("scheduler.started", poll_interval_seconds=POLL_INTERVAL_SECONDS)
     try:
@@ -71,4 +80,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass  # Windows path (see above) — cleanup already ran in main()'s finally block

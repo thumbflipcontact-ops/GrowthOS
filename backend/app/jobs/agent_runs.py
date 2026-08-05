@@ -30,6 +30,7 @@ from arq.worker import Retry
 from app.core.agent_registry import load_agent
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
+from app.core.entitlements import is_org_entitled
 from app.core.events import EventPublisher
 from app.core.job_retry import retry_backoff_seconds
 from app.core.llm.base import LLMProvider
@@ -62,6 +63,19 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
         project = await session.get(Project, config.project_id)
         if project is None:
             logger.error("agent_run.project_missing", agent_config_id=agent_config_id)
+            return
+
+        # Cost-safety gate, not just an HTTP-layer concern (app/api/deps.py's
+        # require_active_subscription): a scheduled agent has no HTTP request to reject, so
+        # this is the only place a canceled/expired org's *cron-triggered* runs actually stop
+        # spending its own metered plugin API calls and LLM tokens. See
+        # docs/billing/BILLING_ARCHITECTURE.md.
+        if not await is_org_entitled(session, project.org_id):
+            logger.info(
+                "agent_run.skipped_org_not_entitled",
+                agent_config_id=agent_config_id,
+                org_id=str(project.org_id),
+            )
             return
 
         run = AgentRun(

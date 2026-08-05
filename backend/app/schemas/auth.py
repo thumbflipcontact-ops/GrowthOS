@@ -24,3 +24,11 @@ class UserResponse(BaseModel):
     name: str
 
     model_config = {"from_attributes": True}
+
+
+class OrganizationResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+
+    model_config = {"from_attributes": True}

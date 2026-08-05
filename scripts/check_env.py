@@ -209,6 +209,29 @@ def _check_reddit_oauth_credentials(results: list[CheckResult]) -> None:
         )
 
 
+def _check_polar_billing_credentials(results: list[CheckResult], settings: object) -> None:
+    access_token = getattr(settings, "polar_access_token", None)
+    webhook_secret = getattr(settings, "polar_webhook_secret", None)
+    product_id = getattr(settings, "polar_product_id", None)
+    if access_token and webhook_secret and product_id:
+        server = getattr(settings, "polar_server", "sandbox")
+        results.append(
+            CheckResult(
+                "Polar billing credentials", "ok", f"POLAR_* are set (server={server})"
+            )
+        )
+    else:
+        results.append(
+            CheckResult(
+                "Polar billing credentials",
+                "warn",
+                "POLAR_ACCESS_TOKEN/POLAR_WEBHOOK_SECRET/POLAR_PRODUCT_ID not fully set",
+                "Not required until you actually accept a paid signup - see "
+                "docs/billing/BILLING_ARCHITECTURE.md's Setup section.",
+            )
+        )
+
+
 def _check_anthropic_key(results: list[CheckResult], settings: object) -> None:
     value = settings.anthropic_api_key.get_secret_value()  # type: ignore[attr-defined]
     if not value or value in ("x", "test-anthropic-key") or value.startswith("test-"):
@@ -287,6 +310,7 @@ async def main() -> int:
     await _check_redis(results, settings)
     _check_plugin_catalog(results)
     _check_reddit_oauth_credentials(results)
+    _check_polar_billing_credentials(results, settings)
     _check_anthropic_key(results, settings)
     if live:
         await _check_anthropic_live(results, settings)

@@ -17,6 +17,7 @@ from fastapi import Cookie, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.entitlements import require_org_entitled
 from app.core.errors import AuthenticationError, AuthorizationError, NotFoundError
 from app.core.plugin_catalog import PluginCatalog
 from app.core.rate_limit import RateLimiter
@@ -118,9 +119,11 @@ async def require_project_access(
     project doesn't exist, AuthorizationError if the user isn't a member of its org — the
     project's existence is not leaked to a user who can't see it (both cases could arguably
     be 404s; we use 403 here because it's more actionable for a user who mistyped a URL
-    while logged into the wrong org, and this is a single-operator v1 system, not a
-    multi-tenant one where existence-leakage is a live threat — see
-    docs/security/SECURITY.md)."""
+    while logged into the wrong org). Now that Phase 4 (docs/billing/BILLING_ARCHITECTURE.md)
+    means genuine strangers hold accounts, the 403-vs-404 choice is a real tenant-isolation
+    question, not a moot one — flagged as a fast-follow audit item there rather than changed
+    here without evidence either choice actually matters at this project's UUID-keyed,
+    unguessable-id scale. See docs/security/SECURITY.md."""
     project = await session.get(Project, project_id)
     if project is None:
         raise NotFoundError("Project not found.")
@@ -150,3 +153,20 @@ async def require_org_access(
         raise AuthorizationError("You do not have access to this organization.")
 
     return organization
+
+
+async def require_active_subscription(
+    project: Project = Depends(require_project_access),
+    session: AsyncSession = Depends(get_db),
+) -> Project:
+    """Gates any route that would spend paid, metered plugin capacity (creating an OAuth
+    connection, triggering an agent run) behind an active subscription or trial — see
+    docs/billing/BILLING_ARCHITECTURE.md and app/core/entitlements.py. Deliberately layered
+    on top of require_project_access rather than replacing it: this always checks
+    membership first (a stranger gets 403, not 402, for a project they can't see at all),
+    then billing status for a project they're actually a member of. Raises
+    SubscriptionRequiredError (402) — the background-job equivalent
+    (app/jobs/agent_runs.py, app/jobs/events.py, app/jobs/publish.py) calls
+    `is_org_entitled` directly instead, since a job has no HTTP response to raise into."""
+    await require_org_entitled(session, project.org_id)
+    return project

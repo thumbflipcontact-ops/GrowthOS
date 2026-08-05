@@ -26,8 +26,9 @@ from app.core.security import (
     create_session_token,
     generate_csrf_token,
 )
-from app.models.identity import User
-from app.schemas.auth import LoginRequest, RegisterRequest, UserResponse
+from app.models.identity import Organization, User
+from app.repositories.user_repository import MembershipRepository
+from app.schemas.auth import LoginRequest, OrganizationResponse, RegisterRequest, UserResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -113,3 +114,21 @@ async def logout(response: Response) -> None:
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
+
+
+@router.get("/me/organizations", response_model=list[OrganizationResponse])
+async def my_organizations(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[Organization]:
+    """The orgs this user belongs to — needed by the frontend right after login/register,
+    since `/auth/register`'s response (UserResponse) deliberately carries no org data (a user
+    can, in principle, belong to more than one org even though registration only ever creates
+    membership in the one it bootstraps)."""
+    memberships = await MembershipRepository(session).list_for_user(current_user.id)
+    organizations = []
+    for membership in memberships:
+        organization = await session.get(Organization, membership.org_id)
+        if organization is not None:
+            organizations.append(organization)
+    return organizations

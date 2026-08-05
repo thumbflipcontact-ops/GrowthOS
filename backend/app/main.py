@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -64,6 +65,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     app = FastAPI(title="GrowthOS API", version="0.1.0", lifespan=lifespan)
     register_exception_handlers(app)
+
+    settings = get_settings()
+    # allow_credentials=True is required for the session cookie to actually be sent on
+    # cross-origin fetch calls from the frontend — browsers refuse credentialed cross-origin
+    # requests without it, regardless of SameSite. allow_origins is deliberately one fixed
+    # origin (not "*", which is incompatible with allow_credentials anyway per the fetch
+    # spec), read from Settings so it's an environment concern, not a code change per deploy.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[settings.frontend_origin],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.middleware("http")
     async def add_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]

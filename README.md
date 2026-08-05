@@ -102,10 +102,13 @@ Phase 0 (architecture) and Phase 1 (platform foundation) are both complete — s
 [PHASE_1_REPORT.md](PHASE_1_REPORT.md) for what was built, tested, and verified. The backend
 has a real FastAPI app, database schema + migrations, auth, the plugin SDK/registry, a
 generic OAuth2 framework, the event bus, and background job plumbing — all with a passing
-test suite. The Reddit plugin (searchable + publishable, real OAuth2 auth) is now
-implemented — see [docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md](docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md).
-No AI provider calls, and no Conversation Finder/Content Agent, exist yet by design — see
-`ROADMAP.md` for what's next.
+test suite. Three channel plugins are now implemented, all against the generic OAuth2
+framework: Reddit (searchable + publishable) — see
+[docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md](docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md)
+— and Twitter/X (searchable + publishable, OAuth2 + PKCE) and LinkedIn (publishable only —
+LinkedIn's public API has no general content-search endpoint) — see
+[docs/reviews/TWITTER_LINKEDIN_IMPLEMENTATION_REPORT.md](docs/reviews/TWITTER_LINKEDIN_IMPLEMENTATION_REPORT.md).
+See `ROADMAP.md` for what's next.
 
 ## Getting started
 

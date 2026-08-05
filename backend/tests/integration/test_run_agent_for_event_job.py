@@ -22,6 +22,7 @@ from app.core.events import EventPublisher
 from app.core.llm.anthropic_provider import AnthropicProvider
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
+from app.models.billing import Subscription, SubscriptionStatus
 from app.models.content import ContentItem
 from app.models.identity import Organization
 from app.models.project import Project
@@ -93,6 +94,19 @@ async def _make_project(db_session) -> Project:
     org = await OrganizationRepository(db_session).add(
         Organization(name="Acme", slug=f"acme-evt-{suffix}")
     )
+    # run_agent_for_event gates on an active subscription/trial (app/core/entitlements.py) —
+    # this test suite exercises the job's own mechanics, not billing, so every project it
+    # builds is entitled by default; see test_billing_entitlements.py for the gate itself.
+    db_session.add(
+        Subscription(
+            org_id=org.id,
+            polar_customer_id=f"cus_{suffix}",
+            polar_subscription_id=f"sub_{suffix}",
+            polar_product_id="prod_test",
+            status=SubscriptionStatus.TRIALING,
+        )
+    )
+    await db_session.flush()
     return await ProjectRepository(db_session).add(
         Project(org_id=org.id, name="ScoutSEO", slug=f"scoutseo-evt-{suffix}")
     )

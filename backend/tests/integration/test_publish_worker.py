@@ -22,6 +22,7 @@ from sqlalchemy import select
 from app.core.config import Settings
 from app.core.plugin_catalog import PluginCatalog
 from app.models.audit import AuditLog
+from app.models.billing import Subscription, SubscriptionStatus
 from app.models.content import ContentItem, ContentItemStatus, ContentPublishAttempt
 from app.models.event import DomainEvent
 from app.models.identity import Organization
@@ -96,6 +97,20 @@ async def _make_project(db_session) -> Project:
     org = await OrganizationRepository(db_session).add(
         Organization(name="Acme", slug=f"acme-pub-{suffix}")
     )
+    # publish_content_item gates on an active subscription/trial (app/core/entitlements.py) —
+    # this test suite exercises the publish job's own mechanics, not billing, so every
+    # project it builds is entitled by default; see test_billing_entitlements.py for the gate
+    # itself.
+    db_session.add(
+        Subscription(
+            org_id=org.id,
+            polar_customer_id=f"cus_{suffix}",
+            polar_subscription_id=f"sub_{suffix}",
+            polar_product_id="prod_test",
+            status=SubscriptionStatus.TRIALING,
+        )
+    )
+    await db_session.flush()
     return await ProjectRepository(db_session).add(
         Project(org_id=org.id, name="ScoutSEO", slug=f"scoutseo-pub-{suffix}")
     )

@@ -27,6 +27,7 @@ EXPECTED_TABLES = {
     "competitors",
     "competitor_observations",
     "daily_briefs",
+    "subscriptions",
 }
 
 EXPECTED_ENUMS = {
@@ -38,6 +39,7 @@ EXPECTED_ENUMS = {
     "buying_intent",
     "content_item_status",
     "contact_status",
+    "subscription_status",
 }
 
 

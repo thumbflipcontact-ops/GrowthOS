@@ -53,8 +53,15 @@ class Settings(BaseSettings):
     environment: Literal["local", "staging", "production"] = "local"
     log_level: str = "INFO"
 
-    # --- Frontend (not consumed by the backend itself; kept for .env parity) ---
+    # --- Frontend ---
     next_public_api_base_url: str = Field(default="http://localhost:8000")
+    # The frontend's own origin — CORS allowlist (app/main.py). Cookie-based session auth
+    # (app/core/security.py) relies on the frontend and backend sharing a registrable domain
+    # (subdomains are fine, e.g. app.example.com + api.example.com — SameSite=Lax cookies
+    # flow between same-site origins regardless of port/subdomain) so this being wrong is a
+    # silent, confusing "login works but every subsequent request looks unauthenticated"
+    # failure, not a loud one — see docs/deployment/DEPLOYMENT.md.
+    frontend_origin: str = Field(default="http://localhost:3000")
 
     # --- OAuth2 plugin framework — see docs/auth/OAUTH2_ARCHITECTURE.md ---
     # oauth_callback_base_url must be the exact, publicly reachable origin registered as
@@ -69,6 +76,30 @@ class Settings(BaseSettings):
     # as before if this is unset. Not the full docs/observability/OBSERVABILITY.md stack —
     # a narrower, more urgent "don't fail silently in a background worker" gap.
     sentry_dsn: str | None = Field(default=None)
+
+    # --- Billing (Phase 4) — see docs/billing/BILLING_ARCHITECTURE.md. Polar, not Stripe:
+    # Stripe does not currently allow solo-founder/individual accounts in India to onboard;
+    # Polar is a merchant-of-record platform with self-serve onboarding regardless of
+    # business-registration status. Unlike per-plugin OAuth credentials (one processor, not
+    # an open-ended set), these are fixed Settings fields. Optional at the type level so a
+    # deployment that hasn't activated billing yet (e.g. local dev) still boots —
+    # BillingService raises BillingNotConfigured at first real use if any is missing, the same
+    # "fail loudly at the point of use, not at import time" pattern
+    # Settings.oauth_client_credentials() already established.
+    polar_access_token: SecretStr | None = Field(default=None)
+    polar_webhook_secret: SecretStr | None = Field(default=None)
+    # "sandbox" (default — safe if unset) or "production". A misconfigured deployment should
+    # never silently hit real production billing; the operator sets this explicitly to go
+    # live, mirroring `environment`'s own safe-by-default convention above.
+    polar_server: Literal["sandbox", "production"] = "sandbox"
+    # The single launch plan's Product ID (see docs/billing/BILLING_ARCHITECTURE.md's "why
+    # one plan, not tiers") — created in the Polar Dashboard, not by this codebase, with its
+    # 7-day trial configured there too (Polar's trial lives on the Product, not passed at
+    # checkout time). Multiple plans later means multiple configured Product IDs, not a code
+    # change to how Checkout Sessions are built.
+    polar_product_id: str | None = Field(default=None)
+    billing_checkout_success_url: str = Field(default="http://localhost:3000/billing/success")
+    billing_portal_return_url: str = Field(default="http://localhost:3000/settings/billing")
 
     model_config = SettingsConfigDict(
         env_file=".env",

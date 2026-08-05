@@ -134,6 +134,10 @@ dataclasses), imported by `backend/app/core/`. This keeps the boundary between "
 API/service layer" and "the independent, swappable agent/plugin units" (`ARCHITECTURE.md`
 §2) visible in the folder structure itself, not just in documentation. `plugins/reddit/` is
 the first real plugin (see `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`);
+`plugins/twitter/` and `plugins/linkedin/` followed (see
+`docs/reviews/TWITTER_LINKEDIN_IMPLEMENTATION_REPORT.md` — `plugins/linkedin/` is notably
+`Publishable` only, not `Searchable`, proof the segmented-capability design tolerates a
+plugin that genuinely can't do one of the four).
 `agents/conversation_finder/` is the first real agent (see
 `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`), `agents/content_agent/` is the
 second (see `docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md`) — both loaded by

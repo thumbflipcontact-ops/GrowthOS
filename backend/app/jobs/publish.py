@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
+from app.core.entitlements import is_org_entitled
 from app.core.errors import CapabilityNotSupported
 from app.core.events import EventPublisher
 from app.core.job_retry import retry_backoff_seconds
@@ -84,6 +85,25 @@ async def publish_content_item(ctx: dict, content_item_id: str) -> None:
         project = await session.get(Project, item.project_id)
         if project is None:
             logger.error("publish.project_missing", content_item_id=content_item_id)
+            return
+
+        # Cost-safety gate: a human already approved this item, but if the org's
+        # subscription lapsed between approval and this job running, don't spend another
+        # real, metered plugin API call on their behalf. Left `approved` with a clear
+        # publish_error rather than raised as Retry — retrying won't help until they
+        # resubscribe, so there's nothing for Arq's backoff to usefully wait for. See
+        # docs/billing/BILLING_ARCHITECTURE.md.
+        if not await is_org_entitled(session, project.org_id):
+            item.publish_error = (
+                "This organization's subscription is not active — publishing is paused "
+                "until it's reactivated."
+            )
+            await session.commit()
+            logger.info(
+                "publish.skipped_org_not_entitled",
+                content_item_id=content_item_id,
+                org_id=str(project.org_id),
+            )
             return
 
         attempts = ContentPublishAttemptRepository(session)

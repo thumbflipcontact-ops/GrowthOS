@@ -11,6 +11,10 @@ claims.
 `plugins/dummy/` is a trivial test-fixture plugin (see its `README.md`) proving the contract
 mechanism works, not a working integration with any real external system. `plugins/reddit/`
 is the first real one — see `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`.
+`plugins/twitter/` and `plugins/linkedin/` followed — see
+`docs/reviews/TWITTER_LINKEDIN_IMPLEMENTATION_REPORT.md`; note `plugins/linkedin/` implements
+`Publishable` only, not `Searchable` (see its own `README.md` for why), proof that this
+segmented-capability design handles a plugin that genuinely can't do one of the four.
 """
 
 from __future__ import annotations

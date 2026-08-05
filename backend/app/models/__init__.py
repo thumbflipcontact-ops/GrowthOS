@@ -5,6 +5,7 @@ required for relationship() string resolution and for Alembic's autogenerate dif
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
 from app.models.audit import AuditLog
 from app.models.base import Base
+from app.models.billing import Subscription, SubscriptionStatus
 from app.models.brief import DailyBrief
 from app.models.content import ContentItem, ContentItemStatus
 from app.models.crm import Company, Competitor, CompetitorObservation, Contact, ContactStatus
@@ -46,4 +47,6 @@ __all__ = [
     "PluginConnectionStatus",
     "Project",
     "ProjectStatus",
+    "Subscription",
+    "SubscriptionStatus",
 ]

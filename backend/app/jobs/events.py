@@ -35,6 +35,7 @@ from app.core.agent_registry import load_agent
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.dispatcher import EventDispatcher
+from app.core.entitlements import is_org_entitled
 from app.core.events import EventPublisher
 from app.core.job_retry import retry_backoff_seconds
 from app.core.llm.base import LLMProvider
@@ -95,6 +96,18 @@ async def run_agent_for_event(ctx: dict, agent_key: str, event_id: str) -> None:
         project = await session.get(Project, event.project_id)
         if project is None:
             logger.error("agent_run_for_event.project_missing", event_id=event_id)
+            return
+
+        # Same cost-safety gate as app/jobs/agent_runs.py's run_scheduled_agent — a
+        # subscription-triggered agent (Content Agent) has no HTTP request to reject either,
+        # and it's the one that spends real LLM tokens per draft. See
+        # docs/billing/BILLING_ARCHITECTURE.md.
+        if not await is_org_entitled(session, project.org_id):
+            logger.info(
+                "agent_run_for_event.skipped_org_not_entitled",
+                agent_key=agent_key,
+                org_id=str(project.org_id),
+            )
             return
 
         config = await AgentConfigRepository(session).get_or_create(event.project_id, agent_key)

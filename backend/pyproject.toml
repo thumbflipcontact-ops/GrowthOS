@@ -18,7 +18,11 @@ dependencies = [
     "argon2-cffi>=23.1,<24",
     "itsdangerous>=2.2,<3",
     "pgvector>=0.3.6,<0.4",
-    "httpx>=0.27,<0.28",
+    # >=0.28.1 floor is polar-sdk's own requirement (see below) — was >=0.27,<0.28 before
+    # billing was added; httpx's 0.27->0.28 change is not a breaking change for anything this
+    # codebase or its plugins use (AsyncClient, MockTransport), verified by the full test
+    # suite passing unchanged after the bump.
+    "httpx>=0.28.1,<0.29",
     "python-dotenv>=1.0,<2",
     "croniter>=3.0,<4",
     # AES-GCM for envelope encryption (ADR 0010) — see app/core/crypto.py. First real consumer
@@ -30,6 +34,13 @@ dependencies = [
     # Optional error tracking (no-ops unless SENTRY_DSN is set) — see
     # app/core/observability.py and docs/reviews/PRODUCTION_READINESS_REVIEW.md O8/O9.
     "sentry-sdk>=2.18,<3",
+    # Billing (Phase 4) — Polar Checkout + Customer Portal + webhooks. See
+    # docs/billing/BILLING_ARCHITECTURE.md. Not Stripe: Stripe does not currently onboard
+    # solo-founder/individual accounts in India (see BILLING_ARCHITECTURE.md's "Why Polar,
+    # not Stripe"); Polar is a merchant-of-record platform with self-serve onboarding
+    # regardless of business registration status. Only the official SDK talks to Polar's API,
+    # same "one boundary module" principle as app/core/oauth/client.py for OAuth providers.
+    "polar-sdk>=0.32,<0.33",
 ]
 
 [project.optional-dependencies]

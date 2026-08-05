@@ -55,13 +55,25 @@ validated against its owner's own schema (a pydantic model) at the application l
 ### `organizations`, `users`, `memberships`
 Deliberately minimal for v1 — one org, one user, `role` defaults to `owner`. The
 `membership_role` enum already includes `member` so that Phase 4 (multi-tenant activation,
-see `ROADMAP.md`) is a matter of *using* the existing model, not changing it.
+see `ROADMAP.md`) was a matter of *using* the existing model, not changing it — confirmed by
+`subscriptions` (below), the first Phase 4 table, which needed zero changes here.
 
 ### `projects`
 The unit everything else hangs off. `icp_config` and `brand_voice` are JSONB because their
 schema is intentionally agent/product-specific — e.g. ScoutSEO's ICP config might describe
 "SaaS founders with Search Console access," while a future e-commerce project's ICP config
 looks nothing like that. Agents read these fields; they don't assume a fixed shape.
+
+### `subscriptions`
+New in Phase 4 — see `docs/billing/BILLING_ARCHITECTURE.md`. Org-level, not project-level
+(like `memberships`): a subscription pays for the whole org, not one of its projects. One row
+per org (`unique(org_id)`) — modeling subscription *history* (past cancellations,
+plan-change history) is complexity the launch plan doesn't need yet; a canceled-then-
+resubscribed org updates its existing row. `status` is a mirror of Polar's own subscription
+status, written only by webhook events (`app/services/billing_service.py`), never computed
+locally — this table is to Polar what `plugin_catalog` is to the in-process plugin scan: a
+queryable local copy of externally-owned truth, refreshed on events rather than derived at
+read time.
 
 ### `plugin_catalog`
 New in V2. Mirrors the in-process plugin manifest scan performed at every startup (see
@@ -192,13 +204,15 @@ migrations are what actually ran against production.
 
 ## What's intentionally not here yet
 
-- Billing/subscription tables (Phase 4, see `ROADMAP.md`).
 - Full-text search indexes beyond the vector index (add when the knowledge base is large
   enough that semantic search alone isn't sufficient — premature to index for now).
-- Row-Level Security policies — planned for Phase 4 when a second org's data actually shares
-  infrastructure with the first; for a single-org deployment, application-layer scoping
-  (every query filtered by `project_id` via the service layer) is sufficient and simpler to
-  reason about. See `docs/security/SECURITY.md`.
+- Row-Level Security policies — genuinely relevant now that Phase 4 means a second org's data
+  actually shares infrastructure with the first, but not yet built: application-layer scoping
+  (every query filtered by `org_id`/`project_id` via the service layer, plus
+  `require_org_access`/`require_project_access` at the API boundary) is what's in place today.
+  Flagged as the "tenant isolation audit" fast-follow in `docs/billing/BILLING_ARCHITECTURE.md`
+  — RLS as a defense-in-depth layer under the existing application-layer scoping, not a
+  replacement for it. See `docs/security/SECURITY.md`.
 - A hard foreign key from `plugin_connections.plugin_key` to `plugin_catalog.plugin_key` —
   deliberately validated at the application layer instead; see the `plugin_catalog` note
   above.

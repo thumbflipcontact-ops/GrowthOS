@@ -63,6 +63,17 @@ OAUTH_FRONTEND_REDIRECT_URL=http://localhost:3000/settings/plugins
 # {PLUGIN_KEY}_OAUTH_CLIENT_ID / _CLIENT_SECRET, one pair per installed OAuth-capable
 # plugin — read directly from the environment, not a fixed Settings field (the plugin set
 # is open-ended). E.g. REDDIT_OAUTH_CLIENT_ID / REDDIT_OAUTH_CLIENT_SECRET.
+
+# Billing (Phase 4) — see docs/billing/BILLING_ARCHITECTURE.md. Polar, not Stripe: Stripe
+# does not currently onboard solo-founder/individual accounts in India. Unlike per-plugin
+# OAuth credentials, these ARE fixed Settings fields (one payments processor, not an
+# open-ended set).
+POLAR_ACCESS_TOKEN=
+POLAR_WEBHOOK_SECRET=
+POLAR_PRODUCT_ID=                                 # the single launch plan's Product id
+POLAR_SERVER=sandbox                              # "sandbox" (default) or "production"
+BILLING_CHECKOUT_SUCCESS_URL=http://localhost:3000/billing/success
+BILLING_PORTAL_RETURN_URL=http://localhost:3000/settings/billing
 ```
 
 `.env.example` at the repo root is kept in sync with every variable `Settings` declares —

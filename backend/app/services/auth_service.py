@@ -1,9 +1,13 @@
 """Authentication scaffold — see docs/auth/AUTHENTICATION.md.
 
-`register` is the solo-operator bootstrap flow (create the one organization + owner user),
-not a public signup flow — org invitations / additional signups are explicitly deferred to
-Phase 4 (docs/decisions/0001-multi-tenancy.md, ROADMAP.md). Every login attempt, successful
-or not, writes an audit_log row per docs/security/SECURITY.md.
+`register` is the public signup flow (Phase 4 — docs/billing/BILLING_ARCHITECTURE.md,
+docs/decisions/0001-multi-tenancy.md): anyone can create an organization + owner user. It
+does not create a subscription — that happens separately via BillingService's Checkout
+Session (app/api/v1/billing.py), so a freshly registered org exists but is not yet entitled
+to anything paid until checkout completes. Org invitations / roles beyond a single owner
+remain deferred — a real gap for a team account, not yet needed for the single-owner-per-org
+model this launch targets. Every login attempt, successful or not, writes an audit_log row
+per docs/security/SECURITY.md.
 """
 
 from __future__ import annotations

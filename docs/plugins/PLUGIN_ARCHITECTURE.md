@@ -324,8 +324,8 @@ incident. See `docs/security/SECURITY.md` and `docs/architecture/LOCKED_DECISION
 | Plugin | Capabilities | Notes |
 |---|---|---|
 | `reddit` | searchable, publishable | **Implemented** — first plugin built, see ADR 0005 and `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`. Not yet connected to a real account or consumed by any agent. |
-| `linkedin` | searchable, publishable | |
-| `twitter` | searchable, publishable | |
+| `linkedin` | publishable | **Implemented** — see `docs/reviews/TWITTER_LINKEDIN_IMPLEMENTATION_REPORT.md`. Deliberately not `searchable` — LinkedIn's public API has no general content-search endpoint for a standard app registration, see `plugins/linkedin/README.md` §"Why no search()". Not yet connected to a real account or consumed by any agent. |
+| `twitter` | searchable, publishable | **Implemented** — see `docs/reviews/TWITTER_LINKEDIN_IMPLEMENTATION_REPORT.md`. OAuth2 + PKCE (required) — the case the platform's OAuth2 framework was originally designed for. Not yet connected to a real account or consumed by any agent. |
 | `gsc_community` | searchable, publishable | No public API; scraping-based |
 | `webmasterworld` | searchable, publishable | No public API; scraping-based |
 | `github` | searchable, publishable | |

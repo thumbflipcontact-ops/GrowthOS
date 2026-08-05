@@ -96,6 +96,28 @@ class TooManyRequests(GrowthOSError):
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
 
 
+class SubscriptionRequiredError(GrowthOSError):
+    """Raised by app/core/entitlements.py's require_active_subscription when an org has no
+    subscription row, or its Stripe status is neither 'trialing' nor 'active' — see
+    docs/billing/BILLING_ARCHITECTURE.md. 402 Payment Required is the semantically correct
+    status for "the account exists and is who they say they are, but hasn't paid" —
+    deliberately distinct from AuthenticationError (401, not who they say) and
+    AuthorizationError (403, not this org's resource at all)."""
+
+    code = "subscription_required"
+    status_code = status.HTTP_402_PAYMENT_REQUIRED
+
+
+class BillingNotConfigured(GrowthOSError):
+    """Raised when a billing route/job is reached but STRIPE_SECRET_KEY (or
+    STRIPE_PRICE_ID/STRIPE_WEBHOOK_SECRET, depending which is needed) isn't set — mirrors
+    OAuthClientNotConfigured's "fail loudly at first use, not at process startup" pattern,
+    since a deployment that hasn't activated billing yet must still boot cleanly."""
+
+    code = "billing_not_configured"
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """The single place every domain exception is mapped to the API error envelope
     documented in docs/errors/ERROR_HANDLING.md."""

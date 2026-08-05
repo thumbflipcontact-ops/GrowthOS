@@ -1,0 +1,17 @@
+[project]
+name = "growthos-plugin-twitter"
+version = "0.1.0"
+description = "GrowthOS plugin: Twitter/X (Searchable + Publishable, OAuth2 + PKCE)"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.9", "httpx>=0.28.1,<0.29"]
+
+[project.entry-points."growthos.plugins"]
+twitter = "plugins.twitter.manifest:MANIFEST"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["plugins.twitter"]
+package-dir = {"plugins.twitter" = "."}

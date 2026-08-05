@@ -41,7 +41,13 @@ reworked. This ordering is what the (now-archived) V1→V2 migration plan produc
    encryption respectively), including its own unit + contract test suite. Not yet connected
    to a real account — the one thing step 5's Conversation Finder, Content Agent, and
    approval/publish workflow still don't change; see
-   `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`.
+   `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`. **Extended with two more channel
+   plugins** — `plugins/twitter/` (searchable + publishable, OAuth2 + PKCE — the case the
+   OAuth2 framework's PKCE support was originally built for) and `plugins/linkedin/`
+   (publishable only; LinkedIn's public API has no general content-search endpoint for a
+   standard app, see `plugins/linkedin/README.md` §"Why no search()"), both against the same
+   platform mechanisms with their own unit + contract test suites, neither yet connected to a
+   real account; see `docs/reviews/TWITTER_LINKEDIN_IMPLEMENTATION_REPORT.md`.
 5. **Conversation Finder + Content Agent** — Conversation Finder remains schedule-triggered
    (it originates discovery); Content Agent subscribes to `knowledge_item.created` instead of
    being placed in a sequencing config. **Done, in two sub-phases:**
@@ -198,15 +204,33 @@ project-specific code changes.
 ## Phase 4 — Multi-tenant activation (only if you decide to sell GrowthOS)
 
 Everything here was deliberately built cheaply-activatable in Phase 0–1 rather than bolted
-on later — see `docs/decisions/0001-multi-tenancy.md`.
+on later — see `docs/decisions/0001-multi-tenancy.md`. **Activated** — confirmed cheap to
+activate as designed: no schema rework was needed, only new tables/routes/jobs alongside the
+existing model.
 
-- Signup flow, org invitations, role-based access beyond single-owner.
-- Billing integration.
-- Per-org resource limits and rate limiting.
-- Tenant isolation audit (see `docs/security/SECURITY.md`).
+- Signup flow — **Done.** `POST /api/v1/auth/register` is now a genuine public signup path
+  (see `app/services/auth_service.py`'s updated docstring), not the solo-operator bootstrap
+  it was through Phase 3. Org invitations / roles beyond a single owner remain **not done** —
+  a real gap for a team account, not yet needed for the single-owner-per-org model this
+  launch targets.
+- Billing integration — **Done**, against Polar (not Stripe — Stripe does not currently
+  onboard solo-founder/individual accounts in India). One plan, 7-day trial, card required
+  upfront. See `docs/billing/BILLING_ARCHITECTURE.md` for the full design and what's still
+  missing before a real public launch (a frontend, chiefly — none exists yet).
+- Per-org resource limits and rate limiting — **Partially done.** The subscription
+  entitlement gate (`app/core/entitlements.py`) blocks all paid plugin/LLM usage for an
+  unentitled org, wired into both API routes and background jobs (agent runs, event-triggered
+  runs, publish) so a canceled org's *scheduled* work stops too, not just its API access. Real
+  per-plan usage quotas (distinct from each plugin's own rate limiter) are not built — see
+  `docs/billing/BILLING_ARCHITECTURE.md`'s "still missing" section.
+- Tenant isolation audit (see `docs/security/SECURITY.md`) — **Not done.** Flagged explicitly
+  in `docs/billing/BILLING_ARCHITECTURE.md` and `app/api/deps.py`'s `require_project_access`
+  docstring as the next thing worth a dedicated pass, now that real strangers hold accounts.
 
 **Exit criterion:** a second, unrelated human can sign up, connect their own plugins, and
-run GrowthOS for their own business with zero visibility into your data.
+run GrowthOS for their own business with zero visibility into your data. **Not yet verified
+end-to-end** — the backend flow is code-complete and tested, but no frontend exists for a real
+second human to actually use, and no live Polar account has been connected outside sandbox.
 
 ## Deferred, with reasoning
 
@@ -214,7 +238,7 @@ run GrowthOS for their own business with zero visibility into your data.
 |---|---|
 | Analytics Agent | Needs enough historical `knowledge_items`/`content_items` volume to find real patterns. Building it against empty tables means designing against guesses. |
 | CRM Assistant | Depends on Customer Finder and Outreach Assistant having run long enough to produce real relationship state worth assisting with. |
-| Multi-tenant signup/billing | Solo-first per your call in Phase 0. Schema and auth are tenant-ready; the flows themselves are not built until there's a reason to sell seats. |
+| Team accounts (org invitations, roles beyond owner) | Public signup + billing (Phase 4) are now activated; multi-user-per-org access is the remaining, not-yet-needed piece of the original solo-first deferral — single-owner-per-org is sufficient for launch. |
 | Kubernetes | Docker Compose is correct for one operator's workload. Revisit only if/when Phase 4 activates and concurrent-tenant load actually requires it — see `docs/scalability/SCALABILITY.md`. |
 | Mobile app | Nothing in the vision requires it yet; the dashboard is a morning-coffee check-in, not a mobile-first workflow. |
 | Fine-tuned/self-hosted models | Provider abstraction (Claude + OpenAI) is deliberately in place so this is a future swap, not a rewrite, if cost or latency ever demands it. |

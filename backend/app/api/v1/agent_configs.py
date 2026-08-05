@@ -10,7 +10,13 @@ from arq import ArqRedis
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_arq_redis, get_current_user, get_db, require_project_access
+from app.api.deps import (
+    get_arq_redis,
+    get_current_user,
+    get_db,
+    require_active_subscription,
+    require_project_access,
+)
 from app.core.agent_registry import load_agent
 from app.models.agent import AgentConfig, AgentRun
 from app.models.audit import AuditLog
@@ -60,7 +66,12 @@ async def upsert_agent_config(
 @router.post("/{agent_key}/runs/trigger", response_model=AgentTriggerResponse, status_code=202)
 async def trigger_agent_run(
     agent_key: str,
-    project: Project = Depends(require_project_access),
+    # A run spends real, metered plugin API calls and LLM tokens — gated on an active
+    # subscription/trial, not just project membership. See app/api/deps.py's
+    # require_active_subscription. The scheduled-trigger path (app/scheduler.py ->
+    # app/jobs/agent_runs.py) has no HTTP request to gate this way; it checks
+    # is_org_entitled directly at the top of the job body instead.
+    project: Project = Depends(require_active_subscription),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
     arq_redis: ArqRedis = Depends(get_arq_redis),
