@@ -36,6 +36,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 def _set_session_cookies(response: Response, user_id: str, settings: Settings) -> None:
     is_secure = not settings.is_local
+    # SameSite=Lax only survives cross-origin fetch when frontend and backend share a
+    # registrable domain (e.g. app.example.com + api.example.com — see
+    # frontend_origin's docstring in app/core/config.py). The default Railway/Vercel domains
+    # (*.up.railway.app vs *.vercel.app) do NOT share one — they're genuinely cross-site, and
+    # SameSite=Lax cookies are dropped by the browser on cross-site fetch/XHR. SameSite=None
+    # (requires Secure, which is_secure already guarantees outside local dev) is the correct
+    # setting for that deployment shape. This does not newly weaken CSRF defenses — the
+    # double-submit check itself is a pre-existing, separately-tracked gap (see
+    # docs/reviews/PRODUCTION_READINESS_REVIEW.md S2); SameSite=Lax was never a complete
+    # defense on its own, and closing S2 for real matters more once this is None.
+    same_site = "none" if not settings.is_local else "lax"
     session_token = create_session_token(
         uuid.UUID(user_id), secret_key=settings.secret_key.get_secret_value()
     )
@@ -45,7 +56,7 @@ def _set_session_cookies(response: Response, user_id: str, settings: Settings) -
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=True,
         secure=is_secure,
-        samesite="lax",
+        samesite=same_site,
     )
     # CSRF cookie is intentionally NOT httponly — the frontend reads it and echoes it back
     # in a request header on state-changing requests (double-submit pattern), see
@@ -56,7 +67,7 @@ def _set_session_cookies(response: Response, user_id: str, settings: Settings) -
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=False,
         secure=is_secure,
-        samesite="lax",
+        samesite=same_site,
     )
 
 
