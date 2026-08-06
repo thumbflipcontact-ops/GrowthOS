@@ -132,3 +132,60 @@ async def test_upsert_rejects_an_unknown_agent_key(db_session) -> None:
             schedule_cron=None,
             enabled=True,
         )
+
+
+@pytest.mark.asyncio
+async def test_upsert_rejects_syntactically_invalid_cron(db_session) -> None:
+    project = await _make_project(db_session)
+    user = await _make_user(db_session)
+    service = AgentConfigService(db_session)
+
+    with pytest.raises(ValidationError):
+        await service.upsert(
+            project_id=project.id,
+            org_id=project.org_id,
+            actor_user_id=user.id,
+            agent_key="conversation_finder",
+            config={},
+            schedule_cron="not a cron expression",
+            enabled=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_upsert_rejects_a_schedule_more_frequent_than_the_platform_floor(
+    db_session,
+) -> None:
+    project = await _make_project(db_session)
+    user = await _make_user(db_session)
+    service = AgentConfigService(db_session)
+
+    with pytest.raises(ValidationError):
+        await service.upsert(
+            project_id=project.id,
+            org_id=project.org_id,
+            actor_user_id=user.id,
+            agent_key="conversation_finder",
+            config={},
+            schedule_cron="*/5 * * * *",  # every 5 minutes — far under the 6-hour floor
+            enabled=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_upsert_accepts_a_schedule_at_exactly_the_platform_floor(db_session) -> None:
+    project = await _make_project(db_session)
+    user = await _make_user(db_session)
+    service = AgentConfigService(db_session)
+
+    config = await service.upsert(
+        project_id=project.id,
+        org_id=project.org_id,
+        actor_user_id=user.id,
+        agent_key="conversation_finder",
+        config={},
+        schedule_cron="0 */6 * * *",  # every 6 hours — exactly the floor, must not be rejected
+        enabled=True,
+    )
+
+    assert config.schedule_cron == "0 */6 * * *"
