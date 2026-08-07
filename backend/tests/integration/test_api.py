@@ -96,6 +96,66 @@ async def test_register_login_me_logout_flow(api_client: AsyncClient) -> None:
     assert login.json()["id"] == user_id
 
 
+def _parse_set_cookie_attrs(set_cookie_header: str) -> dict[str, str | None]:
+    attrs: dict[str, str | None] = {}
+    for part in set_cookie_header.split(";")[1:]:
+        part = part.strip()
+        if not part:
+            continue
+        if "=" in part:
+            key, value = part.split("=", 1)
+            attrs[key.strip().lower()] = value.strip().lower()
+        else:
+            attrs[part.lower()] = None
+    return attrs
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_cookies_with_the_same_secure_and_samesite_login_set(
+    api_client: AsyncClient,
+) -> None:
+    """A delete_cookie() whose secure/samesite attributes don't match the original set_cookie()
+    produces a Set-Cookie header real browsers silently drop in a cross-site deployment (Vercel
+    frontend + Railway backend) — the session cookie never actually gets cleared, so the user
+    stays logged in even though /logout returned 204 and the frontend redirected to /login. This
+    exact bug shipped once already (see app/api/v1/auth.py's _cookie_security_attrs docstring).
+    Asserting structural parity between login's and logout's Set-Cookie headers — rather than
+    hardcoding secure=True/False for one environment — is what would have caught it: the bug is
+    invisible under ENVIRONMENT=local (both sides happen to default to secure=False;
+    samesite=lax), so a test pinned to local's values would pass regardless of this mismatch.
+    """
+    register = await api_client.post(
+        "/api/v1/auth/register",
+        json={
+            "org_name": "Acme",
+            "org_slug": "acme-logout-cookie-parity",
+            "email": "cookie-parity@example.com",
+            "name": "Founder",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+    assert register.status_code == 201
+    set_cookie_headers = register.headers.get_list("set-cookie")
+    session_set = next(h for h in set_cookie_headers if h.startswith("growthos_session="))
+    csrf_set = next(h for h in set_cookie_headers if h.startswith("growthos_csrf="))
+    session_set_attrs = _parse_set_cookie_attrs(session_set)
+    csrf_set_attrs = _parse_set_cookie_attrs(csrf_set)
+
+    logout = await api_client.post("/api/v1/auth/logout")
+    assert logout.status_code == 204
+    clear_cookie_headers = logout.headers.get_list("set-cookie")
+    session_clear = next(h for h in clear_cookie_headers if h.startswith("growthos_session="))
+    csrf_clear = next(h for h in clear_cookie_headers if h.startswith("growthos_csrf="))
+    session_clear_attrs = _parse_set_cookie_attrs(session_clear)
+    csrf_clear_attrs = _parse_set_cookie_attrs(csrf_clear)
+
+    for attr in ("secure", "samesite"):
+        assert (attr in session_clear_attrs) == (attr in session_set_attrs), attr
+        assert session_clear_attrs.get(attr) == session_set_attrs.get(attr), attr
+        assert (attr in csrf_clear_attrs) == (attr in csrf_set_attrs), attr
+        assert csrf_clear_attrs.get(attr) == csrf_set_attrs.get(attr), attr
+
+
 @pytest.mark.asyncio
 async def test_register_rejects_duplicate_email(api_client: AsyncClient) -> None:
     payload = {

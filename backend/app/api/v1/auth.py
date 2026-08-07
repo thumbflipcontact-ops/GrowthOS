@@ -34,8 +34,7 @@ from app.services.auth_service import AuthService
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _set_session_cookies(response: Response, user_id: str, settings: Settings) -> None:
-    is_secure = not settings.is_local
+def _cookie_security_attrs(settings: Settings) -> dict[str, object]:
     # SameSite=Lax only survives cross-origin fetch when frontend and backend share a
     # registrable domain (e.g. app.example.com + api.example.com — see
     # frontend_origin's docstring in app/core/config.py). The default Railway/Vercel domains
@@ -46,7 +45,20 @@ def _set_session_cookies(response: Response, user_id: str, settings: Settings) -
     # double-submit check itself is a pre-existing, separately-tracked gap (see
     # docs/reviews/PRODUCTION_READINESS_REVIEW.md S2); SameSite=Lax was never a complete
     # defense on its own, and closing S2 for real matters more once this is None.
+    #
+    # Every call that sets OR clears SESSION_COOKIE_NAME / CSRF_COOKIE_NAME must use these
+    # exact same attributes. A delete_cookie() with mismatched secure/samesite produces a
+    # Set-Cookie header the browser silently drops in a cross-site context (it never overwrites
+    # the original SameSite=None; Secure cookie) — logout() hit exactly this bug: it looked
+    # like it worked (204 response, frontend redirected to /login) but the real session cookie
+    # was never actually cleared, so the user stayed logged in.
+    is_secure = not settings.is_local
     same_site = "none" if not settings.is_local else "lax"
+    return {"secure": is_secure, "samesite": same_site}
+
+
+def _set_session_cookies(response: Response, user_id: str, settings: Settings) -> None:
+    cookie_attrs = _cookie_security_attrs(settings)
     session_token = create_session_token(
         uuid.UUID(user_id), secret_key=settings.secret_key.get_secret_value()
     )
@@ -55,8 +67,7 @@ def _set_session_cookies(response: Response, user_id: str, settings: Settings) -
         session_token,
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=True,
-        secure=is_secure,
-        samesite=same_site,
+        **cookie_attrs,
     )
     # CSRF cookie is intentionally NOT httponly — the frontend reads it and echoes it back
     # in a request header on state-changing requests (double-submit pattern), see
@@ -66,8 +77,7 @@ def _set_session_cookies(response: Response, user_id: str, settings: Settings) -
         generate_csrf_token(),
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=False,
-        secure=is_secure,
-        samesite=same_site,
+        **cookie_attrs,
     )
 
 
@@ -117,9 +127,10 @@ async def login(
 
 
 @router.post("/logout", status_code=204, response_model=None)
-async def logout(response: Response) -> None:
-    response.delete_cookie(SESSION_COOKIE_NAME)
-    response.delete_cookie(CSRF_COOKIE_NAME)
+async def logout(response: Response, settings: Settings = Depends(get_settings_dep)) -> None:
+    cookie_attrs = _cookie_security_attrs(settings)
+    response.delete_cookie(SESSION_COOKIE_NAME, **cookie_attrs)
+    response.delete_cookie(CSRF_COOKIE_NAME, **cookie_attrs)
 
 
 @router.get("/me", response_model=UserResponse)
