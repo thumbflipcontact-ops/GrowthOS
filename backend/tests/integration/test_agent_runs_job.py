@@ -149,9 +149,18 @@ async def test_run_scheduled_agent_discovers_and_persists_a_knowledge_item(
 
 
 @pytest.mark.asyncio
-async def test_run_scheduled_agent_is_a_noop_for_a_disabled_config(
+async def test_run_scheduled_agent_runs_a_disabled_config_when_invoked_directly(
     db_session, session_factory_for
 ) -> None:
+    """This job body has no `enabled` gate of its own on purpose — see the comment above that
+    check's removal site in app/jobs/agent_runs.py. The cron scheduler (app/core/scheduler.py)
+    already only ever enqueues for configs it queried as enabled in the first place, so a
+    disabled config's schedule genuinely never fires on its own; a gate *here* would only ever
+    fire for the other caller of this same job, the on-demand trigger endpoint
+    (app/api/v1/agent_configs.py) — where it would silently no-op an explicit "Run now" click
+    for any project that had ever unchecked "Run automatically." This test simulates exactly
+    that: invoking the job directly (as the trigger endpoint's enqueue would) against a
+    disabled config, and asserting it still runs."""
     from app.jobs.agent_runs import run_scheduled_agent
 
     project = await _make_project(db_session)
@@ -170,7 +179,8 @@ async def test_run_scheduled_agent_is_a_noop_for_a_disabled_config(
     runs = (
         await db_session.execute(select(AgentRun).where(AgentRun.agent_config_id == config.id))
     ).scalars().all()
-    assert runs == []
+    assert len(runs) == 1
+    assert runs[0].status == AgentRunStatus.SUCCEEDED
 
 
 @pytest.mark.asyncio

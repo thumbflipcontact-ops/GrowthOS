@@ -56,9 +56,18 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
 
     async with session_factory() as session:
         config = await session.get(AgentConfig, uuid.UUID(agent_config_id))
-        if config is None or not config.enabled:
-            logger.warning("agent_run.config_missing_or_disabled", agent_config_id=agent_config_id)
+        if config is None:
+            logger.warning("agent_run.config_missing", agent_config_id=agent_config_id)
             return
+        # No `config.enabled` check here on purpose, even though this same job body also
+        # serves the cron scheduler (app/scheduler.py): the scheduler only ever enqueues
+        # for configs it already queried as enabled in the first place
+        # (AgentConfigRepository.list_enabled_with_schedule) — this would be pure redundant
+        # defense-in-depth for that path. But this job also serves the on-demand trigger
+        # endpoint (app/api/v1/agent_configs.py's trigger_agent_run), where a check here has
+        # the opposite effect: a human explicitly clicking "Run now" would silently no-op —
+        # no error, no AgentRun row, nothing — for any project that had ever unchecked "Run
+        # automatically." An explicit manual trigger should always run.
 
         project = await session.get(Project, config.project_id)
         if project is None:
