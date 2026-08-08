@@ -74,14 +74,26 @@ class ConversationFinderAgent:
                 ctx.logger.warning(
                     "conversation_finder.plugin_search_failed", platform=platform, exc_info=True
                 )
-                # Also recorded here, not just logged: a run with this in its summary still
-                # shows "succeeded" (by design — one plugin failing shouldn't fail the run),
-                # so without this the only way to learn a search silently failed was reading
-                # worker container logs directly. This is what a real X API billing error
-                # ("credits depleted", HTTP 402) looked like before this existed: a "succeeded"
-                # run reporting "searched twitter, 0 results" with the actual cause invisible
-                # anywhere in the product.
-                result.errors.append(f"{platform}: search failed — {exc}")
+                # Recorded, not just logged: a run with this still shows "succeeded" (by
+                # design — one plugin failing shouldn't fail the run), so without this the
+                # only way to learn a search silently failed was reading worker container
+                # logs directly.
+                if getattr(exc, "status_code", None) == 402:
+                    # A 402 from a plugin's own API client means the *platform's* shared app
+                    # ran out of prepaid API credits — a billing problem on our side, not the
+                    # customer's connection. Showing the raw detail on their own Agent
+                    # settings page would be both confusing (reads as "your connection is
+                    # broken") and something they have no way to act on, so they get a
+                    # generic message while the specific one goes to operator_alerts instead.
+                    result.errors.append(
+                        f"{platform}: search temporarily unavailable — we've been notified "
+                        "and are on it."
+                    )
+                    result.operator_alerts.append(
+                        f"{platform} plugin out of API credits (HTTP 402): {exc}"
+                    )
+                else:
+                    result.errors.append(f"{platform}: search failed — {exc}")
                 continue
 
             for plugin_result in plugin_results:

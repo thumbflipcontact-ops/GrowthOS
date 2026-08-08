@@ -59,8 +59,25 @@ async def test_me_raises_on_error_status_with_problem_json(monkeypatch) -> None:
 
     _patch_async_client(monkeypatch, handler)
     client = TwitterClient(access_token="expired")
-    with pytest.raises(TwitterAPIError, match="Unauthorized"):
+    with pytest.raises(TwitterAPIError, match="Unauthorized") as excinfo:
         await client.me()
+    assert excinfo.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_raises_with_status_code_on_credits_depleted(monkeypatch) -> None:
+    """X's pay-per-use billing returns 402 when the app's prepaid credits run out — this is
+    the exact failure mode TwitterPlugin.search() needs to tell apart from an ordinary
+    failure (see plugins/twitter/plugin.py and agents/conversation_finder/agent.py)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(402, json={"title": "credits depleted"})
+
+    _patch_async_client(monkeypatch, handler)
+    client = TwitterClient(access_token="at")
+    with pytest.raises(TwitterAPIError) as excinfo:
+        await client.me()
+    assert excinfo.value.status_code == 402
 
 
 @pytest.mark.asyncio

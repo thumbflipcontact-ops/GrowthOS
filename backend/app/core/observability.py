@@ -54,3 +54,18 @@ def capture_exception(exc: BaseException) -> None:
     import sentry_sdk
 
     sentry_sdk.capture_exception(exc)
+
+
+def capture_operator_alert(message: str, **tags: str) -> None:
+    """For AgentResult.operator_alerts (see agents/_shared/base.py) — a failure worth paging
+    a human for that isn't a raised Python exception, e.g. a plugin's own API client running
+    out of prepaid credits (agents catch and continue past that, by design, rather than
+    failing the whole run, so capture_exception's normal call site — the job runner's
+    top-level except — never sees it). No-op if Sentry isn't initialized, same as
+    capture_exception."""
+    if not _enabled:
+        return
+
+    import sentry_sdk
+
+    sentry_sdk.capture_message(message, level="error", tags=tags)

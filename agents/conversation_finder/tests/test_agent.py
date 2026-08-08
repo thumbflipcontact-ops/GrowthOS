@@ -25,6 +25,7 @@ class _FakePlugin:
     key: str
     results: list[PluginResult] = field(default_factory=list)
     raises: bool = False
+    raise_exc: Exception | None = None
     calls: list[PluginQuery] = field(default_factory=list)
 
     @property
@@ -33,6 +34,8 @@ class _FakePlugin:
 
     async def search(self, query: PluginQuery) -> list[PluginResult]:
         self.calls.append(query)
+        if self.raise_exc is not None:
+            raise self.raise_exc
         if self.raises:
             raise RuntimeError("plugin blew up")
         return self.results
@@ -267,6 +270,36 @@ async def test_one_plugin_raising_does_not_fail_the_whole_run() -> None:
     # logs directly, since the run still reports "succeeded" by design.
     assert len(result.errors) == 1
     assert "broken" in result.errors[0]
+    assert result.operator_alerts == []
+
+
+class _PluginBillingError(Exception):
+    def __init__(self, message: str, *, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+@pytest.mark.asyncio
+async def test_plugin_billing_error_gets_generic_customer_message_and_operator_alert() -> None:
+    """A plugin's own API client running out of prepaid credits (HTTP 402) is the platform's
+    problem, not this customer's — their own Agent settings page must not show them a raw
+    detail that reads as "your connection is broken" when it isn't, or that they have no way
+    to act on. The specific detail instead goes to operator_alerts, which the job runner
+    (app/jobs/agent_runs.py) forwards to error tracking."""
+    broken = _FakePlugin(
+        key="twitter", raise_exc=_PluginBillingError("X returned 402: credits depleted", status_code=402)
+    )
+    ctx, _, _ = _ctx(plugins=[broken], config={"keywords": ["seo"]})
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert len(result.errors) == 1
+    assert "credits depleted" not in result.errors[0]
+    assert "twitter" in result.errors[0]
+
+    assert len(result.operator_alerts) == 1
+    assert "credits depleted" in result.operator_alerts[0]
+    assert "402" in result.operator_alerts[0]
 
 
 @pytest.mark.asyncio

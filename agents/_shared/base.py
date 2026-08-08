@@ -60,7 +60,16 @@ class AgentResult:
     knowledge_items_created: int = 0
     content_items_created: int = 0
     summary: dict = field(default_factory=dict)
+    # Customer-visible — rendered on that project's own Agent settings page (see
+    # frontend/app/settings/agents/page.tsx), so these must only ever describe something
+    # actionable by that customer or genuinely specific to their own connection.
     errors: list[str] = field(default_factory=list)
+    # Operator-visible only, never rendered to a customer — for failures that are the
+    # platform's problem, not theirs (e.g. the platform's own shared X app running out of
+    # pay-per-use credits), where showing the raw detail to a customer would be both
+    # confusing (implies their connection is broken when it isn't) and not actionable by
+    # them. The job runner (app/jobs/agent_runs.py) forwards these to error tracking.
+    operator_alerts: list[str] = field(default_factory=list)
 
 
 class Agent(Protocol):

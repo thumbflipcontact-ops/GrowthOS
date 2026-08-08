@@ -26,7 +26,16 @@ class TwitterAPIError(Exception):
     hard failures, or a top-level `errors` array alongside partial `data` on soft ones —
     `_request()` surfaces whichever is present so callers only ever check one thing. Caught
     inside `TwitterPlugin.publish()`/`search()`/`health_check()`, mirroring
-    plugins/reddit/client.py's RedditAPIError."""
+    plugins/reddit/client.py's RedditAPIError.
+
+    `status_code` is `None` for a connectivity failure (never reached X at all) and set to
+    the actual HTTP status for anything X responded with — callers that need to tell "the
+    platform's own X app is out of pay-per-use credits" (402) apart from an ordinary failure
+    do so by checking this rather than parsing the message string."""
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class TwitterClient:
@@ -50,14 +59,16 @@ class TwitterClient:
         except ValueError as exc:
             if response.status_code >= 400:
                 raise TwitterAPIError(
-                    f"X returned {response.status_code}: {response.text[:500]}"
+                    f"X returned {response.status_code}: {response.text[:500]}",
+                    status_code=response.status_code,
                 ) from exc
             raise TwitterAPIError(f"X returned a non-JSON response: {response.text[:500]}") from exc
 
         if response.status_code >= 400:
             detail = _error_detail(body) if isinstance(body, dict) else None
             raise TwitterAPIError(
-                f"X returned {response.status_code}: {detail or response.text[:500]}"
+                f"X returned {response.status_code}: {detail or response.text[:500]}",
+                status_code=response.status_code,
             )
 
         return body if isinstance(body, dict) else {}

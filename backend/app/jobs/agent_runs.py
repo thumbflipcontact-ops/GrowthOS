@@ -36,7 +36,7 @@ from app.core.job_retry import retry_backoff_seconds
 from app.core.llm.base import LLMProvider
 from app.core.llm.factory import build_llm_provider
 from app.core.migration_check import verify_database_is_migrated
-from app.core.observability import capture_exception, init_error_tracking
+from app.core.observability import capture_exception, capture_operator_alert, init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
@@ -132,6 +132,16 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
         run_logger.info(
             "agent_run.succeeded", knowledge_items_created=result.knowledge_items_created
         )
+
+        # A "succeeded" run can still carry operator_alerts (see agents/_shared/base.py) —
+        # a plugin failure that's the platform's problem, not this customer's, and never
+        # raises (so the except block above never sees it). These are the one thing in this
+        # function still worth paging a human for even though the run itself is fine.
+        for alert in result.operator_alerts:
+            run_logger.error("agent_run.operator_alert", alert=alert)
+            capture_operator_alert(
+                alert, agent_key=config.agent_key, project_id=str(config.project_id)
+            )
 
 
 async def startup(ctx: dict) -> None:
