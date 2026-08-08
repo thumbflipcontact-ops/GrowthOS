@@ -12,8 +12,9 @@ does not do" for why the original buying-intent filter isn't used yet)
 
 ## Purpose
 
-Reads a specific, newly-discovered `knowledge_item` and drafts one Reddit reply for it,
-grounded in that item's own captured title/body text, via the configured LLM provider
+Reads a specific, newly-discovered `knowledge_item` and drafts one reply for it — Reddit or
+X (Twitter), see `_SUPPORTED_PLATFORMS` in `agent.py` — grounded in that item's own captured
+title/body text, via the configured LLM provider
 (`docs/decisions/0004-llm-provider-abstraction.md`). Every draft is persisted as a
 `content_items` row with the model's own confidence, reasoning, and quoted evidence
 attached, then immediately self-checked and — if it passes — advanced to `pending_review`
@@ -30,25 +31,29 @@ publish worker.
    items. See `docs/agents/AGENT_ARCHITECTURE.md` §Communication.
 2. Loads the triggering `knowledge_item` via `ctx.knowledge_base.get(knowledge_item_id)`.
 3. Skips (records a reason in `AgentResult.errors`, drafts nothing) if: the item's platform
-   isn't `"reddit"` (see below), its `confidence` is below this agent's
-   `min_confidence_for_reply`, or it has no `title`/`body_excerpt` to draft or cite from.
-4. Builds a prompt (`prompts/reddit_reply.py`) from the item's title/body excerpt/tags and
-   the project's `brand_voice`, and calls `ctx.llm.complete(...)`.
+   isn't in `_SUPPORTED_PLATFORMS` (`"reddit"` or `"twitter"` — see below), its `confidence`
+   is below this agent's `min_confidence_for_reply`, or it has no `title`/`body_excerpt` to
+   draft or cite from.
+4. Builds a prompt (`prompts/reddit_reply.py` or `prompts/twitter_reply.py`, picked by the
+   item's platform) from the item's title/body excerpt/tags and the project's `brand_voice`,
+   and calls `ctx.llm.complete(...)`. Both prompt modules parse the model's response through
+   the identical shared contract in `prompts/_shared.py`.
 5. Parses the model's response into `reply`/`confidence`/`reasoning`/`evidence` — a JSON
-   response contract this agent's own prompt defines and enforces by parsing, not a
+   response contract this agent's own prompts define and enforce by parsing, not a
    provider-specific structured-output mechanism (ADR 0004's "common subset" trade-off).
    A response that fails to parse is a soft failure: recorded in `AgentResult.errors`, no
    `content_items` row written, run still `succeeded`.
 6. Persists the draft via `ctx.content.create_draft(...)` (always `status="draft"`) —
-   `target_ref` is the Reddit `thing_id` read from `knowledge_item.platform_metadata`
-   (Reddit-specific knowledge that belongs in this agent's own code, not core platform
-   code — see `docs/plugins/PLUGIN_ARCHITECTURE.md`'s "no plugin-specific logic outside the
-   plugin" rule, which this agent's Reddit-awareness doesn't violate: it's an *agent*
-   reading a documented-as-opaque field for its own purposes, not platform code branching on
-   a `plugin_key`).
+   `target_ref` is the Reddit `thing_id` or X tweet id read from
+   `knowledge_item.platform_metadata` (platform-specific knowledge that belongs in this
+   agent's own code, not core platform code — see `docs/plugins/PLUGIN_ARCHITECTURE.md`'s
+   "no plugin-specific logic outside the plugin" rule, which this agent's platform-awareness
+   doesn't violate: it's an *agent* reading a documented-as-opaque field for its own
+   purposes, not platform code branching on a `plugin_key`).
 7. Immediately calls `ctx.content.submit_for_review(...)`, which runs the self-check
-   (`app/services/content_self_check.py` — non-empty body, within `max_reply_length`, no
-   `banned_phrases`) against the drafted body. A passing check advances the row to
+   (`app/services/content_self_check.py` — non-empty body, within that platform's own max
+   length (`max_reply_length` for Reddit, `max_tweet_length` for X), no `banned_phrases`)
+   against the drafted body. A passing check advances the row to
    `pending_review` (matching ARCHITECTURE.md §8's documented flow exactly); a failing check
    leaves it in `draft`, with the specific reasons recorded in `AgentResult.summary` — not on
    the row itself, since `content_items` has no dedicated "why" column for this (see
@@ -59,10 +64,12 @@ publish worker.
 The original spec for this agent (still described above where it still applies) also
 describes outreach drafts (subscribing to `contact.followup_due`) and standalone article
 drafts (schedule-driven, cross-`knowledge_item` pattern mining). **Neither is built.** This
-agent is reply drafts only, for Reddit only — no `contacts` table integration, no article
-prompt template, no other plugin's reply format. `ContentAgentConfig` reflects this: no
-`content_types_enabled` list (there's exactly one type), no `min_buying_intent_for_reply`
-(see below).
+agent is reply drafts only, for Reddit and X (Twitter) — no `contacts` table integration, no
+article prompt template, no LinkedIn or other plugin's reply format yet (adding one is
+the same shape of change as adding X was — see `agent.py`'s comment above
+`_SUPPORTED_PLATFORMS`). `ContentAgentConfig` reflects the "reply drafts only" scope: no
+`content_types_enabled` list (there's exactly one type per supported platform), no
+`min_buying_intent_for_reply` (see below).
 
 **No `buying_intent`-based subscription filter.** The original design filters
 `knowledge_item.created` events by `payload["buying_intent"] in (medium, high)`. Nothing
@@ -94,6 +101,7 @@ same row to `pending_review`; never touches any other row, never sets any other 
 {
   "min_confidence_for_reply": 0.4,
   "max_reply_length": 10000,
+  "max_tweet_length": 280,
   "temperature": 0.7,
   "max_tokens": 1024,
   "banned_phrases": []
@@ -101,10 +109,11 @@ same row to `pending_review`; never touches any other row, never sets any other 
 ```
 
 Set via `PUT /api/v1/projects/{project_id}/agent-configs/content_agent` — see
-`docs/api/API_DESIGN.md`. `max_reply_length` is a static number matching
-`plugins/reddit/manifest.py`'s declared `reddit_reply` content type max length, not read from
-the plugin catalog dynamically — a deliberate simplification for this agent's
-single-platform scope. `banned_phrases` is empty by default — no phrase is banned unless a
-project configures one; this is real, generic self-check infrastructure, not a specific
-content policy invented for this task. No `schedule_cron` is meaningful here — this agent is
-subscription-only and never appears in the cron scheduler's poll.
+`docs/api/API_DESIGN.md`. `max_reply_length`/`max_tweet_length` are static numbers matching
+`plugins/reddit/manifest.py`'s/`plugins/twitter/manifest.py`'s declared content type max
+lengths respectively, not read from the plugin catalog dynamically — a deliberate
+simplification, same rationale as this agent's single-platform scope had originally.
+`banned_phrases` is empty by default — no phrase is banned unless a project configures one;
+this is real, generic self-check infrastructure, not a specific content policy invented for
+this task. No `schedule_cron` is meaningful here — this agent is subscription-only and never
+appears in the cron scheduler's poll.

@@ -26,9 +26,18 @@ class ContentAgentConfig(BaseModel):
         default=10_000,
         ge=1,
         description=(
-            "Matches plugins/reddit/manifest.py's reddit_reply ContentTypeSpec.max_length. "
-            "Not read from the plugin catalog dynamically (see README.md's scoping note) — "
-            "kept here as an explicit, self-contained limit."
+            "Reddit replies only. Matches plugins/reddit/manifest.py's reddit_reply "
+            "ContentTypeSpec.max_length. Not read from the plugin catalog dynamically (see "
+            "README.md's scoping note) — kept here as an explicit, self-contained limit."
+        ),
+    )
+    max_tweet_length: int = Field(
+        default=280,
+        ge=1,
+        description=(
+            "X (Twitter) replies only. Matches plugins/twitter/manifest.py's tweet "
+            "ContentTypeSpec.max_length — the standard, non-Premium per-tweet limit. Same "
+            "self-contained-not-dynamic rationale as max_reply_length above."
         ),
     )
     temperature: float = Field(default=0.7, ge=0.0, le=1.0)

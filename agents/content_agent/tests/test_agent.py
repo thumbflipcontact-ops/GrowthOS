@@ -12,12 +12,12 @@ from typing import Any
 
 import pytest
 import structlog
-from app.core.llm.base import CompletionRequest, CompletionResult
-from app.models.content import ContentItemStatus
-from app.services.content_self_check import SelfCheckResult, run_self_check
 
 from agents._shared.base import AgentContext
 from agents.content_agent.agent import AGENT, ContentAgent
+from app.core.llm.base import CompletionRequest, CompletionResult
+from app.models.content import ContentItemStatus
+from app.services.content_self_check import SelfCheckResult, run_self_check
 
 
 def _knowledge_item(
@@ -250,6 +250,56 @@ async def test_missing_thing_id_yields_a_null_target_ref() -> None:
     await ContentAgent().run(ctx)
 
     assert content.created[0]["target_ref"] is None
+
+
+@pytest.mark.asyncio
+async def test_creates_a_tweet_draft_from_a_successful_completion() -> None:
+    item = _knowledge_item(
+        platform="twitter",
+        title=None,  # tweets never have a title — see plugins/twitter/plugin.py
+        body_excerpt="Anyone else struggling with crawl budget on a huge site?",
+        platform_metadata={"tweet_id": "182736450192834765", "author_id": "999"},
+    )
+    ctx, content, llm = _ctx(item=item, llm_response_text=_draft_json())
+
+    result = await ContentAgent().run(ctx)
+
+    assert result.content_items_created == 1
+    draft = content.created[0]
+    assert draft["type"] == "tweet"
+    assert draft["target_platform"] == "twitter"
+    assert draft["target_ref"] == "182736450192834765"
+    # Not a Reddit reply — build_user_prompt must not have been asked for a subreddit.
+    assert len(llm.calls) == 1
+    assert "crawl budget on a huge site" in llm.calls[0].messages[1].content
+
+
+@pytest.mark.asyncio
+async def test_tweet_missing_tweet_id_yields_a_null_target_ref() -> None:
+    item = _knowledge_item(platform="twitter", platform_metadata={"author_id": "999"})
+    ctx, content, _ = _ctx(item=item, llm_response_text=_draft_json())
+
+    await ContentAgent().run(ctx)
+
+    assert content.created[0]["target_ref"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_tweet_reply_exceeding_max_tweet_length_fails_the_self_check() -> None:
+    item = _knowledge_item(
+        platform="twitter", platform_metadata={"tweet_id": "1", "author_id": "2"}
+    )
+    long_reply = "x" * 300  # over X's 280-character limit
+    ctx, content, _ = _ctx(item=item, llm_response_text=_draft_json(reply=long_reply))
+
+    result = await ContentAgent().run(ctx)
+
+    # Same "still created, just stays in draft" behavior as Reddit's equivalent test —
+    # the self-check gates promotion, not creation.
+    assert result.content_items_created == 1
+    assert result.summary["self_check_passed"] is False
+    assert any("max_length" in reason for reason in result.summary["self_check_reasons"])
+    assert content.submitted[0]["passed"] is False
 
 
 @pytest.mark.asyncio

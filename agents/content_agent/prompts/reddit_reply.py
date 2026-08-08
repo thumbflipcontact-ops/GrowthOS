@@ -1,4 +1,5 @@
-"""Prompt template + response contract for drafting a Reddit reply. See
+"""Prompt template for drafting a Reddit reply — the response contract it's parsed against
+is shared across every platform this agent supports, see `prompts/_shared.py`. See
 agents/content_agent/README.md and docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md.
 
 Deliberately asks for a JSON response and parses it here, rather than using a
@@ -13,9 +14,19 @@ see docs/agents/AGENT_ARCHITECTURE.md's anatomy note on `prompts/`.
 from __future__ import annotations
 
 import json
-import re
 
-from pydantic import BaseModel, Field, ValidationError
+# Re-exported for backward compatibility — these used to be defined in this module directly;
+# every platform's prompt module now shares one copy in _shared.py instead of each parsing
+# an identical response contract independently.
+from agents.content_agent.prompts._shared import (
+    DraftParsingError as DraftParsingError,
+)
+from agents.content_agent.prompts._shared import (
+    DraftReplyExtraction as DraftReplyExtraction,
+)
+from agents.content_agent.prompts._shared import (
+    parse_draft_reply as parse_draft_reply,
+)
 
 # Version 1. Bump this comment (and consider a reddit_reply_v2.py alongside it, not a silent
 # in-place rewrite) if the response contract below changes in a way that would invalidate
@@ -42,20 +53,6 @@ Respond with ONLY a single JSON object, no other text, matching exactly this sha
 """
 
 
-class DraftReplyExtraction(BaseModel):
-    reply: str = Field(min_length=1)
-    confidence: float = Field(ge=0.0, le=1.0)
-    reasoning: str
-    evidence: list[str] = Field(default_factory=list)
-
-
-class DraftParsingError(Exception):
-    """The model's response text could not be parsed into a `DraftReplyExtraction` — see
-    `parse_draft_reply`. A soft failure: the caller (agents/content_agent/agent.py) records
-    it in `AgentResult.errors` and creates no `content_items` row, rather than raising and
-    triggering an Arq retry that would likely reproduce the same malformed response."""
-
-
 def build_user_prompt(
     *,
     subreddit: str | None,
@@ -78,27 +75,3 @@ def build_user_prompt(
         lines.append("")
         lines.append(f"Brand voice guidance: {json.dumps(brand_voice)}")
     return "\n".join(lines)
-
-
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-
-def parse_draft_reply(text: str) -> DraftReplyExtraction:
-    """Parses the model's response text as a `DraftReplyExtraction`. Tries the raw text
-    first; if the model wrapped the JSON in markdown fences or added surrounding prose
-    despite the system prompt's instruction, falls back to extracting the first `{...}`
-    block before giving up. Raises `DraftParsingError` (never propagates the underlying
-    `pydantic`/`json` exception) so the caller has one exception type to catch."""
-    try:
-        return DraftReplyExtraction.model_validate_json(text)
-    except (ValidationError, ValueError):
-        pass
-
-    match = _JSON_OBJECT_RE.search(text)
-    if match is not None:
-        try:
-            return DraftReplyExtraction.model_validate_json(match.group(0))
-        except (ValidationError, ValueError):
-            pass
-
-    raise DraftParsingError(f"Could not parse a draft reply from the model's response: {text!r}")

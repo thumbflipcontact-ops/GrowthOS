@@ -10,6 +10,7 @@ def test_defaults() -> None:
     config = ContentAgentConfig()
     assert config.min_confidence_for_reply == 0.4
     assert config.max_reply_length == 10_000
+    assert config.max_tweet_length == 280
     assert config.temperature == 0.7
     assert config.max_tokens == 1024
 
@@ -35,6 +36,7 @@ def test_accepts_full_config() -> None:
         ("min_confidence_for_reply", -0.1),
         ("min_confidence_for_reply", 1.1),
         ("max_reply_length", 0),
+        ("max_tweet_length", 0),
         ("temperature", -0.1),
         ("temperature", 1.1),
         ("max_tokens", 0),
