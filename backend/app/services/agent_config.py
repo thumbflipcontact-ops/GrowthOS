@@ -106,6 +106,16 @@ class AgentConfigService:
         if not is_update:
             self.session.add(record)
         await self.session.flush()
+        if is_update:
+            # updated_at's value comes from onupdate=func.now() — a server-side SQL
+            # expression, not a Python-computed one. For a fresh INSERT, asyncpg's implicit
+            # RETURNING populates server_default columns onto the object automatically, but
+            # that doesn't extend to an UPDATE's onupdate value, so without this the attribute
+            # is left expired: FastAPI's response serialization (which runs outside this
+            # method, once the request's async context has moved on) then can't lazily load
+            # it and raises MissingGreenlet — this is exactly what happened on every
+            # config-that-already-existed save, i.e. every save after the first.
+            await self.session.refresh(record)
 
         # See CONTRIBUTING.md's plugin-connection precedent (app/services/plugin_connection.py):
         # any project-scoped config a human writes through the API gets an audit_log row.
