@@ -92,7 +92,10 @@ async def approve_content_item(
         org_id=project.org_id,
     )
     await arq_redis.enqueue_job(
-        "publish_content_item", str(item.id), _job_id=_publish_job_id(item.id)
+        "publish_content_item",
+        str(item.id),
+        _job_id=_publish_job_id(item.id),
+        _queue_name="publish",
     )
     return item
 
@@ -156,7 +159,10 @@ async def retry_publish_content_item(
         )
 
     await arq_redis.enqueue_job(
-        "publish_content_item", str(item.id), _job_id=_publish_job_id(item.id)
+        "publish_content_item",
+        str(item.id),
+        _job_id=_publish_job_id(item.id),
+        _queue_name="publish",
     )
     session.add(
         AuditLog(

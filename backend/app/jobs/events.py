@@ -73,6 +73,7 @@ async def dispatch_domain_events(ctx: dict) -> int:
                 agent_key,
                 str(event.id),
                 _job_id=_event_job_id(event.id, agent_key),
+                _queue_name="events",
             )
 
         processed = await dispatcher.dispatch_pending(enqueue)
@@ -208,6 +209,10 @@ async def shutdown(ctx: dict) -> None:
 
 
 class WorkerSettings:
+    # See app/jobs/agent_runs.py's queue_name docstring — every enqueue_job call targeting
+    # this worker (including this file's own dispatch_domain_events -> run_agent_for_event
+    # enqueue) must pass the matching _queue_name="events".
+    queue_name = "events"
     functions = [dispatch_domain_events, run_agent_for_event]
     # Every 5 seconds — tunable, deliberately left flexible per
     # docs/architecture/LOCKED_DECISIONS.md §2 ("Event dispatcher poll interval").

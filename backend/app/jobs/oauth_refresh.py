@@ -60,6 +60,10 @@ async def shutdown(ctx: dict) -> None:
 
 
 class WorkerSettings:
+    # See app/jobs/agent_runs.py's queue_name docstring. Nothing outside this file enqueues
+    # onto it (refresh_oauth_tokens only ever runs via its own cron_jobs entry below), but
+    # the name is still set for consistency and to keep this worker isolated if that changes.
+    queue_name = "oauth_refresh"
     functions = [refresh_oauth_tokens]
     # Every 5 minutes — comfortably inside REFRESH_WINDOW's 10-minute margin (a token first
     # becomes a refresh candidate at T-10m, so it's caught within one cycle, well before

@@ -84,7 +84,7 @@ async def trigger_agent_run(
     load_agent(agent_key)  # 404s for an unknown agent_key before anything else happens
 
     config = await AgentConfigRepository(session).get_or_create(project.id, agent_key)
-    await arq_redis.enqueue_job("run_scheduled_agent", str(config.id))
+    await arq_redis.enqueue_job("run_scheduled_agent", str(config.id), _queue_name="agent_runs")
 
     session.add(
         AuditLog(

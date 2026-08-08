@@ -280,6 +280,9 @@ async def shutdown(ctx: dict) -> None:
 
 
 class WorkerSettings:
+    # See app/jobs/agent_runs.py's queue_name docstring — every enqueue_job call targeting
+    # this worker must pass the matching _queue_name="publish" (app/api/v1/content_items.py).
+    queue_name = "publish"
     functions = [publish_content_item]
     on_startup = startup
     on_shutdown = shutdown

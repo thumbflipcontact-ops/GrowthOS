@@ -46,7 +46,9 @@ async def main() -> None:
     scheduler = Scheduler(session_factory)
 
     async def enqueue(config: AgentConfig) -> None:
-        await redis_pool.enqueue_job("run_scheduled_agent", str(config.id))
+        await redis_pool.enqueue_job(
+            "run_scheduled_agent", str(config.id), _queue_name="agent_runs"
+        )
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()

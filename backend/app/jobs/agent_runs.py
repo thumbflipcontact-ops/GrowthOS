@@ -164,6 +164,14 @@ async def shutdown(ctx: dict) -> None:
 
 
 class WorkerSettings:
+    # Every worker in this deployment shares one Redis instance — without a distinct
+    # queue_name here, arq's default queue is shared across all 4 worker processes, so any
+    # of them can pop a job meant for another (e.g. worker-oauth-refresh popping
+    # run_scheduled_agent and failing with "function not found", since only this worker's
+    # functions list includes it). Every enqueue_job call targeting this worker must pass
+    # the matching _queue_name="agent_runs" — see app/scheduler.py and
+    # app/api/v1/agent_configs.py.
+    queue_name = "agent_runs"
     functions = [run_scheduled_agent]
     on_startup = startup
     on_shutdown = shutdown

@@ -19,7 +19,7 @@ class _FakeArqRedis:
     def __init__(self) -> None:
         self.enqueued: list[tuple[str, tuple]] = []
 
-    async def enqueue_job(self, name: str, *args: object) -> None:
+    async def enqueue_job(self, name: str, *args: object, **kwargs: object) -> None:
         self.enqueued.append((name, args))
 
 
