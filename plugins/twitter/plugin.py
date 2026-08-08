@@ -35,10 +35,15 @@ class TwitterPlugin:
             return []  # throttled — never raise, see RateLimiter's documented contract
 
         search_query = _build_search_query(query.terms, self._config)
-        try:
-            body = await self._client.search_recent(search_query, max_results=query.limit)
-        except TwitterAPIError:
-            return []
+        # Deliberately not caught here, unlike plugins/reddit/plugin.py's per-subreddit catch:
+        # Reddit loops over several subreddits, so swallowing one's failure still lets the
+        # others run. This is a single API call with nothing else to fall back to — catching
+        # TwitterAPIError here just replaces the real error (auth failure, insufficient X API
+        # access tier, rate limit) with an indistinguishable, silently empty result. Letting it
+        # propagate hands it to conversation_finder's own per-plugin handler
+        # (agents/conversation_finder/agent.py), which already logs it properly with exc_info
+        # and continues to the next plugin — the exact resilience contract this needs.
+        body = await self._client.search_recent(search_query, max_results=query.limit)
 
         users_by_id = {u["id"]: u for u in body.get("includes", {}).get("users", [])}
         results: list[PluginResult] = []

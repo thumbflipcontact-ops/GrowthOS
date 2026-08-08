@@ -162,14 +162,18 @@ async def test_search_returns_empty_with_no_terms(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_one_api_error_returns_empty_not_raises(monkeypatch) -> None:
+async def test_search_api_error_propagates(monkeypatch) -> None:
+    """Unlike Reddit (which loops over several subreddits, so one failing still lets the
+    others run), this is a single API call with nothing else to fall back to. Swallowing the
+    error here would silently replace a real failure (bad auth, insufficient X API access
+    tier, rate limit) with an indistinguishable empty result — so it must propagate to
+    conversation_finder's own per-plugin handler, which logs it properly and moves on."""
     fake = _FakeTwitterClient(search_raises=TwitterAPIError("boom"))
     _install_fake_client(monkeypatch, fake)
 
     plugin = create_plugin(_oauth_connection())
-    results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
-
-    assert results == []
+    with pytest.raises(TwitterAPIError, match="boom"):
+        await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
 
 
 @pytest.mark.asyncio
