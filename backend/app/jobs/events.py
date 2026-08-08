@@ -174,7 +174,13 @@ async def run_agent_for_event(ctx: dict, agent_key: str, event_id: str) -> None:
         }
         await session.commit()
         run_logger.info(
-            "agent_run_for_event.succeeded", content_items_created=result.content_items_created
+            "agent_run_for_event.succeeded",
+            content_items_created=result.content_items_created,
+            # TEMP DIAGNOSTIC — remove once content_agent's "0 content_items_created despite
+            # supporting the item's platform" is root-caused; see chat thread. summary/errors
+            # already exist on the row but nothing surfaces them anywhere visible yet.
+            summary=result.summary,
+            errors=result.errors,
         )
 
 
