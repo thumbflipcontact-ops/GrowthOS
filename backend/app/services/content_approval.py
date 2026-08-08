@@ -30,9 +30,18 @@ from app.repositories.content_repository import ContentItemRepository
 
 # Per ARCHITECTURE.md §8: a human may only approve/reject an item still awaiting review.
 _REVIEWABLE_STATUSES = (ContentItemStatus.PENDING_REVIEW,)
-# Archive is a Phase 2C addition (not in ARCHITECTURE.md §8's original diagram) — reachable
-# from either pre-decision state, not from anything already decided or published.
-_ARCHIVABLE_STATUSES = (ContentItemStatus.DRAFT, ContentItemStatus.PENDING_REVIEW)
+# Archive is a Phase 2C addition (not in ARCHITECTURE.md §8's original diagram) — originally
+# reachable from either pre-decision state, not from anything already decided or published.
+# APPROVED was added once _MANUALLY_PUBLISHABLE_STATUSES existed: an approved item that's
+# either stuck waiting on a human to post it manually, or stuck with a publish_error a human
+# has decided isn't worth retrying, needs a way out of "approved" that isn't posting it —
+# discarding it is exactly what archive already means for a pre-decision item, just reached
+# from one status later.
+_ARCHIVABLE_STATUSES = (
+    ContentItemStatus.DRAFT,
+    ContentItemStatus.PENDING_REVIEW,
+    ContentItemStatus.APPROVED,
+)
 # X's own platform policy (Feb 2026) blocks a programmatic reply/quote unless the target
 # post's author already @mentioned this account or quoted it first — every organically
 # discovered post fails that by construction, so a twitter item never actually reaches

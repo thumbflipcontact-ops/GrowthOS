@@ -6,6 +6,51 @@ import { ApiError, api } from "@/lib/api-client";
 import type { ContentItem } from "@/lib/types";
 import { useSession } from "@/lib/useSession";
 
+// X's own platform policy (Feb 2026) blocks a programmatic reply/quote unless the target
+// post's author already @mentioned this account or quoted it first — every organically
+// discovered post fails that by construction, so the backend never even attempts to
+// auto-publish a twitter item (see backend/app/api/v1/content_items.py's
+// _MANUAL_PUBLISH_ONLY_PLATFORMS). This is the frontend's matching list: which platforms an
+// approved item needs a human to post themselves, rather than waiting on a publish job.
+const MANUAL_PUBLISH_ONLY_PLATFORMS = new Set(["twitter"]);
+
+function originalPostUrl(item: ContentItem): string | null {
+  if (item.target_platform === "twitter" && item.target_ref) {
+    return `https://twitter.com/i/web/status/${item.target_ref}`;
+  }
+  return null;
+}
+
+function SourcePost({ item }: { item: ContentItem }) {
+  if (!item.source_title && !item.source_body) {
+    // Older items predating source_title/source_body, or the source knowledge_item was
+    // deleted — fall back to the short quotes the drafting agent originally cited.
+    if (item.evidence.length === 0) return null;
+    return (
+      <div className="content-body" style={{ fontStyle: "italic", fontSize: 13 }}>
+        <strong style={{ fontStyle: "normal" }}>Replying to a post that said:</strong>{" "}
+        {item.evidence.map((quote, i) => (
+          <span key={i}>
+            {i > 0 && " … "}
+            &ldquo;{quote}&rdquo;
+          </span>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="content-body" style={{ fontSize: 13 }}>
+      <strong>Replying to:</strong>
+      {item.source_title && (
+        <div style={{ fontWeight: 600, marginTop: 4 }}>{item.source_title}</div>
+      )}
+      {item.source_body && (
+        <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{item.source_body}</div>
+      )}
+    </div>
+  );
+}
+
 // The Approval Inbox is the highest-stakes surface in this app — it is the only UI that can
 // approve or reject a content_item. Every interaction here biases toward making the human
 // reviewer actually read what they're approving: one item, fully expanded, at a time.
@@ -15,6 +60,9 @@ function ApprovalCard({ item, projectId, onResolved }: { item: ContentItem; proj
   const [error, setError] = useState<string | null>(null);
   const [showRejectReason, setShowRejectReason] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const manualPublishOnly = item.target_platform
+    ? MANUAL_PUBLISH_ONLY_PLATFORMS.has(item.target_platform)
+    : false;
 
   async function handleApprove() {
     setBusy(true);
@@ -51,23 +99,20 @@ function ApprovalCard({ item, projectId, onResolved }: { item: ContentItem; proj
         <span className="muted">confidence: {Number(item.confidence).toFixed(2)}</span>
       </div>
 
-      {item.evidence.length > 0 && (
-        <div className="content-body" style={{ fontStyle: "italic", fontSize: 13 }}>
-          <strong style={{ fontStyle: "normal" }}>Replying to a post that said:</strong>{" "}
-          {item.evidence.map((quote, i) => (
-            <span key={i}>
-              {i > 0 && " … "}
-              &ldquo;{quote}&rdquo;
-            </span>
-          ))}
-        </div>
-      )}
+      <SourcePost item={item} />
 
       <div className="content-body">{item.body}</div>
 
       {item.reasoning && (
         <p className="muted">
           <strong>Agent&apos;s reasoning:</strong> {item.reasoning}
+        </p>
+      )}
+
+      {manualPublishOnly && (
+        <p className="muted" style={{ fontSize: 13 }}>
+          X doesn&apos;t allow posting this automatically — approving moves it to
+          &ldquo;Ready to post&rdquo; below, where you can copy it and post it yourself.
         </p>
       )}
 
@@ -99,7 +144,7 @@ function ApprovalCard({ item, projectId, onResolved }: { item: ContentItem; proj
       ) : (
         <div className="hstack">
           <button type="button" onClick={handleApprove} disabled={busy}>
-            Approve & publish
+            {manualPublishOnly ? "Approve" : "Approve & publish"}
           </button>
           <button
             type="button"
@@ -115,16 +160,153 @@ function ApprovalCard({ item, projectId, onResolved }: { item: ContentItem; proj
   );
 }
 
+// An approved item whose platform this system can't auto-publish to (see
+// MANUAL_PUBLISH_ONLY_PLATFORMS) — copy the text, open the original post, post it yourself,
+// then confirm it here so it stops showing up as waiting on you.
+function ReadyToPostCard({ item, projectId, onResolved }: { item: ContentItem; projectId: string; onResolved: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const postUrl = originalPostUrl(item);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(item.body);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Could not copy — select and copy the text manually.");
+    }
+  }
+
+  async function handleMarkPosted() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.markContentItemPublished(projectId, item.id, item.version);
+      onResolved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update.");
+      setBusy(false);
+    }
+  }
+
+  async function handleDiscard() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.archiveContentItem(projectId, item.id, item.version, "Discarded, not posted.");
+      onResolved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not discard.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="row">
+        <span className="badge badge-muted">{item.target_platform ?? item.type}</span>
+        <span className="badge badge-success">ready to post</span>
+      </div>
+
+      <SourcePost item={item} />
+
+      <div className="content-body">{item.body}</div>
+
+      {error && <div className="error-banner">{error}</div>}
+
+      <div className="hstack">
+        <button type="button" onClick={handleCopy}>
+          {copied ? "Copied!" : "Copy reply text"}
+        </button>
+        {postUrl && (
+          <a href={postUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
+            Open post on X ↗
+          </a>
+        )}
+        <button type="button" className="btn-secondary" onClick={handleMarkPosted} disabled={busy}>
+          I&apos;ve posted this
+        </button>
+        <button type="button" className="btn-danger" onClick={handleDiscard} disabled={busy}>
+          Discard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// An approved item on a platform this system *does* auto-publish to, but the publish
+// attempt failed (see backend/app/jobs/publish.py) — publish_error and the retry endpoint
+// already existed, this is just the first UI that surfaces either. Without this, a failed
+// publish was only ever visible via a Sentry alert, never in the product itself.
+function NeedsAttentionCard({ item, projectId, onResolved }: { item: ContentItem; projectId: string; onResolved: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRetry() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.retryPublishContentItem(projectId, item.id);
+      onResolved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not retry.");
+      setBusy(false);
+    }
+  }
+
+  async function handleDiscard() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.archiveContentItem(projectId, item.id, item.version, "Discarded, not retried.");
+      onResolved();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not discard.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="row">
+        <span className="badge badge-muted">{item.target_platform ?? item.type}</span>
+        <span className="badge badge-danger">failed to publish</span>
+      </div>
+
+      <div className="content-body">{item.body}</div>
+
+      {item.publish_error && <div className="error-banner">{item.publish_error}</div>}
+      {error && <div className="error-banner">{error}</div>}
+
+      <div className="hstack">
+        <button type="button" onClick={handleRetry} disabled={busy}>
+          Retry publish
+        </button>
+        <button type="button" className="btn-danger" onClick={handleDiscard} disabled={busy}>
+          Discard
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ApprovalsPage() {
   const { loading, project, error: sessionError } = useSession();
-  const [items, setItems] = useState<ContentItem[]>([]);
+  const [pendingItems, setPendingItems] = useState<ContentItem[]>([]);
+  const [approvedItems, setApprovedItems] = useState<ContentItem[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!project) return;
     try {
-      const res = await api.listContentItems(project.id, "pending_review");
-      setItems(res);
+      const [pending, approved] = await Promise.all([
+        api.listContentItems(project.id, "pending_review"),
+        api.listContentItems(project.id, "approved"),
+      ]);
+      setPendingItems(pending);
+      setApprovedItems(approved);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : "Could not load drafts.");
     }
@@ -150,6 +332,15 @@ export default function ApprovalsPage() {
     );
   }
 
+  const readyToPost = approvedItems.filter(
+    (item) => item.target_platform && MANUAL_PUBLISH_ONLY_PLATFORMS.has(item.target_platform)
+  );
+  const needsAttention = approvedItems.filter(
+    (item) =>
+      !(item.target_platform && MANUAL_PUBLISH_ONLY_PLATFORMS.has(item.target_platform)) &&
+      item.publish_error
+  );
+
   return (
     <>
       <TopNav />
@@ -157,12 +348,32 @@ export default function ApprovalsPage() {
         <h1>Approvals</h1>
         <p className="subtitle">Read each draft before approving — nothing posts automatically.</p>
         {loadError && <div className="error-banner">{loadError}</div>}
-        {items.length === 0 && !loadError && (
+
+        {pendingItems.length === 0 && needsAttention.length === 0 && readyToPost.length === 0 && !loadError && (
           <div className="empty-state">Nothing waiting for review right now.</div>
         )}
-        {items.map((item) => (
+
+        {pendingItems.map((item) => (
           <ApprovalCard key={item.id} item={item} projectId={project.id} onResolved={refresh} />
         ))}
+
+        {needsAttention.length > 0 && (
+          <>
+            <h2 style={{ marginTop: 28 }}>Needs attention</h2>
+            {needsAttention.map((item) => (
+              <NeedsAttentionCard key={item.id} item={item} projectId={project.id} onResolved={refresh} />
+            ))}
+          </>
+        )}
+
+        {readyToPost.length > 0 && (
+          <>
+            <h2 style={{ marginTop: 28 }}>Ready to post</h2>
+            {readyToPost.map((item) => (
+              <ReadyToPostCard key={item.id} item={item} projectId={project.id} onResolved={refresh} />
+            ))}
+          </>
+        )}
       </div>
     </>
   );

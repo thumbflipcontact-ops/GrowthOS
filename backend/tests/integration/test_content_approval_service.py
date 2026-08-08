@@ -145,6 +145,29 @@ async def test_archive_is_allowed_from_draft_and_pending_review(db_session) -> N
 
 
 @pytest.mark.asyncio
+async def test_archive_is_allowed_from_approved(db_session) -> None:
+    """A "Discard" action for an item stuck in `approved` — e.g. a twitter draft the user
+    decided not to post themselves, or a Reddit item whose publish kept failing and isn't
+    worth retrying. See _ARCHIVABLE_STATUSES' comment for why this was added alongside
+    `approved`."""
+    project = await _make_project(db_session)
+    user = await _make_user(db_session)
+    service = ContentApprovalService(db_session)
+    item = await _make_content_item(db_session, project, status=ContentItemStatus.APPROVED)
+
+    updated = await service.archive(
+        project_id=project.id,
+        item_id=item.id,
+        expected_version=item.version,
+        actor_user_id=user.id,
+        org_id=project.org_id,
+        reason="Discarded, not posted.",
+    )
+
+    assert updated.status == ContentItemStatus.ARCHIVED
+
+
+@pytest.mark.asyncio
 async def test_approve_rejects_an_item_still_in_draft(db_session) -> None:
     project = await _make_project(db_session)
     user = await _make_user(db_session)

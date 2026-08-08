@@ -7,6 +7,9 @@
 // backend/app/core/config.py's frontend_origin docstring.
 
 import type {
+  AgentConfig,
+  AgentRun,
+  AgentTriggerResponse,
   ApiErrorBody,
   CheckoutSessionResponse,
   ContentItem,
@@ -165,5 +168,59 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ version, reason }),
     });
+  },
+
+  archiveContentItem(
+    projectId: string,
+    itemId: string,
+    version: number,
+    reason?: string
+  ): Promise<ContentItem> {
+    return apiFetch(`/api/v1/projects/${projectId}/content-items/${itemId}/archive`, {
+      method: "POST",
+      body: JSON.stringify(reason ? { version, reason } : { version }),
+    });
+  },
+
+  markContentItemPublished(
+    projectId: string,
+    itemId: string,
+    version: number
+  ): Promise<ContentItem> {
+    return apiFetch(`/api/v1/projects/${projectId}/content-items/${itemId}/mark-published`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    });
+  },
+
+  retryPublishContentItem(projectId: string, itemId: string): Promise<ContentItem> {
+    return apiFetch(`/api/v1/projects/${projectId}/content-items/${itemId}/retry-publish`, {
+      method: "POST",
+    });
+  },
+
+  listAgentConfigs(projectId: string): Promise<AgentConfig[]> {
+    return apiFetch(`/api/v1/projects/${projectId}/agent-configs`);
+  },
+
+  upsertAgentConfig(
+    projectId: string,
+    agentKey: string,
+    body: { config: Record<string, unknown>; schedule_cron: string | null; enabled: boolean }
+  ): Promise<AgentConfig> {
+    return apiFetch(`/api/v1/projects/${projectId}/agent-configs/${agentKey}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+  },
+
+  triggerAgentRun(projectId: string, agentKey: string): Promise<AgentTriggerResponse> {
+    return apiFetch(`/api/v1/projects/${projectId}/agent-configs/${agentKey}/runs/trigger`, {
+      method: "POST",
+    });
+  },
+
+  listAgentRuns(projectId: string, agentKey: string): Promise<AgentRun[]> {
+    return apiFetch(`/api/v1/projects/${projectId}/agent-configs/${agentKey}/runs`);
   },
 };

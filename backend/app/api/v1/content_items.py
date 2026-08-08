@@ -4,13 +4,14 @@ docs/reviews/PUBLISHING_WORKFLOW_IMPLEMENTATION_REPORT.md.
 
 List/get are read-only. approve/reject/archive/mark-published are the *only* endpoints in
 the entire API that can move a `content_item` out of `pending_review` (or, for archive, out
-of `draft`; or, for mark-published, out of `approved`) — see ARCHITECTURE.md §8 and
-`app/services/content_approval.py`, which does the actual state-machine enforcement; this
-router only translates HTTP in and out of it. `approve` additionally enqueues the publish
-job for every platform except X/Twitter (see the route below for why) — the only place a
-publish attempt is triggered other than a manual `retry-publish` call. `mark-published` is
-the one other place `status` becomes `published` — see its own docstring for why that's not
-a violation of the publish worker owning that transition for every other platform.
+of `draft`/`pending_review`/`approved`; or, for mark-published, out of `approved`) — see
+ARCHITECTURE.md §8 and `app/services/content_approval.py`, which does the actual
+state-machine enforcement; this router only translates HTTP in and out of it. `approve`
+additionally enqueues the publish job for every platform except X/Twitter (see the route
+below for why) — the only place a publish attempt is triggered other than a manual
+`retry-publish` call. `mark-published` is the one other place `status` becomes `published`
+— see its own docstring for why that's not a violation of the publish worker owning that
+transition for every other platform.
 """
 
 from __future__ import annotations
