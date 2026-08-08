@@ -201,9 +201,16 @@ class PluginRegistry:
         docs/reviews/PLATFORM_READINESS_REVIEW.md §3."""
         capability_name = _capability_name_for_protocol(required)
         # TEMP DIAGNOSTIC — remove once conversation_finder's "no connected platforms" report
-        # is root-caused; see chat thread. Dumps exactly what this registry instance is
-        # holding right before filtering, since the frontend has no visibility into
-        # capabilities_enabled/status/label at all.
+        # is root-caused; see chat thread. print(), not logger, deliberately: bypasses
+        # structlog's processor pipeline entirely to rule out something in that pipeline
+        # silently swallowing the structured log call (the earlier structlog-based version of
+        # this diagnostic never appeared in worker-agent-runs' logs at all, despite that same
+        # process's other info-level structlog lines showing up fine).
+        print(
+            f"PLUGIN_REGISTRY_DEBUG capability={capability_name} "
+            f"connections={[(pk, c.label, c.status, list(c.capabilities_enabled)) for pk, c in self._connections.items()]}",
+            flush=True,
+        )
         logger.info(
             "plugin_registry.debug_connections_snapshot",
             capability=capability_name,
