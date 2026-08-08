@@ -51,6 +51,15 @@ def score_result(result: PluginResult, terms: Sequence[str]) -> tuple[float, lis
         elif in_body:
             weight_total += _BODY_MATCH_WEIGHT
 
-    max_possible = len(cleaned_terms) * _TITLE_MATCH_WEIGHT
+    # The per-term ceiling has to match what this result could actually earn, not what a
+    # title-bearing result could earn — a plugin whose results never have a title (e.g.
+    # Twitter: plugins/twitter/plugin.py's _to_plugin_result always sets title=None, a tweet
+    # IS just body text) can never hit _TITLE_MATCH_WEIGHT, so denominating against it caps
+    # every one of that plugin's results near ~0.2-0.3 regardless of how relevant they
+    # actually are. That's not "less relevant than a title match," it's an artifact of the
+    # platform having no title field at all — a fully-matching, title-less result should
+    # still be able to reach 1.0, the same as a fully-matching title-bearing one.
+    per_term_max = _TITLE_MATCH_WEIGHT if title else _BODY_MATCH_WEIGHT
+    max_possible = len(cleaned_terms) * per_term_max
     score = min(1.0, weight_total / max_possible) if max_possible else 0.0
     return round(score, 2), sorted(set(matched))

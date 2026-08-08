@@ -20,10 +20,11 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from plugins._shared.base import PluginQuery, Searchable
+
 from agents._shared.base import AgentContext, AgentResult
 from agents.conversation_finder.config import ConversationFinderConfig
 from agents.conversation_finder.ranking import score_result
-from plugins._shared.base import PluginQuery, Searchable
 
 if TYPE_CHECKING:
     from app.models.project import Project

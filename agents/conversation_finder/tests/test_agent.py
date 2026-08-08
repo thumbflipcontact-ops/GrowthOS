@@ -14,10 +14,10 @@ from typing import Any
 
 import pytest
 import structlog
+from plugins._shared.base import PluginQuery, PluginResult
 
 from agents._shared.base import AgentContext
 from agents.conversation_finder.agent import AGENT, ConversationFinderAgent
-from plugins._shared.base import PluginQuery, PluginResult
 
 
 @dataclass
@@ -287,7 +287,8 @@ async def test_plugin_billing_error_gets_generic_customer_message_and_operator_a
     to act on. The specific detail instead goes to operator_alerts, which the job runner
     (app/jobs/agent_runs.py) forwards to error tracking."""
     broken = _FakePlugin(
-        key="twitter", raise_exc=_PluginBillingError("X returned 402: credits depleted", status_code=402)
+        key="twitter",
+        raise_exc=_PluginBillingError("X returned 402: credits depleted", status_code=402),
     )
     ctx, _, _ = _ctx(plugins=[broken], config={"keywords": ["seo"]})
 
