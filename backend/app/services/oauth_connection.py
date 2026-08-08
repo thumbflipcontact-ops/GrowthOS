@@ -31,7 +31,7 @@ from app.core.oauth.pkce import code_challenge_from_verifier, generate_code_veri
 from app.core.oauth.state import OAuthState, create_state_token, generate_nonce, verify_state_token
 from app.core.plugin_catalog import PluginCatalog
 from app.models.audit import AuditLog
-from app.models.plugin import PluginConnection, PluginConnectionStatus
+from app.models.plugin import PluginCapability, PluginConnection, PluginConnectionStatus
 from app.models.project import Project
 from app.repositories.plugin_repository import PluginConnectionRepository
 
@@ -78,7 +78,8 @@ class OAuthConnectionService:
         the currently authenticated session — see docs/auth/OAUTH2_ARCHITECTURE.md §6),
         exchanges `code` for tokens, envelope-encrypts them (ADR 0010), and upserts the
         `plugin_connections` row: creates it on a first connect, updates the same row in
-        place on a reconnect (same id, `config`/`capabilities_enabled` preserved)."""
+        place on a reconnect (same id, `config` preserved; `capabilities_enabled` is
+        re-synced to the full manifest on every successful callback — see below)."""
         state = verify_state_token(state_token, secret_key=self._session_secret())
         if state is None:
             raise AuthenticationError("OAuth state is missing, invalid, or expired.")
@@ -89,7 +90,7 @@ class OAuthConnectionService:
         if project is None:
             raise NotFoundError("Project not found.", details={"project_id": str(state.project_id)})
 
-        _manifest, spec = self._oauth_manifest_and_spec(state.plugin_key)
+        manifest, spec = self._oauth_manifest_and_spec(state.plugin_key)
         client = self._client_for(state.plugin_key)
 
         try:
@@ -111,6 +112,16 @@ class OAuthConnectionService:
             self.session.add(connection)
 
         self._store_token(connection, token)
+        # No granular per-capability toggle UI exists yet (docs/plugins/PLUGIN_ARCHITECTURE.md's
+        # "data-level" gate is aspirational until one is built) — until then, a successfully
+        # completed OAuth round-trip is the single source of truth for "this connection is
+        # usable," so always sync capabilities_enabled to the full manifest here rather than
+        # only on first connect. Without this, a connection ever created via a path that skipped
+        # the capabilities_enabled=entry.capabilities create-time write (e.g. a reconnect, or a
+        # bare connection row) is permanently invisible to PluginRegistry.all_with_capability()
+        # even with valid, working credentials — see conversation_finder always reporting
+        # "no connected platforms" despite a "connected" badge.
+        connection.capabilities_enabled = [PluginCapability(c) for c in manifest.capabilities]
         await self.session.flush()
 
         self.session.add(
