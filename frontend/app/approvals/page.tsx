@@ -51,6 +51,18 @@ function ApprovalCard({ item, projectId, onResolved }: { item: ContentItem; proj
         <span className="muted">confidence: {Number(item.confidence).toFixed(2)}</span>
       </div>
 
+      {item.evidence.length > 0 && (
+        <div className="content-body" style={{ fontStyle: "italic", fontSize: 13 }}>
+          <strong style={{ fontStyle: "normal" }}>Replying to a post that said:</strong>{" "}
+          {item.evidence.map((quote, i) => (
+            <span key={i}>
+              {i > 0 && " … "}
+              &ldquo;{quote}&rdquo;
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="content-body">{item.body}</div>
 
       {item.reasoning && (
