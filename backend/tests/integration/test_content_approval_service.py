@@ -243,6 +243,67 @@ async def test_concurrent_approve_and_reject_only_one_wins(db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mark_published_manually_transitions_approved_to_published(db_session) -> None:
+    project = await _make_project(db_session)
+    user = await _make_user(db_session)
+    item = await _make_content_item(db_session, project, status=ContentItemStatus.APPROVED)
+    service = ContentApprovalService(db_session)
+
+    updated = await service.mark_published_manually(
+        project_id=project.id,
+        item_id=item.id,
+        expected_version=item.version,
+        actor_user_id=user.id,
+        org_id=project.org_id,
+    )
+
+    assert updated.status == ContentItemStatus.PUBLISHED
+    assert updated.published_at is not None
+
+    audit = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.action == "content_item.published_manually")
+        )
+    ).scalar_one_or_none()
+    assert audit is not None
+    assert audit.target == str(item.id)
+
+
+@pytest.mark.asyncio
+async def test_mark_published_manually_rejects_an_item_still_pending_review(db_session) -> None:
+    project = await _make_project(db_session)
+    user = await _make_user(db_session)
+    item = await _make_content_item(db_session, project)  # default status: pending_review
+    service = ContentApprovalService(db_session)
+
+    with pytest.raises(InvalidStateTransition):
+        await service.mark_published_manually(
+            project_id=project.id,
+            item_id=item.id,
+            expected_version=item.version,
+            actor_user_id=user.id,
+            org_id=project.org_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_mark_published_manually_rejects_an_already_published_item(db_session) -> None:
+    project = await _make_project(db_session)
+    user = await _make_user(db_session)
+    item = await _make_content_item(db_session, project, status=ContentItemStatus.PUBLISHED)
+    service = ContentApprovalService(db_session)
+
+    with pytest.raises(InvalidStateTransition):
+        await service.mark_published_manually(
+            project_id=project.id,
+            item_id=item.id,
+            expected_version=item.version,
+            actor_user_id=user.id,
+            org_id=project.org_id,
+        )
+
+
+@pytest.mark.asyncio
 async def test_approve_404s_for_an_item_in_a_different_project(db_session) -> None:
     project_a = await _make_project(db_session)
     project_b = await _make_project(db_session)

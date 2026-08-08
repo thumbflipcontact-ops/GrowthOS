@@ -33,6 +33,13 @@ _REVIEWABLE_STATUSES = (ContentItemStatus.PENDING_REVIEW,)
 # Archive is a Phase 2C addition (not in ARCHITECTURE.md §8's original diagram) — reachable
 # from either pre-decision state, not from anything already decided or published.
 _ARCHIVABLE_STATUSES = (ContentItemStatus.DRAFT, ContentItemStatus.PENDING_REVIEW)
+# X's own platform policy (Feb 2026) blocks a programmatic reply/quote unless the target
+# post's author already @mentioned this account or quoted it first — every organically
+# discovered post fails that by construction, so a twitter item never actually reaches
+# app/jobs/publish.py at all (see app/api/v1/content_items.py's approve route). An approved
+# twitter item is instead posted by a human directly on X, then told to this service via
+# mark_published_manually — the only status this can start from.
+_MANUALLY_PUBLISHABLE_STATUSES = (ContentItemStatus.APPROVED,)
 
 
 class ContentApprovalService:
@@ -82,6 +89,41 @@ class ContentApprovalService:
             action="content_item.rejected",
             reason=reason,
         )
+
+    async def mark_published_manually(
+        self,
+        *,
+        project_id: uuid.UUID,
+        item_id: uuid.UUID,
+        expected_version: int,
+        actor_user_id: uuid.UUID,
+        org_id: uuid.UUID,
+    ) -> ContentItem:
+        """A human posted this themselves (see the module-level comment on
+        `_MANUALLY_PUBLISHABLE_STATUSES` for why) and is telling the system it's done.
+        `_transition`'s generic UPDATE doesn't set `published_at` — every other
+        `approved -> published` path (app/jobs/publish.py) sets it as part of recording a
+        real API response, which doesn't exist here, so it's set directly after."""
+        item = await self._transition(
+            project_id=project_id,
+            item_id=item_id,
+            expected_version=expected_version,
+            from_statuses=_MANUALLY_PUBLISHABLE_STATUSES,
+            to_status=ContentItemStatus.PUBLISHED,
+            actor_user_id=actor_user_id,
+            org_id=org_id,
+            action="content_item.published_manually",
+            reason=None,
+        )
+        item.published_at = datetime.now(UTC)
+        await self.session.flush()
+        # This second flush (on top of _transition's own) triggers another onupdate=func.now()
+        # write to updated_at — same class of bug as backend/app/services/agent_config.py's
+        # fix earlier: without refreshing again here, updated_at is left expired, and FastAPI's
+        # response serialization (running outside this method, after the request's async
+        # context has moved on) can't lazily load it — MissingGreenlet.
+        await self.session.refresh(item)
+        return item
 
     async def archive(
         self,

@@ -15,6 +15,14 @@ class ApproveContentItemRequest(BaseModel):
     version: int = Field(ge=1)
 
 
+class MarkPublishedManuallyRequest(BaseModel):
+    """See app/services/content_approval.py's mark_published_manually — for a platform
+    (currently just X/Twitter) whose own policy blocks this system from posting on the
+    project's behalf, so a human posted it directly and is confirming that here."""
+
+    version: int = Field(ge=1)
+
+
 class RejectContentItemRequest(BaseModel):
     version: int = Field(ge=1)
     reason: str = Field(min_length=1)
@@ -45,6 +53,15 @@ class ContentItemResponse(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    # The triggering knowledge_item's own title/body_excerpt — the original post in full, as
+    # captured at discovery time, not just the short `evidence` quotes the drafting agent
+    # pulled from it. Not a column on content_items itself (there is no FK-joined data on the
+    # ORM object by default — see app/api/v1/content_items.py's _with_source_post, which
+    # populates these via a separate batch query). Both None whenever knowledge_item_id is
+    # null, or the caller didn't populate them (e.g. approve/reject/archive/mark-published's
+    # response, which the frontend never re-renders the source post from).
+    source_title: str | None = None
+    source_body: str | None = None
 
     model_config = {"from_attributes": True}
 

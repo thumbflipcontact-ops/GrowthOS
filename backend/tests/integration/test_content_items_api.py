@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.models.content import ContentItemStatus
 from app.services.content_drafts import ContentDraftClient
+from app.services.knowledge_base import KnowledgeBaseClient
 
 pytestmark = pytest.mark.integration
 
@@ -103,6 +104,60 @@ async def test_list_content_items_returns_drafts(
     assert body[0]["body"] == "A helpful reply."
     assert body[0]["confidence"] == "0.75"
     assert body[0]["evidence"] == ["quote"]
+
+
+@pytest.mark.asyncio
+async def test_list_and_get_content_items_include_the_full_source_post(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    knowledge_item, _ = await KnowledgeBaseClient(db_session).upsert_discovery(
+        project_id=uuid.UUID(project_id),
+        platform="twitter",
+        url="https://twitter.com/i/web/status/1",
+        tags=["seo"],
+        confidence=Decimal("0.8"),
+        body_excerpt="The full original tweet text, every single word of it, unabbreviated.",
+    )
+    item = await ContentDraftClient(db_session).create_draft(
+        project_id=uuid.UUID(project_id),
+        type="tweet",
+        body="A helpful reply.",
+        confidence=Decimal("0.75"),
+        target_platform="twitter",
+        knowledge_item_id=knowledge_item.id,
+    )
+    await db_session.flush()
+
+    list_response = await api_client.get(f"/api/v1/projects/{project_id}/content-items")
+    assert list_response.status_code == 200
+    [body] = [i for i in list_response.json() if i["id"] == str(item.id)]
+    assert body["source_body"] == (
+        "The full original tweet text, every single word of it, unabbreviated."
+    )
+
+    get_response = await api_client.get(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}"
+    )
+    assert get_response.status_code == 200
+    assert get_response.json()["source_body"] == (
+        "The full original tweet text, every single word of it, unabbreviated."
+    )
+
+
+@pytest.mark.asyncio
+async def test_content_item_without_a_knowledge_item_has_null_source_post(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=uuid.UUID(project_id), type="reddit_reply", body="hi", confidence=Decimal("0.5")
+    )
+    await db_session.flush()
+
+    r = await api_client.get(f"/api/v1/projects/{project_id}/content-items/{item.id}")
+    assert r.status_code == 200
+    assert r.json()["source_title"] is None
+    assert r.json()["source_body"] is None
 
 
 @pytest.mark.asyncio
@@ -204,6 +259,82 @@ async def test_approve_transitions_to_approved_and_enqueues_a_publish_job(
     assert job_name == "publish_content_item"
     assert args == (str(item.id),)
     assert kwargs["_job_id"] == f"publish-{item.id}"
+
+
+@pytest.mark.asyncio
+async def test_approve_skips_the_publish_job_for_a_twitter_item(
+    api_client: AsyncClient, project_id: str, db_session, fake_arq_redis: _FakeArqRedis
+) -> None:
+    """X's own platform policy blocks a programmatic reply/quote unless the target post's
+    author already @mentioned or quoted this account first — every organically-discovered
+    post fails that by construction, so approving a twitter item must never enqueue a
+    publish attempt that's guaranteed to 403. See app/api/v1/content_items.py's
+    _MANUAL_PUBLISH_ONLY_PLATFORMS."""
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=uuid.UUID(project_id),
+        type="tweet",
+        body="A helpful reply.",
+        confidence=Decimal("0.75"),
+        target_platform="twitter",
+        target_ref="182736450192834765",
+    )
+    item.status = ContentItemStatus.PENDING_REVIEW
+    await db_session.flush()
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/approve",
+        json={"version": item.version},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "approved"
+    assert fake_arq_redis.enqueued == []
+
+
+@pytest.mark.asyncio
+async def test_mark_published_works_for_an_approved_twitter_item(
+    api_client: AsyncClient, project_id: str, db_session, fake_arq_redis: _FakeArqRedis
+) -> None:
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=uuid.UUID(project_id),
+        type="tweet",
+        body="A helpful reply.",
+        confidence=Decimal("0.75"),
+        target_platform="twitter",
+        target_ref="182736450192834765",
+    )
+    item.status = ContentItemStatus.PENDING_REVIEW
+    await db_session.flush()
+
+    approve = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/approve",
+        json={"version": item.version},
+    )
+    assert approve.status_code == 200
+    approved_version = approve.json()["version"]
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/mark-published",
+        json={"version": approved_version},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "published"
+    assert body["published_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_mark_published_rejects_an_item_still_pending_review(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    item = await _make_pending_review_item(db_session, project_id)
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/mark-published",
+        json={"version": item.version},
+    )
+    assert r.status_code == 409
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,15 @@ class KnowledgeItemRepository(Repository[KnowledgeItem]):
         )
         return result.scalar_one_or_none()
 
+    async def list_by_ids(self, ids: set[uuid.UUID]) -> list[KnowledgeItem]:
+        """Batch lookup for a set of already-known ids — e.g. resolving several
+        content_items' knowledge_item_id in one query rather than one per row. See
+        app/api/v1/content_items.py's _with_source_post."""
+        if not ids:
+            return []
+        result = await self.session.execute(select(KnowledgeItem).where(KnowledgeItem.id.in_(ids)))
+        return list(result.scalars().all())
+
     async def list_by_project(
         self,
         project_id: uuid.UUID,
