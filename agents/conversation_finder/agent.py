@@ -66,7 +66,7 @@ class ConversationFinderAgent:
             plugins_searched.append(platform)
             try:
                 plugin_results = await plugin.search(query)
-            except Exception:
+            except Exception as exc:
                 # One plugin misbehaving must never fail the whole discovery cycle — mirrors
                 # PluginRegistry.all_with_capability()'s own resilience contract one level up
                 # (a broken plugin is skipped at construction time; a plugin that constructs
@@ -74,6 +74,14 @@ class ConversationFinderAgent:
                 ctx.logger.warning(
                     "conversation_finder.plugin_search_failed", platform=platform, exc_info=True
                 )
+                # Also recorded here, not just logged: a run with this in its summary still
+                # shows "succeeded" (by design — one plugin failing shouldn't fail the run),
+                # so without this the only way to learn a search silently failed was reading
+                # worker container logs directly. This is what a real X API billing error
+                # ("credits depleted", HTTP 402) looked like before this existed: a "succeeded"
+                # run reporting "searched twitter, 0 results" with the actual cause invisible
+                # anywhere in the product.
+                result.errors.append(f"{platform}: search failed — {exc}")
                 continue
 
             for plugin_result in plugin_results:

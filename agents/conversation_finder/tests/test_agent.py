@@ -262,6 +262,11 @@ async def test_one_plugin_raising_does_not_fail_the_whole_run() -> None:
     assert result.knowledge_items_created == 1
     assert kb.saved_calls[0]["url"] == "https://x.invalid/ok"
     assert result.summary["platforms_searched"] == ["broken", "dummy"]
+    # The failure is still recorded, not just logged — otherwise the only way to learn a
+    # search silently failed (e.g. a real API billing/auth error) is reading worker container
+    # logs directly, since the run still reports "succeeded" by design.
+    assert len(result.errors) == 1
+    assert "broken" in result.errors[0]
 
 
 @pytest.mark.asyncio

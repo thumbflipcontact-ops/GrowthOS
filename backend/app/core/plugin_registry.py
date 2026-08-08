@@ -200,34 +200,6 @@ class PluginRegistry:
         on purpose, not because of an oversight — see
         docs/reviews/PLATFORM_READINESS_REVIEW.md §3."""
         capability_name = _capability_name_for_protocol(required)
-        # TEMP DIAGNOSTIC — remove once conversation_finder's "no connected platforms" report
-        # is root-caused; see chat thread. print(), not logger, deliberately: bypasses
-        # structlog's processor pipeline entirely to rule out something in that pipeline
-        # silently swallowing the structured log call (the earlier structlog-based version of
-        # this diagnostic never appeared in worker-agent-runs' logs at all, despite that same
-        # process's other info-level structlog lines showing up fine).
-        print(
-            f"PLUGIN_REGISTRY_DEBUG capability={capability_name} "
-            f"connections={[(pk, c.label, c.status, list(c.capabilities_enabled)) for pk, c in self._connections.items()]}",
-            flush=True,
-        )
-        logger.info(
-            "plugin_registry.debug_connections_snapshot",
-            capability=capability_name,
-            connections=[
-                {
-                    "id": str(c.id),
-                    "plugin_key": pk,
-                    "label": c.label,
-                    "status": c.status.value if hasattr(c.status, "value") else str(c.status),
-                    "capabilities_enabled": [
-                        cap.value if hasattr(cap, "value") else str(cap)
-                        for cap in c.capabilities_enabled
-                    ],
-                }
-                for pk, c in self._connections.items()
-            ],
-        )
         instances = []
         for plugin_key, connection in self._connections.items():
             manifest = self._catalog.get(plugin_key)
