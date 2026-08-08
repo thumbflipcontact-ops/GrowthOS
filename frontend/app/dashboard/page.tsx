@@ -117,7 +117,7 @@ export default function DashboardPage() {
           <h2>Get started</h2>
           <div className="stack">
             <a href="/settings/plugins" className="btn btn-secondary">
-              Connect an account (X, LinkedIn, Reddit)
+              Connect an account (X, Reddit)
             </a>
             <a href="/approvals" className="btn btn-secondary">
               Review drafted posts

@@ -15,9 +15,15 @@ const STATUS_BADGE: Record<string, string> = {
 
 const PLUGIN_LABELS: Record<string, string> = {
   twitter: "X (Twitter)",
-  linkedin: "LinkedIn",
   reddit: "Reddit",
 };
+
+// LinkedIn's own API has no third-party post-search access at any tier (see conversation
+// history / support notes) — Threadly only supports platforms it can actually discover
+// conversations on, so LinkedIn is filtered out here even if the backend's plugin catalog
+// still knows about it. Not removing the plugin package itself (see plugins/linkedin/), just
+// keeping it out of every customer-facing surface.
+const UNSUPPORTED_PLUGIN_KEYS = new Set(["linkedin"]);
 
 function PluginRow({
   entry,
@@ -115,8 +121,13 @@ export default function PluginsPage() {
         api.listPluginConnections(project.id),
       ]);
       // Only plugins with a real, connectable OAuth flow — this UI has no form for api_key/
-      // session_credentials auth types yet (e.g. the "dummy" test fixture).
-      setCatalog(catalogRes.filter((entry) => entry.auth_type === "oauth2"));
+      // session_credentials auth types yet (e.g. the "dummy" test fixture) — and only
+      // platforms Threadly actually supports discovery on (see UNSUPPORTED_PLUGIN_KEYS).
+      setCatalog(
+        catalogRes.filter(
+          (entry) => entry.auth_type === "oauth2" && !UNSUPPORTED_PLUGIN_KEYS.has(entry.plugin_key)
+        )
+      );
       setConnections(connectionsRes);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : "Could not load connections.");
@@ -149,7 +160,7 @@ export default function PluginsPage() {
       <div className="container-wide">
         <h1>Connections</h1>
         <p className="subtitle">
-          Connect the accounts GrowthOS should monitor and post to. Every reply is drafted for
+          Connect the accounts Threadly should monitor and post to. Every reply is drafted for
           review — nothing posts without your approval.
         </p>
         {loadError && <div className="error-banner">{loadError}</div>}
