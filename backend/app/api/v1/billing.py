@@ -22,11 +22,39 @@ from app.repositories.billing_repository import SubscriptionRepository
 from app.schemas.billing import (
     CheckoutSessionResponse,
     PortalSessionResponse,
+    PricingTierResponse,
+    PricingTiersResponse,
     SubscriptionStatusResponse,
 )
 from app.services.billing_service import BillingService
 
 router = APIRouter(tags=["billing"])
+
+
+@router.get("/billing/pricing-tiers", response_model=PricingTiersResponse)
+async def get_pricing_tiers(
+    session: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> PricingTiersResponse:
+    """Public, unauthenticated — the landing page's live "spots left" indicator (shown before
+    signup, so there's no org/user to scope it to). No PII, just per-tier counts derived from
+    app/core/pricing.py's pure math over BillingService.get_pricing_tiers()."""
+    statuses = await BillingService(session, settings).get_pricing_tiers()
+    return PricingTiersResponse(
+        tiers=[
+            PricingTierResponse(
+                key=s.tier.key,
+                label=s.tier.label,
+                price_usd=s.tier.price_usd,
+                capacity=s.tier.capacity,
+                spots_taken=s.spots_taken,
+                spots_left=s.spots_left,
+                is_current=s.is_current,
+                is_sold_out=s.is_sold_out,
+            )
+            for s in statuses
+        ]
+    )
 
 
 @router.get("/orgs/{org_id}/billing/status", response_model=SubscriptionStatusResponse)

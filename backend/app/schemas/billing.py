@@ -23,3 +23,21 @@ class SubscriptionStatusResponse(BaseModel):
     is_entitled: bool
     trial_ends_at: datetime | None
     current_period_end: datetime | None
+
+
+class PricingTierResponse(BaseModel):
+    """One row of the public "spots left" pricing display — see app/core/pricing.py and
+    GET /api/v1/billing/pricing-tiers."""
+
+    key: str
+    label: str
+    price_usd: int
+    capacity: int | None
+    spots_taken: int
+    spots_left: int | None
+    is_current: bool
+    is_sold_out: bool
+
+
+class PricingTiersResponse(BaseModel):
+    tiers: list[PricingTierResponse]

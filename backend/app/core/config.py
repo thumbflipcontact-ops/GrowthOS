@@ -92,12 +92,16 @@ class Settings(BaseSettings):
     # never silently hit real production billing; the operator sets this explicitly to go
     # live, mirroring `environment`'s own safe-by-default convention above.
     polar_server: Literal["sandbox", "production"] = "sandbox"
-    # The single launch plan's Product ID (see docs/billing/BILLING_ARCHITECTURE.md's "why
-    # one plan, not tiers") — created in the Polar Dashboard, not by this codebase, with its
-    # 7-day trial configured there too (Polar's trial lives on the Product, not passed at
-    # checkout time). Multiple plans later means multiple configured Product IDs, not a code
-    # change to how Checkout Sessions are built.
+    # Three Products, one per launch pricing tier (see docs/billing/BILLING_ARCHITECTURE.md's
+    # "Tiered launch pricing") — each created in the Polar Dashboard, not by this codebase,
+    # each with the same 7-day trial configured on it (Polar's trial lives on the Product, not
+    # passed at checkout time). `polar_product_id` is the standard/base tier ($29, unlimited
+    # capacity) — kept as the original field name since it's the tier every deployment must
+    # configure; the other two are additive and optional so a deployment that hasn't set up
+    # tiered pricing yet just sends every checkout to the standard product.
     polar_product_id: str | None = Field(default=None)
+    polar_product_id_tier1: str | None = Field(default=None)  # "founding" — $9, first 5
+    polar_product_id_tier2: str | None = Field(default=None)  # "early" — $19, next 10
     billing_checkout_success_url: str = Field(default="http://localhost:3000/billing/success")
     billing_portal_return_url: str = Field(default="http://localhost:3000/settings/billing")
 

@@ -54,7 +54,7 @@ export default function TermsPage() {
         <h2>4. Subscription, free trial, and billing</h2>
         <ul>
           <li>New accounts start with a 7-day free trial. A valid payment card is required to start the trial.</li>
-          <li>Unless canceled before the trial ends, your card will be automatically charged the then-current subscription price (currently $49/month) at the end of the trial, and monthly thereafter until you cancel.</li>
+          <li>Threadly offers tiered launch pricing based on signup order (see our pricing page for current rates and availability). Unless canceled before the trial ends, your card will be automatically charged the subscription price shown on the pricing page at the time you started your trial, and monthly thereafter until you cancel. That price is fixed for your account once your trial starts and will not increase due to later tiers filling up.</li>
           <li>You can cancel anytime from your dashboard&apos;s billing page, which is self-service and takes effect at the end of your current billing period. We do not provide prorated refunds for partial billing periods.</li>
           <li>All payments are processed by Polar, acting as merchant of record. Your relationship for payment purposes is with Polar; Threadly does not handle or store your card details.</li>
           <li>We may change our pricing with at least 30 days&apos; notice to active subscribers; continued use after a price change takes effect constitutes acceptance of the new price.</li>

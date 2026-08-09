@@ -13,7 +13,6 @@ function slugify(value: string): string {
 }
 
 export default function SignupPage() {
-  const [businessName, setBusinessName] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,16 +23,14 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
 
-    const slug = slugify(businessName);
-    if (slug.length < 1) {
-      setError("Business name must contain at least one letter or number.");
-      return;
-    }
-
     setSubmitting(true);
     try {
+      // No business-name field in this form — every account still needs an Organization
+      // under the hood (see ARCHITECTURE.md's multi-tenancy model), so one is created
+      // automatically from the person's own name rather than asking them to name it.
+      const slug = slugify(name) || "workspace";
       await api.register({
-        org_name: businessName,
+        org_name: `${name}'s Workspace`,
         org_slug: `${slug}-${Date.now().toString(36)}`,
         email,
         name,
@@ -56,15 +53,6 @@ export default function SignupPage() {
       <div className="card">
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit}>
-          <label htmlFor="businessName">Business name</label>
-          <input
-            id="businessName"
-            value={businessName}
-            onChange={(e) => setBusinessName(e.target.value)}
-            required
-            placeholder="Acme SEO"
-          />
-
           <label htmlFor="name">Your name</label>
           <input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
 
@@ -93,6 +81,10 @@ export default function SignupPage() {
           </button>
         </form>
       </div>
+      <p className="muted">
+        By creating an account you agree to Threadly&apos;s{" "}
+        <a href="/terms">Terms &amp; Conditions</a> and <a href="/privacy">Privacy Policy</a>.
+      </p>
       <p className="muted">
         Already have an account? <a href="/login">Log in</a>
       </p>

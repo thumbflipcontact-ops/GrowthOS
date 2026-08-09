@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GrowthOS",
+  title: "Threadly",
   description: "Find relevant conversations, draft replies, and approve every post yourself.",
 };
 

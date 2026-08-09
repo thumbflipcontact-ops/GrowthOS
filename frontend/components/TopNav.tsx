@@ -1,5 +1,6 @@
 "use client";
 
+import { Logo } from "@/components/Logo";
 import { api } from "@/lib/api-client";
 
 export function TopNav() {
@@ -13,9 +14,11 @@ export function TopNav() {
       <div className="top-nav-inner">
         <div>
           <a href="/dashboard" className="brand">
-            GrowthOS
+            <Logo size={24} />
+            Threadly
           </a>
           <a href="/settings/plugins">Connections</a>
+          <a href="/settings/agents">Agent settings</a>
           <a href="/approvals">Approvals</a>
         </div>
         <button className="btn-secondary" onClick={handleLogout} type="button">

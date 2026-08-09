@@ -64,6 +64,10 @@ export interface ContentItem {
   confidence: string;
   reasoning: string | null;
   evidence: string[];
+  // The triggering knowledge_item's own title/body_excerpt — the original post in full, not
+  // just the short evidence quotes above. Both null if there's no linked knowledge_item.
+  source_title: string | null;
+  source_body: string | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -89,10 +93,55 @@ export interface SubscriptionStatus {
   current_period_end: string | null;
 }
 
+export interface PricingTier {
+  key: string;
+  label: string;
+  price_usd: number;
+  capacity: number | null;
+  spots_taken: number;
+  spots_left: number | null;
+  is_current: boolean;
+  is_sold_out: boolean;
+}
+
+export interface PricingTiersResponse {
+  tiers: PricingTier[];
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;
     message: string;
     details: Record<string, unknown>;
   };
+}
+
+export interface AgentConfig {
+  id: string;
+  project_id: string;
+  agent_key: string;
+  config: Record<string, unknown>;
+  schedule_cron: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentTriggerResponse {
+  agent_config_id: string;
+  agent_key: string;
+  status: string;
+}
+
+export interface AgentRun {
+  id: string;
+  agent_config_id: string;
+  project_id: string;
+  agent_key: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  summary: Record<string, unknown> | null;
+  error: string | null;
+  created_at: string;
 }

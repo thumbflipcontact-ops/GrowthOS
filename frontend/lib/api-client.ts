@@ -18,6 +18,7 @@ import type {
   PluginCatalogEntry,
   PluginConnection,
   PortalSessionResponse,
+  PricingTiersResponse,
   Project,
   SubscriptionStatus,
   User,
@@ -112,6 +113,10 @@ export const api = {
 
   getSubscriptionStatus(orgId: string): Promise<SubscriptionStatus> {
     return apiFetch(`/api/v1/orgs/${orgId}/billing/status`);
+  },
+
+  pricingTiers(): Promise<PricingTiersResponse> {
+    return apiFetch("/api/v1/billing/pricing-tiers");
   },
 
   pluginCatalog(): Promise<PluginCatalogEntry[]> {

@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import BillingNotConfigured, NotFoundError, ValidationError
+from app.core.pricing import PricingTier, TierStatus, tier_for_count, tier_statuses
 from app.models.audit import AuditLog
 from app.models.billing import Subscription, SubscriptionStatus
 from app.models.identity import Organization
@@ -72,7 +73,7 @@ class BillingService:
         `subscription.customer.external_id`, so no separate "pending checkout" state needs to
         be tracked between session creation and webhook arrival (unlike a processor that only
         echoes back an opaque reference id)."""
-        product_id = self._require_product_id()
+        product_id = await self._resolve_product_id(org.id)
 
         async with Polar(
             access_token=self._require_access_token(), server=self.settings.polar_server
@@ -189,15 +190,43 @@ class BillingService:
             status=subscription.status.value,
         )
 
+    async def get_pricing_tiers(self) -> list[TierStatus]:
+        """Live "spots left" per tier for the public landing page — see app/core/pricing.py
+        and GET /api/v1/billing/pricing-tiers. Read-only, no Polar call: counts this
+        platform's own `subscriptions` rows, the same counter `_resolve_product_id` uses to
+        assign a tier at checkout time, so the two are always in sync."""
+        count = await self.subscriptions.count_all()
+        return tier_statuses(count)
+
+    async def _resolve_product_id(self, org_id: uuid.UUID) -> str:
+        """Which Polar Product a checkout session should use — codeless tiered pricing, see
+        app/core/pricing.py. An org that already has a subscription row (even canceled) keeps
+        the product it originally checked out into, so its price is permanent and re-checkout
+        never re-counts its own row against itself. A brand-new org is assigned a tier purely
+        by how many organizations have ever checked out before it — no discount code, nothing
+        the customer enters."""
+        existing = await self.subscriptions.get_by_org(org_id)
+        if existing is not None:
+            return existing.polar_product_id
+        count = await self.subscriptions.count_all()
+        return self._require_tier_product_id(tier_for_count(count))
+
+    def _require_tier_product_id(self, tier: PricingTier) -> str:
+        product_id = {
+            "founding": self.settings.polar_product_id_tier1,
+            "early": self.settings.polar_product_id_tier2,
+            "standard": self.settings.polar_product_id,
+        }[tier.key]
+        if product_id is None:
+            raise BillingNotConfigured(
+                f"No Polar Product configured for the '{tier.key}' pricing tier."
+            )
+        return product_id
+
     def _require_access_token(self) -> str:
         if self.settings.polar_access_token is None:
             raise BillingNotConfigured("POLAR_ACCESS_TOKEN is not set.")
         return self.settings.polar_access_token.get_secret_value()
-
-    def _require_product_id(self) -> str:
-        if self.settings.polar_product_id is None:
-            raise BillingNotConfigured("POLAR_PRODUCT_ID is not set.")
-        return self.settings.polar_product_id
 
 
 def _parse_status(raw: str) -> SubscriptionStatus:

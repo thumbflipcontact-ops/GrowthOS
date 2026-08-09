@@ -1,8 +1,8 @@
 # Billing Architecture (Phase 4)
 
-**Status:** Implemented — one plan, 7-day trial, Polar as the payment processor. See
-`docs/reviews/` for the implementation report once written, `ROADMAP.md`'s Phase 4 entry, and
-`docs/database/SCHEMA.md`'s `subscriptions` table note.
+**Status:** Implemented — tiered launch pricing, 7-day trial, Polar as the payment processor.
+See `docs/reviews/` for the implementation report once written, `ROADMAP.md`'s Phase 4 entry,
+and `docs/database/SCHEMA.md`'s `subscriptions` table note.
 
 ## Why Polar, not Stripe
 
@@ -16,15 +16,47 @@ that onto this codebase. The generic pieces of this design (the `subscriptions` 
 `app/services/billing_service.py` talks to Polar's API, the same "one boundary module"
 principle `app/core/oauth/client.py` follows for OAuth providers.
 
-## Why one plan, not tiers, at launch
+## Tiered launch pricing
 
-Splitting into tiers before a single paying customer exists means guessing what a "higher"
-tier should even contain. Ship one plan, learn what customers actually ask for, then add a
-tier as a new Polar Product + a new `STRIPE_PRICE_ID`-equivalent config value — not a
+Every org's *feature set* is identical regardless of price paid — entitlement stays binary
+(active/trialing or not, see `app/core/entitlements.py`). What varies is which of three Polar
+Products a checkout session is created against:
+
+| Tier | Key | Price | Capacity |
+|---|---|---|---|
+| Founding | `founding` | $9/month | First 5 organizations ever to check out |
+| Early | `early` | $19/month | Next 10 |
+| Standard | `standard` | $29/month | Everyone after that, unlimited |
+
+No discount codes exist anywhere in this flow — a customer never sees or enters one. Instead,
+`BillingService._resolve_product_id` (`app/services/billing_service.py`) counts how many
+organizations already have a `subscriptions` row (`SubscriptionRepository.count_all()` —
+deliberately includes canceled rows, since a founding-tier org that cancels doesn't free its
+spot for someone else) and maps that count to a tier via `app/core/pricing.py`'s pure
+`tier_for_count`. The resulting Polar Product id is passed to `checkouts.create_async` exactly
+like the single-plan flow did — Checkout, trial, and webhook sync are otherwise unchanged.
+
+Tier assignment is **sticky**: if an org already has a subscription row (even a canceled one,
+e.g. it abandoned an earlier checkout and is trying again), `_resolve_product_id` reuses that
+row's `polar_product_id` rather than recomputing — both because the price should be permanent
+once assigned, and to avoid the org's own row inflating the count against itself.
+
+The same counter powers a public, unauthenticated `GET /api/v1/billing/pricing-tiers`
+(`app/core/pricing.py`'s `tier_statuses`) — the landing page's live "spots left" display. It's
+read-only and makes no Polar call; it reads the same `subscriptions` table
+`_resolve_product_id` counts, so the two can never disagree about how many spots are taken.
+
+This does mean three Products must exist in the Polar Dashboard instead of one — see Setup
+below — and there's a small, accepted race window if two signups complete Checkout
+concurrently right at a tier boundary (both could read the same pre-increment count and land
+in the same tier one spot over capacity). Not worth locking around at expected launch volume;
+revisit if it ever actually happens.
+
+Splitting into unlimited future tiers still isn't done — see the original reasoning below,
+which continues to apply beyond these three fixed launch tiers: adding a fourth means a new
+Polar Product + a new tier entry in `app/core/pricing.py`'s `PRICING_TIERS`, not a
 rearchitecture. Nothing in `BillingService`, the `subscriptions` table, or
-`app/core/entitlements.py` is plan-aware; entitlement is binary (active/trialing or not), so
-adding a second plan later touches Polar Dashboard config and, at most, a small amount of
-plan-selection UI — never the gating logic itself.
+`app/core/entitlements.py` is plan-aware beyond product-id selection at checkout time.
 
 ## Why card-required at signup, not a no-card trial
 
@@ -101,8 +133,10 @@ silently drift apart.
 1. Create a Polar account at <https://polar.sh> and a Polar Organization (Polar's own
    multi-tenant concept for *sellers* — not to be confused with this platform's own
    `organizations` table, which is for *customers*).
-2. Create a subscription Product with the 7-day trial configured on it. Note its Product id
-   → `POLAR_PRODUCT_ID`.
+2. Create **three** subscription Products, one per launch tier (see "Tiered launch pricing"
+   above) — $9, $19, and $29/month — each with the same 7-day trial configured on it. Note
+   their Product ids → `POLAR_PRODUCT_ID_TIER1` (founding, $9), `POLAR_PRODUCT_ID_TIER2`
+   (early, $19), `POLAR_PRODUCT_ID` (standard, $29).
 3. Get an access token (Polar Dashboard → Settings → API) → `POLAR_ACCESS_TOKEN`.
 4. Register a webhook endpoint pointing at
    `{OAUTH_CALLBACK_BASE_URL}/api/v1/billing/webhook`, subscribed at minimum to the
@@ -118,13 +152,14 @@ silently drift apart.
   (zero custom UI needed for payment itself), but signup, login, connecting a plugin account,
   and the approval inbox all still need *some* UI — even a minimal one. This is the most
   honest, largest gap: everything above is reachable today only via direct API calls.
-- **A real Polar account and Product**, not sandbox — §Setup above is unstarted in any real
-  environment as of this writing.
+- **A real Polar account and three Products**, not sandbox — §Setup above is unstarted in any
+  real environment as of this writing.
 - **Per-plan usage quotas.** Today's only usage ceiling is each plugin's own rate limiter
   (e.g. Twitter's 60 req/15min, shared across whatever org happens to be calling it in-process
   — see `plugins/twitter/README.md`'s "Known limitation — process-local only"). There is no
-  per-org daily/monthly cap tied to the subscription plan yet; acceptable for a single launch
-  plan with one tier, revisit once tiers exist or real usage data shows it's needed.
+  per-org daily/monthly cap tied to the subscription plan yet; the three launch tiers differ
+  only in price, not feature set or usage limits — revisit once real usage data shows it's
+  needed.
 - **Tenant isolation audit.** `require_project_access`'s 403-vs-404 choice (see
   `app/api/deps.py`) was reasoned about for a single-operator system; now that strangers hold
   real accounts, it's a genuine question worth a dedicated pass, not changed reactively here —
