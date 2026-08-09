@@ -135,7 +135,8 @@ export default function RootPage() {
           <span className="dot" /> Built for founders finding their first users
         </span>
         <h1>
-          Stop searching for the right conversation. <span className="grad">Let AI find it for you on X.</span>
+          Stop searching for the right conversation.{" "}
+          <span className="grad">Let AI find it for you on&nbsp;X.</span>
         </h1>
         <p className="lead">
           Building a product means your next user is out there right now, posting about the
