@@ -38,7 +38,7 @@ export default function PrivacyPage() {
 
         <h3>1.2 Connected platform data</h3>
         <p>
-          When you connect an account (X/Twitter or Reddit) via OAuth, we receive and
+          When you connect an account (X/Twitter) via OAuth, we receive and
           store an access token (and refresh token, where the platform provides one) that lets
           Threadly act on your behalf within the scopes you approved during that platform&apos;s
           own consent screen. These tokens are encrypted at rest. We never see or store your
@@ -112,7 +112,7 @@ export default function PrivacyPage() {
         <ul>
           <li><strong>Polar</strong> — subscription billing and payment processing (merchant of record).</li>
           <li><strong>Anthropic</strong> — AI processing to draft replies (Claude API).</li>
-          <li><strong>X (Twitter) and Reddit</strong> — the platforms you explicitly connect via OAuth; we exchange data with them only within the scopes you grant.</li>
+          <li><strong>X (Twitter)</strong> — the platform you explicitly connect via OAuth; we exchange data with it only within the scopes you grant.</li>
           <li><strong>Railway</strong> and <strong>Vercel</strong> — infrastructure providers hosting our backend, database, and website.</li>
         </ul>
         <p>We do not sell your personal information to anyone, ever.</p>

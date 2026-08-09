@@ -11,7 +11,7 @@ const STEPS = [
   },
   {
     title: "It watches, so you don't have to",
-    body: "Conversation Finder scans X and Reddit on a schedule and drafts a reply with Claude the moment something's worth joining. No more refreshing search tabs all day.",
+    body: "Conversation Finder scans X on a schedule and drafts a reply with Claude the moment something's worth joining. No more refreshing search tabs all day.",
   },
   {
     title: "You approve — or you don't",
@@ -19,10 +19,7 @@ const STEPS = [
   },
 ];
 
-const PLATFORMS = [
-  { name: "X (Twitter)", soon: false },
-  { name: "Reddit", soon: false },
-];
+const PLATFORMS = [{ name: "X (Twitter)", soon: false }];
 
 export default function RootPage() {
   useEffect(() => {
@@ -64,7 +61,7 @@ export default function RootPage() {
         </h1>
         <p className="lead">
           Building a product means your next user is out there right now, posting about the
-          exact problem you solve — on X or Reddit. Threadly finds that conversation
+          exact problem you solve — on X. Threadly finds that conversation
           for you and drafts a reply, so you spend your time building, not scrolling search
           results. Nothing goes out without your yes.
         </p>
@@ -133,7 +130,7 @@ export default function RootPage() {
             </div>
             <div className="muted">7-day free trial, then $49/month</div>
             <ul>
-              <li>Unlimited approved connections across X and Reddit</li>
+              <li>Unlimited approved connections on X</li>
               <li>AI-drafted replies via Claude, on your schedule</li>
               <li>Full manual approval on every single post</li>
               <li>Cancel anytime from your dashboard</li>

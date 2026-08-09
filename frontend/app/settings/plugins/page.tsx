@@ -18,12 +18,14 @@ const PLUGIN_LABELS: Record<string, string> = {
   reddit: "Reddit",
 };
 
-// LinkedIn's own API has no third-party post-search access at any tier (see conversation
-// history / support notes) — Threadly only supports platforms it can actually discover
-// conversations on, so LinkedIn is filtered out here even if the backend's plugin catalog
-// still knows about it. Not removing the plugin package itself (see plugins/linkedin/), just
-// keeping it out of every customer-facing surface.
-const UNSUPPORTED_PLUGIN_KEYS = new Set(["linkedin"]);
+// LinkedIn's own API has no third-party post-search access at any tier — Threadly only
+// supports platforms it can actually discover conversations on. Reddit's OAuth app was never
+// finished being set up (its OAuth client credentials aren't configured on the backend), and
+// testing it requires a working, non-banned Reddit account this project doesn't currently
+// have — so for now Threadly only supports X. Neither plugin package is deleted (see
+// plugins/linkedin/, plugins/reddit/), both are just kept out of every customer-facing
+// surface until they're actually ready.
+const UNSUPPORTED_PLUGIN_KEYS = new Set(["linkedin", "reddit"]);
 
 function PluginRow({
   entry,

@@ -125,7 +125,7 @@ function ApprovalCard({ item, projectId, onResolved }: { item: ContentItem; proj
             id={`reason-${item.id}`}
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="e.g. tone is off, wrong subreddit, factually incorrect"
+            placeholder="e.g. tone is off, not relevant, factually incorrect"
           />
           <div className="hstack">
             <button type="button" className="btn-danger" onClick={handleReject} disabled={busy}>
