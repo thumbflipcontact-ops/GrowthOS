@@ -24,7 +24,7 @@ from app.core.plugin_catalog import (
     sync_catalog_to_db,
 )
 from app.core.plugin_registry import PluginRegistry
-from app.models.plugin import PluginCapability, PluginConnection
+from app.models.plugin import PluginCapability, PluginConnection, PluginConnectionStatus
 
 pytestmark = pytest.mark.integration
 
@@ -161,12 +161,16 @@ async def test_registry_all_with_capability_skips_a_broken_plugin_but_returns_th
         ]
     )
     dummy_connection = PluginConnection(
-        project_id=uuid.uuid4(), plugin_key="dummy", capabilities_enabled=[PluginCapability.SEARCHABLE]
+        project_id=uuid.uuid4(),
+        plugin_key="dummy",
+        capabilities_enabled=[PluginCapability.SEARCHABLE],
+        status=PluginConnectionStatus.CONNECTED,
     )
     broken_connection = PluginConnection(
         project_id=dummy_connection.project_id,
         plugin_key="broken",
         capabilities_enabled=[PluginCapability.SEARCHABLE],
+        status=PluginConnectionStatus.CONNECTED,
     )
     registry = PluginRegistry(catalog, [dummy_connection, broken_connection], _SETTINGS)
 
@@ -183,9 +187,31 @@ async def test_registry_all_with_capability_filters_correctly() -> None:
     catalog = PluginCatalog()
     catalog.refresh(discover_installed_plugins())
     connection = PluginConnection(
-        project_id=uuid.uuid4(), plugin_key="dummy", capabilities_enabled=[PluginCapability.SEARCHABLE]
+        project_id=uuid.uuid4(),
+        plugin_key="dummy",
+        capabilities_enabled=[PluginCapability.SEARCHABLE],
+        status=PluginConnectionStatus.CONNECTED,
     )
     registry = PluginRegistry(catalog, [connection], _SETTINGS)
 
     assert len(registry.all_with_capability(Searchable)) == 1
     assert len(registry.all_with_capability(MetricsQueryable)) == 0
+
+
+@pytest.mark.asyncio
+async def test_registry_all_with_capability_excludes_a_disconnected_connection() -> None:
+    """A connection row can outlive an actually-working connection (OAuth never completed,
+    later disconnected, token permanently expired) — all_with_capability() must not fan out
+    to it, unlike a merely broken-but-CONNECTED plugin (see the "skips a broken plugin" test
+    above, which is a different failure mode: constructible-but-erroring vs never-connected)."""
+    catalog = PluginCatalog()
+    catalog.refresh(discover_installed_plugins())
+    connection = PluginConnection(
+        project_id=uuid.uuid4(),
+        plugin_key="dummy",
+        capabilities_enabled=[PluginCapability.SEARCHABLE],
+        status=PluginConnectionStatus.DISCONNECTED,
+    )
+    registry = PluginRegistry(catalog, [connection], _SETTINGS)
+
+    assert registry.all_with_capability(Searchable) == []

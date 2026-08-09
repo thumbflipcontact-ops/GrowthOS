@@ -21,7 +21,7 @@ from app.models.billing import Subscription, SubscriptionStatus
 from app.models.event import DomainEvent
 from app.models.identity import Organization
 from app.models.knowledge import KnowledgeItem
-from app.models.plugin import PluginCapability, PluginConnection
+from app.models.plugin import PluginCapability, PluginConnection, PluginConnectionStatus
 from app.models.project import Project
 from app.repositories.agent_repository import AgentConfigRepository
 from app.repositories.organization_repository import OrganizationRepository
@@ -76,6 +76,7 @@ async def _connect_dummy_as_searchable(db_session, project: Project) -> None:
             project_id=project.id,
             plugin_key="dummy",
             capabilities_enabled=[PluginCapability.SEARCHABLE],
+            status=PluginConnectionStatus.CONNECTED,
         )
     )
     await db_session.flush()

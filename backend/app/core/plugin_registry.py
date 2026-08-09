@@ -43,7 +43,7 @@ from app.core.config import Settings
 from app.core.crypto import derive_master_key, envelope_decrypt
 from app.core.errors import CapabilityNotSupported
 from app.core.plugin_catalog import PluginCatalog
-from app.models.plugin import PluginCapability, PluginConnection
+from app.models.plugin import PluginCapability, PluginConnection, PluginConnectionStatus
 
 logger = structlog.get_logger()
 
@@ -206,6 +206,14 @@ class PluginRegistry:
             if manifest is None or capability_name not in manifest.capabilities:
                 continue
             if PluginCapability(capability_name) not in connection.capabilities_enabled:
+                continue
+            # A connection row can outlive an actually-working connection (OAuth never
+            # completed, later disconnected, token permanently expired) — the docstring above
+            # says "every connected... plugin", so this is the check that makes that literal,
+            # not just aspirational. Without it, a stale/disconnected connection still gets
+            # fanned out to on every run (e.g. conversation_finder would keep listing it under
+            # "platforms_searched" even though nothing was ever actually searched there).
+            if connection.status != PluginConnectionStatus.CONNECTED:
                 continue
             try:
                 instance = _load_plugin_instance(manifest, connection, self._settings)
