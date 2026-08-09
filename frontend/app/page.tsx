@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/Logo";
+import { LinkedInIcon, XIcon } from "@/components/SocialIcons";
 import { api } from "@/lib/api-client";
 import type { PricingTier } from "@/lib/types";
 
@@ -195,10 +196,6 @@ export default function RootPage() {
       </section>
 
       <section className="landing-section">
-        <div className="section-heading">
-          <h2>Pricing gets more expensive as we grow</h2>
-          <p>The earlier you join, the less you pay — forever. Same product, same features, no tiers to compare.</p>
-        </div>
         {tiers && <TierBar tiers={tiers} />}
         <div className="pricing-wrap">
           <div className="pricing-card">
@@ -223,10 +220,31 @@ export default function RootPage() {
 
       <footer className="landing-footer">
         <div>Threadly — AI finds the conversation. You approve the reply.</div>
+        <div className="footer-social">
+          <a
+            href="https://x.com/AmolParikh10"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Follow on X"
+            className="social-icon"
+          >
+            <XIcon />
+          </a>
+          <a
+            href="https://www.linkedin.com/in/amol-parikh-4442b0b/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Connect on LinkedIn"
+            className="social-icon"
+          >
+            <LinkedInIcon />
+          </a>
+        </div>
         <div className="footer-links">
           <a href="/privacy">Privacy Policy</a>
           <a href="/terms">Terms &amp; Conditions</a>
         </div>
+        <div className="footer-copyright">© 2026 Threadly. All rights reserved.</div>
       </footer>
     </>
   );
