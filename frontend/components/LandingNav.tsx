@@ -11,6 +11,7 @@ export function LandingNav() {
           </a>
           <div className="landing-nav-links">
             <a href="/features">Features</a>
+            <a href="/use-cases">Use Cases</a>
             <a href="/#pricing">Pricing</a>
             <a href="/faq">FAQ</a>
           </div>

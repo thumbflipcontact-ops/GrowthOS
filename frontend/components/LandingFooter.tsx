@@ -26,6 +26,7 @@ export function LandingFooter() {
       </div>
       <div className="footer-links">
         <a href="/features">Features</a>
+        <a href="/use-cases">Use Cases</a>
         <a href="/#pricing">Pricing</a>
         <a href="/faq">FAQ</a>
         <a href="/privacy">Privacy Policy</a>
