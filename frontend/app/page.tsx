@@ -177,7 +177,13 @@ export default function RootPage() {
           <p>A real walkthrough of the actual product — not a mockup.</p>
         </div>
         <div className="demo-frame">
-          <div className="demo-placeholder">Demo video coming shortly</div>
+          <iframe
+            src="https://www.loom.com/embed/cf01ff136ed4416e84bfa106391029ec?hideEmbedTopBar=true"
+            title="Threadly product demo"
+            className="demo-embed"
+            allow="fullscreen"
+            allowFullScreen
+          />
         </div>
       </section>
 
