@@ -345,6 +345,35 @@ button:disabled {
   color: var(--text);
 }
 
+.landing-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+
+.landing-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.landing-nav-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.landing-nav-links a:hover {
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .landing-nav-links {
+    display: none;
+  }
+}
+
 .landing-section {
   max-width: 1080px;
   margin: 0 auto;
@@ -562,6 +591,39 @@ button:disabled {
   font-size: 14px;
   margin: 0;
   line-height: 1.55;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 96px;
+}
+
+.faq-list {
+  max-width: 720px;
+  margin: 0 auto 96px;
+}
+
+.faq-item {
+  padding: 22px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.faq-item:last-child {
+  border-bottom: none;
+}
+
+.faq-item h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.faq-item p {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
 }
 
 .demo-frame {
@@ -819,7 +881,8 @@ button:disabled {
   .hero h1 {
     font-size: 32px;
   }
-  .steps-grid {
+  .steps-grid,
+  .feature-grid {
     grid-template-columns: 1fr;
   }
 }

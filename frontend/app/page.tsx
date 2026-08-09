@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Logo } from "@/components/Logo";
-import { LinkedInIcon, XIcon } from "@/components/SocialIcons";
+import { LandingFooter } from "@/components/LandingFooter";
+import { LandingNav } from "@/components/LandingNav";
 import { api } from "@/lib/api-client";
 import type { PricingTier } from "@/lib/types";
 
@@ -113,22 +113,7 @@ export default function RootPage() {
 
   return (
     <>
-      <nav className="landing-nav">
-        <div className="landing-nav-inner">
-          <a href="/" className="brand">
-            <Logo size={28} />
-            Threadly
-          </a>
-          <div className="hstack">
-            <a href="/login" className="btn-ghost">
-              Log in
-            </a>
-            <a href="/signup" className="btn btn-grad">
-              Start free trial
-            </a>
-          </div>
-        </div>
-      </nav>
+      <LandingNav />
 
       <header className="hero">
         <span className="hero-badge">
@@ -202,7 +187,7 @@ export default function RootPage() {
         </div>
       </section>
 
-      <section className="landing-section">
+      <section id="pricing" className="landing-section">
         {tiers && <TierBar tiers={tiers} />}
         <div className="pricing-wrap">
           <div className="pricing-card">
@@ -225,34 +210,7 @@ export default function RootPage() {
         </div>
       </section>
 
-      <footer className="landing-footer">
-        <div>Threadly — AI finds the conversation. You approve the reply.</div>
-        <div className="footer-social">
-          <a
-            href="https://x.com/AmolParikh10"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Follow on X"
-            className="social-icon"
-          >
-            <XIcon />
-          </a>
-          <a
-            href="https://www.linkedin.com/in/amol-parikh-4442b0b/"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Connect on LinkedIn"
-            className="social-icon"
-          >
-            <LinkedInIcon />
-          </a>
-        </div>
-        <div className="footer-links">
-          <a href="/privacy">Privacy Policy</a>
-          <a href="/terms">Terms &amp; Conditions</a>
-        </div>
-        <div className="footer-copyright">© 2026 Threadly. All rights reserved.</div>
-      </footer>
+      <LandingFooter />
     </>
   );
 }
