@@ -79,12 +79,14 @@ async def _seed_subscriptions(db_session, count: int) -> None:
     await db_session.flush()
 
 
-def _polar_customer(external_id: str | None) -> SubscriptionCustomer:
+def _polar_customer(
+    external_id: str | None, *, email: str = "founder@example.com"
+) -> SubscriptionCustomer:
     # model_construct (not model_validate) deliberately — this platform's own sync logic
-    # (BillingService._sync_subscription) only ever reads `.external_id` off this object;
-    # building a fully schema-valid SubscriptionCustomer would mean tracking every field
-    # Polar's SDK happens to require today, none of which this test is actually about.
-    return SubscriptionCustomer.model_construct(external_id=external_id)
+    # (BillingService._sync_subscription) only reads `.external_id` and `.email` off this
+    # object; building a fully schema-valid SubscriptionCustomer would mean tracking every
+    # field Polar's SDK happens to require today, none of which this test is actually about.
+    return SubscriptionCustomer.model_construct(external_id=external_id, email=email)
 
 
 def _polar_subscription(
@@ -341,7 +343,9 @@ async def test_webhook_creating_an_entitled_subscription_captures_subscribed_eve
     org = await _make_org(db_session)
     webhook_payload = WebhookSubscriptionCreatedPayload(
         timestamp=datetime.now(UTC),
-        data=_polar_subscription(external_customer_id=str(org.id)),
+        data=_polar_subscription(
+            external_customer_id=str(org.id), product_id="prod_test_founding"
+        ),
     )
     monkeypatch.setattr(
         billing_service_module, "validate_event", lambda payload, headers, secret: webhook_payload
@@ -355,7 +359,44 @@ async def test_webhook_creating_an_entitled_subscription_captures_subscribed_eve
 
     await BillingService(db_session, _settings()).handle_webhook_event(payload=b"{}", headers={})
 
-    assert captured == [(str(org.id), "subscribed", {})]
+    assert captured == [
+        (
+            str(org.id),
+            "subscribed",
+            {"email": "founder@example.com", "tier": "founding", "price_usd": 9},
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_webhook_subscribed_event_has_no_tier_for_an_unrecognized_product_id(
+    monkeypatch, db_session
+) -> None:
+    """A product_id that doesn't match any of this deployment's configured tiers (e.g. a
+    subscription created against a Product from before the current tier setup) still fires
+    "subscribed" with the email, just without a price — see BillingService._tier_for_product_id."""
+    import app.services.billing_service as billing_service_module
+
+    org = await _make_org(db_session)
+    webhook_payload = WebhookSubscriptionCreatedPayload(
+        timestamp=datetime.now(UTC),
+        data=_polar_subscription(external_customer_id=str(org.id), product_id="prod_unrecognized"),
+    )
+    monkeypatch.setattr(
+        billing_service_module, "validate_event", lambda payload, headers, secret: webhook_payload
+    )
+    captured: list[tuple] = []
+    monkeypatch.setattr(
+        billing_service_module.analytics,
+        "capture",
+        lambda distinct_id, event, **props: captured.append((distinct_id, event, props)),
+    )
+
+    await BillingService(db_session, _settings()).handle_webhook_event(payload=b"{}", headers={})
+
+    assert captured == [
+        (str(org.id), "subscribed", {"email": "founder@example.com", "tier": None, "price_usd": None})
+    ]
 
 
 @pytest.mark.asyncio

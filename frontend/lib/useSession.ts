@@ -65,9 +65,15 @@ export function useSession(): SessionState {
         if (!cancelled) {
           // Identified by org, not user — billing/entitlement (and so every funnel step worth
           // measuring, up through the "subscribed" event captured server-side in
-          // billing_service.py) is scoped to the org, not the individual person.
+          // billing_service.py) is scoped to the org, not the individual person. email/name
+          // are the signed-up person's own, not the org's auto-generated workspace label —
+          // that's what makes a PostHog person profile actually recognizable as someone.
           if (organization) {
-            initPosthog()?.identify(organization.id, { name: organization.name });
+            initPosthog()?.identify(organization.id, {
+              email: user.email,
+              name: user.name,
+              organization_name: organization.name,
+            });
           }
           setState({ loading: false, user, organization, project, error: null });
         }

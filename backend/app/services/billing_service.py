@@ -37,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import analytics
 from app.core.config import Settings
 from app.core.errors import BillingNotConfigured, NotFoundError, ValidationError
-from app.core.pricing import PricingTier, TierStatus, tier_for_count, tier_statuses
+from app.core.pricing import PRICING_TIERS, PricingTier, TierStatus, tier_for_count, tier_statuses
 from app.models.audit import AuditLog
 from app.models.billing import Subscription, SubscriptionStatus
 from app.models.identity import Organization
@@ -191,8 +191,18 @@ class BillingService:
                 # and that isn't a real "subscribed" milestone for the funnel. Fired here
                 # rather than from the frontend's billing/start redirect because this is the
                 # one funnel step where webhook-verified truth matters more than whether the
-                # browser ever completes its redirect back from Checkout.
-                analytics.capture(str(subscription.org_id), "subscribed")
+                # browser ever completes its redirect back from Checkout. email/price come
+                # straight off the webhook payload, not a DB lookup — Polar already has both
+                # (email from create_checkout_session's customer_email, price implied by
+                # which Product this org's checkout used).
+                tier = self._tier_for_product_id(polar_sub.product_id)
+                analytics.capture(
+                    str(subscription.org_id),
+                    "subscribed",
+                    email=polar_sub.customer.email,
+                    tier=tier.key if tier else None,
+                    price_usd=tier.price_usd if tier else None,
+                )
         logger.info(
             "billing.subscription_synced",
             org_id=str(subscription.org_id),
@@ -231,6 +241,21 @@ class BillingService:
                 f"No Polar Product configured for the '{tier.key}' pricing tier."
             )
         return product_id
+
+    def _tier_for_product_id(self, product_id: str) -> PricingTier | None:
+        """Reverse of _require_tier_product_id — which PricingTier (and so which price) a
+        Polar Product id corresponds to, for analytics only (see _sync_subscription's
+        "subscribed" capture). Returns None for a product_id that predates this deployment's
+        current tier configuration rather than guessing."""
+        product_ids_by_tier_key = {
+            "founding": self.settings.polar_product_id_tier1,
+            "early": self.settings.polar_product_id_tier2,
+            "standard": self.settings.polar_product_id,
+        }
+        for tier in PRICING_TIERS:
+            if product_ids_by_tier_key[tier.key] == product_id:
+                return tier
+        return None
 
     def _require_access_token(self) -> str:
         if self.settings.polar_access_token is None:
