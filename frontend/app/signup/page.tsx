@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ApiError, api } from "@/lib/api-client";
+import { initPosthog } from "@/lib/posthog";
 
 function slugify(value: string): string {
   return value
@@ -36,6 +37,10 @@ export default function SignupPage() {
         name,
         password,
       });
+      // Captured under the anonymous distinct_id — useSession's identify(organization.id)
+      // call on the very next page load (dashboard) merges this event into that org's
+      // timeline, PostHog's standard anonymous-then-identified pattern.
+      initPosthog()?.capture("signup_completed");
       // Registration signs the browser in directly (session cookie set on the response), and
       // the org is immediately entitled via the no-card trial (see
       // docs/billing/BILLING_ARCHITECTURE.md) — no billing step required before the

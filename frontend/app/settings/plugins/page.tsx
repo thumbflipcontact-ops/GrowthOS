@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { TopNav } from "@/components/TopNav";
 import { ApiError, api } from "@/lib/api-client";
+import { initPosthog } from "@/lib/posthog";
 import type { PluginCatalogEntry, PluginConnection } from "@/lib/types";
 import { useSession } from "@/lib/useSession";
 
@@ -54,6 +55,7 @@ function PluginRow({
         });
       }
       const { authorize_url } = await api.startOAuthConnection(projectId, entry.plugin_key);
+      initPosthog()?.capture("plugin_connect_clicked", { plugin_key: entry.plugin_key });
       window.location.href = authorize_url;
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {

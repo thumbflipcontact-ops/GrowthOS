@@ -41,6 +41,11 @@ dependencies = [
     # regardless of business registration status. Only the official SDK talks to Polar's API,
     # same "one boundary module" principle as app/core/oauth/client.py for OAuth providers.
     "polar-sdk>=0.32,<0.33",
+    # Product analytics — server-side "subscribed" capture only (see app/core/analytics.py),
+    # the one funnel milestone that must come from webhook-verified truth rather than a
+    # frontend redirect the browser might never complete. Optional, same "no-ops unless the
+    # env var is set" pattern as sentry-sdk/SENTRY_DSN above (POSTHOG_API_KEY here instead).
+    "posthog>=7.0,<8",
 ]
 
 [project.optional-dependencies]

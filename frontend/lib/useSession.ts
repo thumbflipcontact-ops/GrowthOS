@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, api } from "./api-client";
+import { initPosthog } from "./posthog";
 import type { Organization, Project, User } from "./types";
 
 interface SessionState {
@@ -62,6 +63,12 @@ export function useSession(): SessionState {
         }
 
         if (!cancelled) {
+          // Identified by org, not user — billing/entitlement (and so every funnel step worth
+          // measuring, up through the "subscribed" event captured server-side in
+          // billing_service.py) is scoped to the org, not the individual person.
+          if (organization) {
+            initPosthog()?.identify(organization.id, { name: organization.name });
+          }
           setState({ loading: false, user, organization, project, error: null });
         }
       } catch (err) {

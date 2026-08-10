@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SourcePost, originalPostUrl } from "@/components/SourcePost";
 import { TopNav } from "@/components/TopNav";
 import { ApiError, api } from "@/lib/api-client";
+import { initPosthog } from "@/lib/posthog";
 import type { ContentItem } from "@/lib/types";
 import { useSession } from "@/lib/useSession";
 
@@ -33,6 +34,7 @@ function ApprovalCard({ item, projectId, onResolved }: { item: ContentItem; proj
     setError(null);
     try {
       await api.approveContentItem(projectId, item.id, item.version);
+      initPosthog()?.capture("draft_approved", { platform: item.target_platform ?? item.type });
       onResolved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not approve.");

@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     # a narrower, more urgent "don't fail silently in a background worker" gap.
     sentry_dsn: str | None = Field(default=None)
 
+    # --- Product analytics — see app/core/analytics.py. Optional, same pattern as
+    # sentry_dsn above: every process runs exactly as before if posthog_api_key is unset.
+    # posthog_host defaults to PostHog's US Cloud ingest endpoint (this deployment's project
+    # is on US Cloud, not EU) — override only if the PostHog project ever migrates region.
+    posthog_api_key: str | None = Field(default=None)
+    posthog_host: str = Field(default="https://us.i.posthog.com")
+
     # --- Billing (Phase 4) — see docs/billing/BILLING_ARCHITECTURE.md. Polar, not Stripe:
     # Stripe does not currently allow solo-founder/individual accounts in India to onboard;
     # Polar is a merchant-of-record platform with self-serve onboarding regardless of

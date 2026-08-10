@@ -18,6 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
+from app.core.analytics import init_analytics
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.errors import register_exception_handlers
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings)
     init_error_tracking(settings, process_name="backend")
+    init_analytics(settings)
 
     engine = create_engine(
         str(settings.database_url),

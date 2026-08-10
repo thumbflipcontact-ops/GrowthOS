@@ -34,6 +34,7 @@ from polar_sdk.models import (
 from polar_sdk.webhooks import WebhookUnknownTypeError, WebhookVerificationError, validate_event
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import analytics
 from app.core.config import Settings
 from app.core.errors import BillingNotConfigured, NotFoundError, ValidationError
 from app.core.pricing import PricingTier, TierStatus, tier_for_count, tier_statuses
@@ -184,6 +185,14 @@ class BillingService:
                 )
             )
             await self.session.flush()
+            if subscription.is_entitled:
+                # Gated on is_entitled, not just is_new — a subscription can be created in a
+                # non-entitled status (e.g. straight to past_due on a failed first charge),
+                # and that isn't a real "subscribed" milestone for the funnel. Fired here
+                # rather than from the frontend's billing/start redirect because this is the
+                # one funnel step where webhook-verified truth matters more than whether the
+                # browser ever completes its redirect back from Checkout.
+                analytics.capture(str(subscription.org_id), "subscribed")
         logger.info(
             "billing.subscription_synced",
             org_id=str(subscription.org_id),

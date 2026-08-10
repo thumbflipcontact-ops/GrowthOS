@@ -333,6 +333,103 @@ async def test_webhook_creates_a_new_subscription_row(monkeypatch, db_session) -
 
 
 @pytest.mark.asyncio
+async def test_webhook_creating_an_entitled_subscription_captures_subscribed_event(
+    monkeypatch, db_session
+) -> None:
+    import app.services.billing_service as billing_service_module
+
+    org = await _make_org(db_session)
+    webhook_payload = WebhookSubscriptionCreatedPayload(
+        timestamp=datetime.now(UTC),
+        data=_polar_subscription(external_customer_id=str(org.id)),
+    )
+    monkeypatch.setattr(
+        billing_service_module, "validate_event", lambda payload, headers, secret: webhook_payload
+    )
+    captured: list[tuple] = []
+    monkeypatch.setattr(
+        billing_service_module.analytics,
+        "capture",
+        lambda distinct_id, event, **props: captured.append((distinct_id, event, props)),
+    )
+
+    await BillingService(db_session, _settings()).handle_webhook_event(payload=b"{}", headers={})
+
+    assert captured == [(str(org.id), "subscribed", {})]
+
+
+@pytest.mark.asyncio
+async def test_webhook_creating_a_non_entitled_subscription_does_not_capture(
+    monkeypatch, db_session
+) -> None:
+    """A subscription that lands straight in a non-entitled status on its first webhook (e.g.
+    a failed first charge) is not a real "subscribed" milestone for the funnel."""
+    import app.services.billing_service as billing_service_module
+
+    org = await _make_org(db_session)
+    webhook_payload = WebhookSubscriptionCreatedPayload(
+        timestamp=datetime.now(UTC),
+        data=_polar_subscription(
+            external_customer_id=str(org.id), status=PolarSubscriptionStatus.PAST_DUE
+        ),
+    )
+    monkeypatch.setattr(
+        billing_service_module, "validate_event", lambda payload, headers, secret: webhook_payload
+    )
+    captured: list[tuple] = []
+    monkeypatch.setattr(
+        billing_service_module.analytics,
+        "capture",
+        lambda distinct_id, event, **props: captured.append((distinct_id, event, props)),
+    )
+
+    await BillingService(db_session, _settings()).handle_webhook_event(payload=b"{}", headers={})
+
+    assert captured == []
+
+
+@pytest.mark.asyncio
+async def test_webhook_updating_an_existing_subscription_does_not_recapture(
+    monkeypatch, db_session
+) -> None:
+    """Only the first-ever sync for a subscription should fire "subscribed" — subsequent
+    status changes (e.g. trialing -> active) are not a new milestone."""
+    import app.services.billing_service as billing_service_module
+
+    org = await _make_org(db_session)
+    db_session.add(
+        Subscription(
+            org_id=org.id,
+            polar_customer_id="cus_polar_123",
+            polar_subscription_id="sub_polar_1",
+            polar_product_id="prod_test",
+            status=SubscriptionStatus.TRIALING,
+        )
+    )
+    await db_session.flush()
+
+    webhook_payload = WebhookSubscriptionUpdatedPayload(
+        timestamp=datetime.now(UTC),
+        data=_polar_subscription(
+            external_customer_id=str(org.id), status=PolarSubscriptionStatus.ACTIVE
+        ),
+    )
+    monkeypatch.setattr(
+        billing_service_module, "validate_event", lambda payload, headers, secret: webhook_payload
+    )
+    captured: list[tuple] = []
+    monkeypatch.setattr(
+        billing_service_module.analytics,
+        "capture",
+        lambda distinct_id, event, **props: captured.append((distinct_id, event, props)),
+    )
+
+    await BillingService(db_session, _settings()).handle_webhook_event(payload=b"{}", headers={})
+
+    assert captured == []
+
+
+@pytest.mark.asyncio
 async def test_webhook_updates_an_existing_subscription_row(monkeypatch, db_session) -> None:
     import app.services.billing_service as billing_service_module
 

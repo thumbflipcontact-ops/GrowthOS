@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api-client";
+import { initPosthog } from "@/lib/posthog";
 import { useSession } from "@/lib/useSession";
 
 export default function BillingStartPage() {
@@ -15,7 +16,10 @@ export default function BillingStartPage() {
     api
       .createCheckoutSession(organization.id)
       .then((res) => {
-        if (!cancelled) window.location.href = res.checkout_url;
+        if (!cancelled) {
+          initPosthog()?.capture("checkout_started");
+          window.location.href = res.checkout_url;
+        }
       })
       .catch((err) => {
         if (cancelled) return;
