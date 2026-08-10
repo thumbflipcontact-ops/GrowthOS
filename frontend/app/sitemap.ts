@@ -7,7 +7,18 @@ import type { MetadataRoute } from "next";
 const BASE_URL = "https://www.usethreadly.co";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const routes = ["", "/features", "/use-cases", "/faq", "/terms", "/privacy", "/login", "/signup"];
+  const routes = [
+    "",
+    "/features",
+    "/use-cases",
+    "/faq",
+    "/terms",
+    "/privacy",
+    "/login",
+    "/signup",
+    "/blog",
+    "/blog/manual-scrolling-x-doesnt-scale",
+  ];
   return routes.map((route) => ({
     url: `${BASE_URL}${route}`,
     lastModified: new Date(),

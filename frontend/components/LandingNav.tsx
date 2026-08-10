@@ -14,6 +14,7 @@ export function LandingNav() {
             <a href="/use-cases">Use Cases</a>
             <a href="/#pricing">Pricing</a>
             <a href="/faq">FAQ</a>
+            <a href="/blog">Blog</a>
           </div>
         </div>
         <div className="hstack">
