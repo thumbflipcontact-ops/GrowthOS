@@ -15,13 +15,13 @@ from datetime import UTC, datetime
 
 import structlog
 from arq import create_pool
-from arq.connections import RedisSettings
 
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.logging import configure_logging
 from app.core.migration_check import verify_database_is_migrated
 from app.core.observability import init_error_tracking
+from app.core.redis import build_redis_settings
 from app.core.scheduler import Scheduler
 from app.models.agent import AgentConfig
 
@@ -42,7 +42,7 @@ async def main() -> None:
     )
     await verify_database_is_migrated(engine)
     session_factory = create_session_factory(engine)
-    redis_pool = await create_pool(RedisSettings.from_dsn(str(settings.redis_url)))
+    redis_pool = await create_pool(build_redis_settings(settings))
     scheduler = Scheduler(session_factory)
 
     async def enqueue(config: AgentConfig) -> None:

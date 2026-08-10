@@ -28,7 +28,6 @@ from datetime import UTC, datetime
 import structlog
 from agents._shared.base import AgentContext
 from arq import cron
-from arq.connections import RedisSettings
 from arq.worker import Retry
 
 from app.core.agent_registry import load_agent
@@ -44,6 +43,7 @@ from app.core.migration_check import verify_database_is_migrated
 from app.core.observability import capture_exception, init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
+from app.core.redis import build_redis_settings
 from app.core.subscriptions import SubscriptionRegistry, discover_agent_subscriptions
 from app.models.agent import AgentRun, AgentRunStatus
 from app.models.event import DomainEvent
@@ -228,4 +228,4 @@ class WorkerSettings:
     # Retries with exponential backoff on transient failure, same policy as
     # app/jobs/agent_runs.py — see docs/jobs/BACKGROUND_JOBS.md "Retries & idempotency".
     max_tries = 3
-    redis_settings = RedisSettings.from_dsn(str(get_settings().redis_url))
+    redis_settings = build_redis_settings(get_settings())

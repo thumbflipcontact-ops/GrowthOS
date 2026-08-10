@@ -12,7 +12,6 @@ import uuid
 from collections.abc import AsyncIterator
 
 from arq import ArqRedis, create_pool
-from arq.connections import RedisSettings
 from fastapi import Cookie, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +20,7 @@ from app.core.entitlements import require_org_entitled
 from app.core.errors import AuthenticationError, AuthorizationError, NotFoundError
 from app.core.plugin_catalog import PluginCatalog
 from app.core.rate_limit import RateLimiter
+from app.core.redis import build_redis_settings
 from app.core.security import SESSION_COOKIE_NAME, verify_session_token
 from app.models.identity import Organization, User
 from app.models.project import Project
@@ -80,7 +80,7 @@ async def get_arq_redis(request: Request) -> ArqRedis:
     pool = getattr(request.app.state, "arq_redis", None)
     if pool is None:
         settings = get_settings()
-        pool = await create_pool(RedisSettings.from_dsn(str(settings.redis_url)))
+        pool = await create_pool(build_redis_settings(settings))
         request.app.state.arq_redis = pool
     return pool
 

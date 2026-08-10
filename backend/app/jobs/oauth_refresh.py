@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import structlog
 from arq import cron
-from arq.connections import RedisSettings
 
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
@@ -19,6 +18,7 @@ from app.core.migration_check import verify_database_is_migrated
 from app.core.oauth.refresh import OAuthRefreshSweep
 from app.core.observability import init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
+from app.core.redis import build_redis_settings
 
 logger = structlog.get_logger()
 
@@ -72,4 +72,4 @@ class WorkerSettings:
     cron_jobs = [cron(refresh_oauth_tokens, minute=set(range(0, 60, 5)))]
     on_startup = startup
     on_shutdown = shutdown
-    redis_settings = RedisSettings.from_dsn(str(get_settings().redis_url))
+    redis_settings = build_redis_settings(get_settings())

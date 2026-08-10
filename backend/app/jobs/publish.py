@@ -36,7 +36,6 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from arq.connections import RedisSettings
 from arq.worker import Retry
 from plugins._shared.base import Publishable
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +50,7 @@ from app.core.migration_check import verify_database_is_migrated
 from app.core.observability import capture_exception, init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
+from app.core.redis import build_redis_settings
 from app.models.audit import AuditLog
 from app.models.content import ContentItem, ContentItemStatus, ContentPublishAttempt
 from app.models.project import Project
@@ -287,4 +287,4 @@ class WorkerSettings:
     on_startup = startup
     on_shutdown = shutdown
     max_tries = 3
-    redis_settings = RedisSettings.from_dsn(str(get_settings().redis_url))
+    redis_settings = build_redis_settings(get_settings())

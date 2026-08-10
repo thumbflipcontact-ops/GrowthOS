@@ -24,7 +24,6 @@ from datetime import UTC, datetime
 
 import structlog
 from agents._shared.base import AgentContext
-from arq.connections import RedisSettings
 from arq.worker import Retry
 
 from app.core.agent_registry import load_agent
@@ -39,6 +38,7 @@ from app.core.migration_check import verify_database_is_migrated
 from app.core.observability import capture_exception, capture_operator_alert, init_error_tracking
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
+from app.core.redis import build_redis_settings
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
 from app.models.project import Project
 from app.repositories.plugin_repository import PluginConnectionRepository
@@ -198,4 +198,4 @@ class WorkerSettings:
     # docs/jobs/BACKGROUND_JOBS.md "Retries & idempotency". Arq's default backoff is
     # exponential; max_tries mirrors the documented "retried up to 3 times."
     max_tries = 3
-    redis_settings = RedisSettings.from_dsn(str(get_settings().redis_url))
+    redis_settings = build_redis_settings(get_settings())
