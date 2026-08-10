@@ -20,6 +20,7 @@ export function TopNav() {
           <a href="/settings/plugins">Connections</a>
           <a href="/settings/agents">Agent settings</a>
           <a href="/approvals">Approvals</a>
+          <a href="/posted">Posted</a>
         </div>
         <button className="btn-secondary" onClick={handleLogout} type="button">
           Log out
