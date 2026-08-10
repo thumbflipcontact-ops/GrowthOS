@@ -25,6 +25,10 @@ const FEATURES = [
     body: "Approve a draft and it's ready to go: copy the reply text, jump straight to the original post on X, paste, and mark it posted. Takes seconds, but the actual posting is always yours.",
   },
   {
+    title: "A record of everywhere you've replied",
+    body: "Every reply you mark as posted is logged with a timestamp and a link back to the original post — so you always know where you've already commented, instead of losing track and re-searching the same conversations.",
+  },
+  {
     title: "Tiered founding pricing",
     body: "The earlier you sign up, the less you pay — and it's locked in for as long as you stay subscribed. No coupon codes, nothing to enter.",
   },

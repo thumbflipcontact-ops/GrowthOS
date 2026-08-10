@@ -137,7 +137,7 @@ export default function RootPage() {
             Log in
           </a>
         </div>
-        <p className="hero-note">Card required to start · cancel anytime before day 7, pay nothing</p>
+        <p className="hero-note">No card required · cancel anytime, nothing charged until you subscribe</p>
       </header>
 
       <section className="landing-section">
@@ -196,7 +196,7 @@ export default function RootPage() {
               ${currentPrice}
               <span>/month</span>
             </div>
-            <div className="muted">7-day free trial, then ${currentPrice}/month — your price, locked in for good</div>
+            <div className="muted">7-day free trial, no card required — then ${currentPrice}/month, locked in for good</div>
             <ul>
               <li>Unlimited approved connections on X</li>
               <li>AI-drafted replies via Claude, on your schedule</li>

@@ -36,10 +36,11 @@ export default function SignupPage() {
         name,
         password,
       });
-      // Registration signs the browser in directly (session cookie set on the response) —
-      // straight to billing next, since a trial-less, unentitled account can't do anything
-      // yet. See docs/billing/BILLING_ARCHITECTURE.md.
-      window.location.href = "/billing/start";
+      // Registration signs the browser in directly (session cookie set on the response), and
+      // the org is immediately entitled via the no-card trial (see
+      // docs/billing/BILLING_ARCHITECTURE.md) — no billing step required before the
+      // dashboard, unlike the old card-required flow.
+      window.location.href = "/dashboard";
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
       setSubmitting(false);
@@ -49,7 +50,7 @@ export default function SignupPage() {
   return (
     <div className="container">
       <h1>Start your free trial</h1>
-      <p className="subtitle">7 days free. A card is required to start the trial.</p>
+      <p className="subtitle">7 days free. No card required.</p>
       <div className="card">
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -77,7 +78,7 @@ export default function SignupPage() {
           <p className="muted">At least 12 characters.</p>
 
           <button type="submit" className="btn-block" disabled={submitting}>
-            {submitting ? "Creating account..." : "Create account & continue to billing"}
+            {submitting ? "Creating account..." : "Create account & start free trial"}
           </button>
         </form>
       </div>

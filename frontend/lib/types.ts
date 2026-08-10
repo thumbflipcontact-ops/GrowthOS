@@ -91,6 +91,7 @@ export interface SubscriptionStatus {
   is_entitled: boolean;
   trial_ends_at: string | null;
   current_period_end: string | null;
+  no_card_trial_ends_at: string | null;
 }
 
 export interface PricingTier {

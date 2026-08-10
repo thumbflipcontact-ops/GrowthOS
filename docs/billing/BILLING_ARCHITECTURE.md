@@ -58,14 +58,33 @@ Polar Product + a new tier entry in `app/core/pricing.py`'s `PRICING_TIERS`, not
 rearchitecture. Nothing in `BillingService`, the `subscriptions` table, or
 `app/core/entitlements.py` is plan-aware beyond product-id selection at checkout time.
 
-## Why card-required at signup, not a no-card trial
+## No-card 7-day trial
 
-Every plugin's API access is now genuinely metered upstream — X API v2 moved to pay-per-use
-pricing (see `plugins/twitter/README.md`) — so a free trial that lets an anonymous signup make
-unlimited plugin calls is a direct, uncapped cost exposure with no revenue behind it.
-Requiring a card at Checkout (Polar's Checkout Session, not a custom form — card data never
-touches this codebase) is the standard, low-effort mitigation: a trial-abuser still has to
-supply a real payment method.
+Signup itself starts a 7-day trial — no card, no Polar Checkout involved at all yet.
+`app/core/entitlements.py`'s `is_org_entitled` treats an org with no `subscriptions` row as
+entitled until `NO_CARD_TRIAL_DAYS` (7) after `Organization.created_at`, computed on the fly
+rather than stored on its own column — no migration, and it can never drift out of sync with
+when the org actually signed up. `no_card_trial_ends_at()` is the one place that math happens;
+`GET /orgs/{org_id}/billing/status` (`app/api/v1/billing.py`) calls the same function so the
+dashboard's trial countdown can never disagree with what actually gates access.
+
+Once that window elapses without a completed Checkout, the org drops out of
+`is_org_entitled` — same 402 (`SubscriptionRequiredError`) as `past_due`/`canceled`, and the
+dashboard prompts to subscribe. Checkout at that point (or any time, if someone wants to lock
+in a tier before spots run out — see "Tiered launch pricing" below) is `allow_trial=False`
+(`BillingService.create_checkout_session`): the free period already happened before Checkout
+ever ran, so a second, Polar-side trial stacked on top would double the free period. This is
+enforced at the checkout-request level specifically so it holds even if a Polar Product still
+has a trial period configured on its own (see Setup below) — belt-and-suspenders, not reliant
+on remembering a dashboard setting.
+
+This still leaves the real cost-exposure question card-required trials existed to solve: every
+plugin's API access is genuinely metered upstream (X API v2 is pay-per-use — see
+`plugins/twitter/README.md`), so a no-card trial is real, uncapped cost exposure with no
+revenue behind it until someone converts. Accepted for now in exchange for a lower-friction
+signup; a per-org usage cap during the no-card window specifically (tighter than the
+subscribed-tier limits) is the natural mitigation if abuse becomes a real problem — not built
+yet, see "What's still missing" below.
 
 ## Data model
 
@@ -87,17 +106,19 @@ silently drift apart.
 
 1. **Signup** (`POST /api/v1/auth/register`) creates the org + owner user — this is now a
    genuine public signup path (previously a solo-operator bootstrap, see
-   `app/services/auth_service.py`'s docstring), but creates no subscription. The org exists,
-   unentitled, until checkout completes.
-2. **Checkout** (`POST /api/v1/orgs/{org_id}/billing/checkout-session`) —
+   `app/services/auth_service.py`'s docstring), and creates no subscription — but the org is
+   immediately entitled via the no-card trial (see above), not gated on checkout the way it
+   used to be.
+2. **Checkout** (`POST /api/v1/orgs/{org_id}/billing/checkout-session`) — optional during the
+   no-card trial (locks in a tier early), required once it elapses.
    `BillingService.create_checkout_session` calls Polar's `checkouts.create_async`, passing
    `external_customer_id=str(org.id)`. This is the load-bearing detail: Polar links its own
    Customer record back to this org via that field, so every later webhook for this
    subscription carries it on `subscription.customer.external_id` — no separate "pending
    checkout" state needs tracking between session creation and webhook arrival.
-3. **Trial configuration lives on the Polar Product**, not passed per-checkout — set the
-   7-day trial when creating the Product in the Polar Dashboard (see "Setup" below);
-   `allow_trial=True` on the Checkout request just permits it to apply.
+3. **No Polar-side trial** — `allow_trial=False` on every Checkout request now (see above);
+   whatever trial duration a Polar Product still has configured on it never applies. Checkout
+   always charges immediately.
 4. **Webhook** (`POST /api/v1/billing/webhook`, one fixed URL, not org-scoped — the same
    reasoning `app/api/v1/oauth.py`'s callback route documents for OAuth providers) —
    `BillingService.handle_webhook_event` verifies the signature via `polar_sdk.webhooks.
@@ -108,8 +129,8 @@ silently drift apart.
    re-reading the Subscription's current state rather than branching per event type). Every
    other event type (`checkout.*`, `customer.*`, `order.*`, ...) is logged and ignored.
 5. **Entitlement gate** (`app/core/entitlements.py`) — `is_org_entitled`/`require_org_entitled`
-   read the `subscriptions` row directly; no Polar call, no `billing_service` import. Wired
-   into:
+   read the `subscriptions` row directly (falling back to the no-card trial window when there
+   isn't one yet — see above); no Polar call, no `billing_service` import. Wired into:
    - `POST .../plugin-connections` (`app/api/deps.py`'s `require_active_subscription`) — the
      act of connecting an account is where paid, metered API usage starts.
    - `POST .../agent-configs/{key}/runs/trigger` (same dependency) — a manual run spends real
@@ -134,9 +155,11 @@ silently drift apart.
    multi-tenant concept for *sellers* — not to be confused with this platform's own
    `organizations` table, which is for *customers*).
 2. Create **three** subscription Products, one per launch tier (see "Tiered launch pricing"
-   above) — $9, $19, and $29/month — each with the same 7-day trial configured on it. Note
-   their Product ids → `POLAR_PRODUCT_ID_TIER1` (founding, $9), `POLAR_PRODUCT_ID_TIER2`
-   (early, $19), `POLAR_PRODUCT_ID` (standard, $29).
+   above) — $9, $19, and $29/month. No trial needs configuring on them — the free 7 days now
+   happens entirely before Checkout (see "No-card 7-day trial" above), and `allow_trial=False`
+   on every Checkout request means a Product-level trial wouldn't apply even if left on from
+   before. Note their Product ids → `POLAR_PRODUCT_ID_TIER1` (founding, $9),
+   `POLAR_PRODUCT_ID_TIER2` (early, $19), `POLAR_PRODUCT_ID` (standard, $29).
 3. Get an access token (Polar Dashboard → Settings → API) → `POLAR_ACCESS_TOKEN`.
 4. Register a webhook endpoint pointing at
    `{OAUTH_CALLBACK_BASE_URL}/api/v1/billing/webhook`, subscribed at minimum to the
@@ -159,7 +182,10 @@ silently drift apart.
   — see `plugins/twitter/README.md`'s "Known limitation — process-local only"). There is no
   per-org daily/monthly cap tied to the subscription plan yet; the three launch tiers differ
   only in price, not feature set or usage limits — revisit once real usage data shows it's
-  needed.
+  needed. This matters more now that signup grants a full 7 days of access with no card on
+  file at all (see "No-card 7-day trial" above) — a tighter cap specifically during that
+  window, before any payment method exists, is the natural first mitigation if trial abuse
+  becomes a real cost problem.
 - **Tenant isolation audit.** `require_project_access`'s 403-vs-404 choice (see
   `app/api/deps.py`) was reasoned about for a single-operator system; now that strangers hold
   real accounts, it's a genuine question worth a dedicated pass, not changed reactively here —

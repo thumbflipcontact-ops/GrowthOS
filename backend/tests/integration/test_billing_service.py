@@ -158,7 +158,9 @@ async def test_create_checkout_session_returns_url(monkeypatch, db_session) -> N
     # No one has checked out yet — this org is the 1st, so it lands in the founding tier.
     assert call.products == ["prod_test_founding"]
     assert call.external_customer_id == str(org.id)
-    assert call.allow_trial is True
+    # The free period already happened via the no-card trial (see app/core/entitlements.py)
+    # before this checkout ever ran — Checkout must never grant a second, stacked trial.
+    assert call.allow_trial is False
 
 
 @pytest.mark.asyncio

@@ -83,13 +83,13 @@ class BillingService:
                     products=[product_id],
                     external_customer_id=str(org.id),
                     customer_email=user_email,
-                    # 7-day free trial, card required upfront — see docs/billing/
-                    # BILLING_ARCHITECTURE.md's "why card-required" (metered upstream API
-                    # costs make a no-card trial an open invitation to cost real money with
-                    # zero conversion odds). The 7-day duration itself is configured on the
-                    # Product in the Polar Dashboard, not here — allow_trial just permits it
-                    # to apply to this checkout.
-                    allow_trial=True,
+                    # The free 7 days already happened before this checkout ever ran — see
+                    # app/core/entitlements.py's no-card trial, which starts at signup with no
+                    # Polar involvement at all. allow_trial=False makes Checkout charge
+                    # immediately regardless of whether a trial is still configured on the
+                    # Polar Product itself (docs/billing/BILLING_ARCHITECTURE.md's Setup step
+                    # 2) — belt-and-suspenders against ever granting a second, stacked trial.
+                    allow_trial=False,
                     success_url=self.settings.billing_checkout_success_url,
                 )
             )

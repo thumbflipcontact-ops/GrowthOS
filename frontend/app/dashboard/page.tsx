@@ -42,12 +42,36 @@ function BillingCard({ orgId }: { orgId: string }) {
   if (!status) return <div className="card muted">Loading billing status...</div>;
 
   if (!status.has_subscription) {
+    if (status.is_entitled) {
+      // No-card trial still running — see docs/billing/BILLING_ARCHITECTURE.md. Subscribing
+      // is optional here (locks in your tier before spots fill up), never required.
+      return (
+        <div className="card">
+          <div className="row">
+            <h2 style={{ margin: 0 }}>Billing</h2>
+            <span className="badge badge-success">free trial</span>
+          </div>
+          {status.no_card_trial_ends_at && (
+            <p className="muted">Free trial ends {formatDate(status.no_card_trial_ends_at)}. No card required.</p>
+          )}
+          <a href="/billing/start" className="btn-secondary">
+            Subscribe now
+          </a>
+        </div>
+      );
+    }
     return (
       <div className="card">
-        <h2>Billing</h2>
-        <p className="muted">You haven&apos;t started your subscription yet.</p>
+        <div className="row">
+          <h2 style={{ margin: 0 }}>Billing</h2>
+          <span className="badge badge-warn">trial ended</span>
+        </div>
+        <p className="muted">
+          Your 7-day free trial has ended. Subscribe to keep using Threadly — connecting
+          accounts and drafting replies are paused until then.
+        </p>
         <a href="/billing/start" className="btn">
-          Start 7-day free trial
+          Subscribe now
         </a>
       </div>
     );

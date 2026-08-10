@@ -21,7 +21,11 @@ const FAQS = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes — 7 days, free. A valid payment card is required to start the trial, and you won't be charged if you cancel before day 7.",
+    a: "Yes — 7 days, free, no card required. Signing up starts the trial immediately; you can use Threadly fully during those 7 days without entering any payment details.",
+  },
+  {
+    q: "What happens after the 7 days?",
+    a: "You'll need to subscribe to keep using Threadly — connecting accounts and drafting replies pause until you do. Your account and any drafts you've already reviewed aren't deleted, and you can subscribe any time to pick back up.",
   },
   {
     q: "How does pricing work?",
@@ -29,7 +33,7 @@ const FAQS = [
   },
   {
     q: "Will my price ever go up?",
-    a: "No. Once you're subscribed, your price is fixed for that subscription. Later tiers filling up as more people sign up doesn't affect customers who already joined.",
+    a: "No. Once you subscribe, your price is fixed for that subscription — later tiers filling up as more people join doesn't affect you. One thing worth knowing: your tier is based on when you actually subscribe, not when you signed up, so if you want to guarantee a lower price, subscribing during your free trial (rather than waiting) locks it in before spots fill up.",
   },
   {
     q: "Can I cancel anytime?",

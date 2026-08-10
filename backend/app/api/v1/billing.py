@@ -12,11 +12,14 @@ authentication: a valid Polar signature over the raw request bytes.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_settings_dep, require_org_access
 from app.core.config import Settings
+from app.core.entitlements import no_card_trial_ends_at
 from app.models.identity import Organization, User
 from app.repositories.billing_repository import SubscriptionRepository
 from app.schemas.billing import (
@@ -67,12 +70,18 @@ async def get_subscription_status(
     keeps in sync, the same source app/core/entitlements.py gates on."""
     subscription = await SubscriptionRepository(session).get_by_org(org.id)
     if subscription is None:
+        # No Checkout completed yet — org is on its no-card trial (see
+        # app/core/entitlements.py), which the dashboard needs to render a countdown for
+        # (still running) or a "subscribe now" prompt (elapsed) — is_entitled distinguishes
+        # the two.
+        trial_ends_at = no_card_trial_ends_at(org.created_at)
         return SubscriptionStatusResponse(
             has_subscription=False,
             status=None,
-            is_entitled=False,
+            is_entitled=datetime.now(UTC) < trial_ends_at,
             trial_ends_at=None,
             current_period_end=None,
+            no_card_trial_ends_at=trial_ends_at,
         )
     return SubscriptionStatusResponse(
         has_subscription=True,
@@ -80,6 +89,7 @@ async def get_subscription_status(
         is_entitled=subscription.is_entitled,
         trial_ends_at=subscription.trial_ends_at,
         current_period_end=subscription.current_period_end,
+        no_card_trial_ends_at=None,
     )
 
 
