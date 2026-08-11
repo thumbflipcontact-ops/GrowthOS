@@ -18,6 +18,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/signup",
     "/blog",
     "/blog/manual-scrolling-x-doesnt-scale",
+    "/blog/why-ai-twitter-replies-sound-like-a-bot",
+    "/blog/twitter-mentions-that-convert-dont-tag-you",
   ];
   return routes.map((route) => ({
     url: `${BASE_URL}${route}`,
