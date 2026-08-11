@@ -31,9 +31,15 @@ pytestmark = pytest.mark.integration
 _EXPIRED_TRIAL_CREATED_AT = datetime.now(UTC) - timedelta(days=NO_CARD_TRIAL_DAYS + 1)
 
 
-async def _make_org(db_session, *, suffix: str | None = None, created_at: datetime | None = None) -> Organization:
+async def _make_org(
+    db_session,
+    *,
+    suffix: str | None = None,
+    created_at: datetime | None = None,
+    is_comped: bool = False,
+) -> Organization:
     suffix = suffix or uuid.uuid4().hex[:8]
-    org = Organization(name="Acme", slug=f"acme-entitle-{suffix}")
+    org = Organization(name="Acme", slug=f"acme-entitle-{suffix}", is_comped=is_comped)
     if created_at is not None:
         org.created_at = created_at
     return await OrganizationRepository(db_session).add(org)
@@ -86,6 +92,24 @@ async def test_org_with_past_due_canceled_or_incomplete_subscription_is_not_enti
     org = await _make_org(db_session)
     await _add_subscription(db_session, org.id, status)
     assert await is_org_entitled(db_session, org.id) is False
+
+
+@pytest.mark.asyncio
+async def test_comped_org_with_no_subscription_is_entitled(db_session) -> None:
+    org = await _make_org(db_session, is_comped=True, created_at=_EXPIRED_TRIAL_CREATED_AT)
+    assert await is_org_entitled(db_session, org.id) is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status", [SubscriptionStatus.PAST_DUE, SubscriptionStatus.CANCELED, SubscriptionStatus.INCOMPLETE]
+)
+async def test_comped_org_is_entitled_even_with_a_dead_subscription_row(db_session, status) -> None:
+    """The whole point of is_comped: it must survive whatever happens to a real Polar
+    subscription afterward — a later cancellation, a failed renewal charge, anything."""
+    org = await _make_org(db_session, is_comped=True)
+    await _add_subscription(db_session, org.id, status)
+    assert await is_org_entitled(db_session, org.id) is True
 
 
 @pytest.mark.asyncio

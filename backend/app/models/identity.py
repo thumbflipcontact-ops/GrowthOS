@@ -24,6 +24,14 @@ class Organization(UUIDPkMixin, CreatedAtMixin, Base):
 
     name: Mapped[str] = mapped_column(nullable=False)
     slug: Mapped[str] = mapped_column(nullable=False, unique=True)
+    # Manual, permanent entitlement override — see app/core/entitlements.py. Set directly in
+    # the database for comped accounts (no admin UI yet, since there's exactly one use case so
+    # far); once true, is_org_entitled() short-circuits to True regardless of what happens to
+    # any subscription row afterward, so it survives a real Polar subscription later expiring,
+    # failing, or getting canceled.
+    is_comped: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=text("false")
+    )
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="organization")
     projects: Mapped[list[Project]] = relationship(back_populates="organization")  # noqa: F821
