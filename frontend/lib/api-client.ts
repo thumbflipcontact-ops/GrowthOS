@@ -8,7 +8,7 @@
 
 import type {
   AgentConfig,
-  AgentRun,
+  AgentRunListResponse,
   AgentTriggerResponse,
   ApiErrorBody,
   CheckoutSessionResponse,
@@ -225,7 +225,19 @@ export const api = {
     });
   },
 
-  listAgentRuns(projectId: string, agentKey: string): Promise<AgentRun[]> {
-    return apiFetch(`/api/v1/projects/${projectId}/agent-configs/${agentKey}/runs`);
+  listAgentRuns(
+    projectId: string,
+    agentKey: string,
+    { limit, offset }: { limit: number; offset: number }
+  ): Promise<AgentRunListResponse> {
+    return apiFetch(
+      `/api/v1/projects/${projectId}/agent-configs/${agentKey}/runs?limit=${limit}&offset=${offset}`
+    );
+  },
+
+  deleteAgentRun(projectId: string, agentKey: string, runId: string): Promise<void> {
+    return apiFetch(`/api/v1/projects/${projectId}/agent-configs/${agentKey}/runs/${runId}`, {
+      method: "DELETE",
+    });
   },
 };

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.agent import AgentConfig, AgentRun
 from app.repositories.base import Repository
@@ -65,14 +65,28 @@ class AgentRunRepository(Repository[AgentRun]):
         return list(result.scalars().all())
 
     async def list_by_project_and_key(
-        self, project_id: uuid.UUID, agent_key: str, *, limit: int = 50
+        self, project_id: uuid.UUID, agent_key: str, *, limit: int = 50, offset: int = 0
     ) -> list[AgentRun]:
         """The run history behind `GET .../agent-configs/{agent_key}/runs` — see
-        docs/api/API_DESIGN.md."""
+        docs/api/API_DESIGN.md. Backed by idx_agent_runs_project_key_created (migration
+        d3e5f7a9b2c4) so this WHERE + ORDER BY + LIMIT/OFFSET stays an index scan rather than
+        a sequential scan as a project's run history grows."""
         result = await self.session.execute(
             select(AgentRun)
             .where(AgentRun.project_id == project_id, AgentRun.agent_key == agent_key)
-            .order_by(AgentRun.created_at.desc())
+            .order_by(AgentRun.created_at.desc(), AgentRun.id.desc())
             .limit(limit)
+            .offset(offset)
         )
         return list(result.scalars().all())
+
+    async def count_by_project_and_key(self, project_id: uuid.UUID, agent_key: str) -> int:
+        """Total row count for the same (project_id, agent_key) predicate
+        list_by_project_and_key filters on — lets the frontend compute total pages without
+        fetching every row. Same index as above serves this count."""
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(AgentRun)
+            .where(AgentRun.project_id == project_id, AgentRun.agent_key == agent_key)
+        )
+        return result.scalar_one()

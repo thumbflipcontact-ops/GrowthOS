@@ -189,7 +189,135 @@ async def test_list_runs_is_empty_before_any_trigger(
         f"/api/v1/projects/{project_id}/agent-configs/conversation_finder/runs"
     )
     assert r.status_code == 200
-    assert r.json() == []
+    assert r.json() == {"runs": [], "total": 0}
+
+
+async def _seed_runs(db_session, project_id: str, agent_config_id, count: int) -> list:
+    import uuid as uuid_module
+
+    from app.models.agent import AgentRun, AgentRunStatus
+
+    runs = []
+    for _ in range(count):
+        run = AgentRun(
+            agent_config_id=agent_config_id,
+            project_id=uuid_module.UUID(project_id),
+            agent_key="conversation_finder",
+            status=AgentRunStatus.SUCCEEDED,
+        )
+        db_session.add(run)
+        runs.append(run)
+    await db_session.flush()
+    return runs
+
+
+@pytest.mark.asyncio
+async def test_list_runs_paginates_with_limit_and_offset(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    from app.repositories.agent_repository import AgentConfigRepository
+
+    config = await AgentConfigRepository(db_session).get_or_create(
+        uuid.UUID(project_id), "conversation_finder"
+    )
+    await _seed_runs(db_session, project_id, config.id, 25)
+
+    page1 = await api_client.get(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder/runs",
+        params={"limit": 20, "offset": 0},
+    )
+    page2 = await api_client.get(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder/runs",
+        params={"limit": 20, "offset": 20},
+    )
+
+    assert page1.status_code == 200
+    body1 = page1.json()
+    assert body1["total"] == 25
+    assert len(body1["runs"]) == 20
+
+    body2 = page2.json()
+    assert body2["total"] == 25
+    assert len(body2["runs"]) == 5
+
+    # No overlap between pages.
+    ids1 = {r["id"] for r in body1["runs"]}
+    ids2 = {r["id"] for r in body2["runs"]}
+    assert ids1.isdisjoint(ids2)
+
+
+@pytest.mark.asyncio
+async def test_list_runs_rejects_a_page_size_over_100(
+    api_client: AsyncClient, project_id: str
+) -> None:
+    r = await api_client.get(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder/runs",
+        params={"limit": 101},
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_delete_run_removes_it_from_the_list(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    from app.repositories.agent_repository import AgentConfigRepository
+
+    config = await AgentConfigRepository(db_session).get_or_create(
+        uuid.UUID(project_id), "conversation_finder"
+    )
+    [run] = await _seed_runs(db_session, project_id, config.id, 1)
+
+    r = await api_client.delete(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder/runs/{run.id}"
+    )
+    assert r.status_code == 204
+
+    listed = await api_client.get(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder/runs"
+    )
+    assert listed.json() == {"runs": [], "total": 0}
+
+
+@pytest.mark.asyncio
+async def test_delete_run_404s_for_a_run_belonging_to_another_project(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    from app.models.identity import Organization
+    from app.models.project import Project
+    from app.repositories.agent_repository import AgentConfigRepository
+    from app.repositories.base import Repository
+    from app.repositories.organization_repository import OrganizationRepository
+
+    other_org = await OrganizationRepository(db_session).add(
+        Organization(name="Other Org", slug="other-org-agent-runs")
+    )
+
+    class _ProjectRepository(Repository[Project]):
+        model = Project
+
+    other_project = await _ProjectRepository(db_session).add(
+        Project(org_id=other_org.id, name="Other Project", slug="other-project-agent-runs")
+    )
+    other_config = await AgentConfigRepository(db_session).get_or_create(
+        other_project.id, "conversation_finder"
+    )
+    [other_run] = await _seed_runs(db_session, str(other_project.id), other_config.id, 1)
+
+    r = await api_client.delete(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder/runs/{other_run.id}"
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_run_404s_for_an_unknown_run_id(
+    api_client: AsyncClient, project_id: str
+) -> None:
+    r = await api_client.delete(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder/runs/{uuid.uuid4()}"
+    )
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio

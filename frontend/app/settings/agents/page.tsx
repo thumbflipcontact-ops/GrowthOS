@@ -22,6 +22,8 @@ function textToKeywords(text: string): string[] {
     .filter(Boolean);
 }
 
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
+
 function AgentSettingsCard({ projectId }: { projectId: string }) {
   const [keywordsText, setKeywordsText] = useState("");
   const [enabled, setEnabled] = useState(false);
@@ -31,10 +33,19 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [runsTotal, setRunsTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  async function loadRuns() {
+  async function loadRuns(atPage = page, size = pageSize) {
     try {
-      setRuns(await api.listAgentRuns(projectId, AGENT_KEY));
+      const res = await api.listAgentRuns(projectId, AGENT_KEY, {
+        limit: size,
+        offset: atPage * size,
+      });
+      setRuns(res.runs);
+      setRunsTotal(res.total);
     } catch {
       // Non-fatal — the config form still works without run history.
     }
@@ -52,9 +63,38 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load agent settings."))
       .finally(() => setLoading(false));
-    loadRuns();
+    loadRuns(0, pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size);
+    setPage(0);
+    loadRuns(0, size);
+  }
+
+  function handlePageChange(nextPage: number) {
+    setPage(nextPage);
+    loadRuns(nextPage, pageSize);
+  }
+
+  async function handleDeleteRun(runId: string) {
+    if (!window.confirm("Delete this run? This can't be undone.")) return;
+    setDeletingId(runId);
+    try {
+      await api.deleteAgentRun(projectId, AGENT_KEY, runId);
+      // If deleting the last row on a page beyond the first, step back a page instead of
+      // showing an empty page — same UX as most paginated tables.
+      const isLastRowOnPage = runs.length === 1 && page > 0;
+      const nextPage = isLastRowOnPage ? page - 1 : page;
+      setPage(nextPage);
+      await loadRuns(nextPage, pageSize);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete this run.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   async function saveConfig() {
     await api.upsertAgentConfig(projectId, AGENT_KEY, {
@@ -147,12 +187,13 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
         </div>
       </form>
 
-      {runs.length > 0 && (
+      {runsTotal > 0 && (
         <>
           <h2 style={{ marginTop: 28 }}>Recent runs</h2>
           <div className="stack">
             {runs.map((run) => {
               const details = (run.summary?.details ?? {}) as {
+                terms?: string[];
                 platforms_searched?: string[];
                 results_found?: number;
               };
@@ -167,12 +208,28 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
                 <div key={run.id} className="content-body" style={{ fontSize: 13, whiteSpace: "normal" }}>
                   <div className="row">
                     <span>{new Date(run.created_at).toLocaleString()}</span>
-                    <span
-                      className={`badge ${run.status === "failed" ? "badge-danger" : run.status === "succeeded" ? "badge-success" : "badge-muted"}`}
-                    >
-                      {run.status}
-                    </span>
+                    <div className="hstack" style={{ alignItems: "center", gap: 8 }}>
+                      <span
+                        className={`badge ${run.status === "failed" ? "badge-danger" : run.status === "succeeded" ? "badge-success" : "badge-muted"}`}
+                      >
+                        {run.status}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-danger"
+                        style={{ padding: "2px 8px", fontSize: 12 }}
+                        onClick={() => handleDeleteRun(run.id)}
+                        disabled={deletingId === run.id}
+                      >
+                        {deletingId === run.id ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
                   </div>
+                  {details.terms && details.terms.length > 0 && (
+                    <p className="muted" style={{ margin: "6px 0 0" }}>
+                      Searched for: {details.terms.join(", ")}
+                    </p>
+                  )}
                   {run.error && <p className="muted" style={{ margin: "6px 0 0" }}>{run.error}</p>}
                   {softErrors.map((msg, i) => (
                     <p key={i} className="error-banner" style={{ margin: "6px 0 0" }}>
@@ -189,6 +246,50 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
                 </div>
               );
             })}
+          </div>
+
+          <div className="row" style={{ marginTop: 16, alignItems: "center" }}>
+            <div className="hstack" style={{ alignItems: "center", gap: 8 }}>
+              <label htmlFor="page-size" className="muted" style={{ fontSize: 13 }}>
+                Show
+              </label>
+              <select
+                id="page-size"
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                style={{ width: "auto" }}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+              <span className="muted" style={{ fontSize: 13 }}>
+                per page · {runsTotal} total
+              </span>
+            </div>
+            <div className="hstack" style={{ gap: 8 }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page === 0}
+              >
+                Previous
+              </button>
+              <span className="muted" style={{ fontSize: 13, alignSelf: "center" }}>
+                Page {page + 1} of {Math.max(1, Math.ceil(runsTotal / pageSize))}
+              </span>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => handlePageChange(page + 1)}
+                disabled={(page + 1) * pageSize >= runsTotal}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </>
       )}

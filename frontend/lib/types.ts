@@ -147,3 +147,8 @@ export interface AgentRun {
   error: string | null;
   created_at: string;
 }
+
+export interface AgentRunListResponse {
+  runs: AgentRun[];
+  total: number;
+}

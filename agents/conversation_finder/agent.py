@@ -134,6 +134,7 @@ class ConversationFinderAgent:
                     )
 
         result.summary = {
+            "terms": terms,
             "platforms_searched": plugins_searched,
             "results_found": results_found,
             "unique_urls": len(seen_urls),

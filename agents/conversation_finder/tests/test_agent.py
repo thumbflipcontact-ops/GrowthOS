@@ -316,6 +316,7 @@ async def test_summary_reports_platforms_and_counts() -> None:
 
     result = await ConversationFinderAgent().run(ctx)
 
+    assert result.summary["terms"] == ["crawl budget"]
     assert result.summary["platforms_searched"] == ["dummy"]
     assert result.summary["results_found"] == 2
     assert result.summary["unique_urls"] == 2

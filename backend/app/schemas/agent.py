@@ -47,3 +47,11 @@ class AgentRunResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AgentRunListResponse(BaseModel):
+    """`total` is the full row count for this (project, agent_key) — independent of `limit`/
+    `offset` — so the frontend can compute page count without fetching every row."""
+
+    runs: list[AgentRunResponse]
+    total: int
