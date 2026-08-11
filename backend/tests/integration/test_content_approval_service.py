@@ -202,10 +202,32 @@ async def test_approve_rejects_an_already_approved_item(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_archive_rejects_an_already_published_item(db_session) -> None:
+async def test_archive_is_allowed_from_published(db_session) -> None:
+    """The frontend's "Posted" tab delete button — a user removing an item from their own
+    posted-history view. Archiving (not a hard delete) so the row and its AuditLog trail
+    survive. See _ARCHIVABLE_STATUSES' comment."""
     project = await _make_project(db_session)
     user = await _make_user(db_session)
     item = await _make_content_item(db_session, project, status=ContentItemStatus.PUBLISHED)
+    service = ContentApprovalService(db_session)
+
+    updated = await service.archive(
+        project_id=project.id,
+        item_id=item.id,
+        expected_version=item.version,
+        actor_user_id=user.id,
+        org_id=project.org_id,
+        reason="Removed from Posted tab.",
+    )
+
+    assert updated.status == ContentItemStatus.ARCHIVED
+
+
+@pytest.mark.asyncio
+async def test_archive_rejects_an_already_archived_item(db_session) -> None:
+    project = await _make_project(db_session)
+    user = await _make_user(db_session)
+    item = await _make_content_item(db_session, project, status=ContentItemStatus.ARCHIVED)
     service = ContentApprovalService(db_session)
 
     with pytest.raises(InvalidStateTransition):

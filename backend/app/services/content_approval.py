@@ -36,11 +36,16 @@ _REVIEWABLE_STATUSES = (ContentItemStatus.PENDING_REVIEW,)
 # either stuck waiting on a human to post it manually, or stuck with a publish_error a human
 # has decided isn't worth retrying, needs a way out of "approved" that isn't posting it —
 # discarding it is exactly what archive already means for a pre-decision item, just reached
-# from one status later.
+# from one status later. PUBLISHED was added the same way, one status later still: the
+# frontend's "Posted" tab (app/frontend/app/posted/page.tsx) needs a "delete" action for an
+# item the user no longer wants tracked there — archiving (not a hard delete) keeps the
+# AuditLog trail and the row itself intact, consistent with every other removal in this
+# codebase never being a physical DELETE.
 _ARCHIVABLE_STATUSES = (
     ContentItemStatus.DRAFT,
     ContentItemStatus.PENDING_REVIEW,
     ContentItemStatus.APPROVED,
+    ContentItemStatus.PUBLISHED,
 )
 # X's own platform policy (Feb 2026) blocks a programmatic reply/quote unless the target
 # post's author already @mentioned this account or quoted it first — every organically

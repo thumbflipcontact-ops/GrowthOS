@@ -37,6 +37,8 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(20);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   async function loadRuns(atPage = page, size = pageSize) {
     try {
@@ -46,9 +48,52 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       });
       setRuns(res.runs);
       setRunsTotal(res.total);
+      setSelectedRunIds(new Set()); // a fetched page never matches a stale selection
     } catch {
       // Non-fatal — the config form still works without run history.
     }
+  }
+
+  function toggleRunSelected(runId: string) {
+    setSelectedRunIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(runId)) next.delete(runId);
+      else next.add(runId);
+      return next;
+    });
+  }
+
+  function toggleSelectAllRuns() {
+    setSelectedRunIds((prev) =>
+      prev.size === runs.length ? new Set() : new Set(runs.map((r) => r.id))
+    );
+  }
+
+  async function handleDeleteSelectedRuns() {
+    if (selectedRunIds.size === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${selectedRunIds.size} run${selectedRunIds.size === 1 ? "" : "s"}? This can't be undone.`
+      )
+    ) {
+      return;
+    }
+    setBulkDeleting(true);
+    setError(null);
+    const results = await Promise.allSettled(
+      [...selectedRunIds].map((id) => api.deleteAgentRun(projectId, AGENT_KEY, id))
+    );
+    const failures = results.filter((r) => r.status === "rejected").length;
+    if (failures > 0) {
+      setError(`${failures} of ${selectedRunIds.size} runs couldn't be deleted. Refresh and try again.`);
+    }
+    // All selected rows on this page are gone — if this wasn't the first page and the whole
+    // page just emptied, step back rather than show a blank page (same rule as single-delete).
+    const isWholePageGone = selectedRunIds.size === runs.length && page > 0;
+    const nextPage = isWholePageGone ? page - 1 : page;
+    setPage(nextPage);
+    await loadRuns(nextPage, pageSize);
+    setBulkDeleting(false);
   }
 
   useEffect(() => {
@@ -190,6 +235,27 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       {runsTotal > 0 && (
         <>
           <h2 style={{ marginTop: 28 }}>Recent runs</h2>
+
+          <div className="row" style={{ marginBottom: 8, alignItems: "center" }}>
+            <label className="hstack muted" style={{ alignItems: "center", gap: 8, fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={selectedRunIds.size === runs.length}
+                onChange={toggleSelectAllRuns}
+                style={{ width: "auto" }}
+              />
+              Select all on this page
+            </label>
+            <button
+              type="button"
+              className="btn-danger"
+              onClick={handleDeleteSelectedRuns}
+              disabled={selectedRunIds.size === 0 || bulkDeleting}
+            >
+              {bulkDeleting ? "Deleting..." : `Delete selected (${selectedRunIds.size})`}
+            </button>
+          </div>
+
           <div className="stack">
             {runs.map((run) => {
               const details = (run.summary?.details ?? {}) as {
@@ -207,7 +273,16 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
               return (
                 <div key={run.id} className="content-body" style={{ fontSize: 13, whiteSpace: "normal" }}>
                   <div className="row">
-                    <span>{new Date(run.created_at).toLocaleString()}</span>
+                    <div className="hstack" style={{ alignItems: "center", gap: 10 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRunIds.has(run.id)}
+                        onChange={() => toggleRunSelected(run.id)}
+                        style={{ width: "auto" }}
+                        aria-label="Select this run"
+                      />
+                      <span>{new Date(run.created_at).toLocaleString()}</span>
+                    </div>
                     <div className="hstack" style={{ alignItems: "center", gap: 8 }}>
                       <span
                         className={`badge ${run.status === "failed" ? "badge-danger" : run.status === "succeeded" ? "badge-success" : "badge-muted"}`}
