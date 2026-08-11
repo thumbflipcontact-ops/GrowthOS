@@ -18,7 +18,10 @@ class SubscriptionStatusResponse(BaseModel):
     `has_subscription=False` is the normal state for an org that registered but hasn't
     completed Checkout yet, not an error — `no_card_trial_ends_at` is set whenever
     `has_subscription` is false (whether that trial is still running or already elapsed;
-    `is_entitled` distinguishes the two), and null once the org has an actual subscription."""
+    `is_entitled` distinguishes the two), and null once the org has an actual subscription.
+    `is_comped` is true only for a manually comped org (Organization.is_comped) — when true,
+    `is_entitled` is always true and the other fields are cleared, since a comped org's real
+    subscription row (if it has one) is irrelevant to what the dashboard should show it."""
 
     has_subscription: bool
     status: str | None
@@ -26,6 +29,7 @@ class SubscriptionStatusResponse(BaseModel):
     trial_ends_at: datetime | None
     current_period_end: datetime | None
     no_card_trial_ends_at: datetime | None
+    is_comped: bool = False
 
 
 class PricingTierResponse(BaseModel):

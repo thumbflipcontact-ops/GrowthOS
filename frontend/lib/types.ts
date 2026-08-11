@@ -92,6 +92,7 @@ export interface SubscriptionStatus {
   trial_ends_at: string | null;
   current_period_end: string | null;
   no_card_trial_ends_at: string | null;
+  is_comped: boolean;
 }
 
 export interface PricingTier {

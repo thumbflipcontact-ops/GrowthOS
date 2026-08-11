@@ -324,3 +324,31 @@ async def test_billing_status_for_trialing_org(api_client: AsyncClient, db_sessi
     assert body["status"] == "trialing"
     assert body["is_entitled"] is True
     assert body["no_card_trial_ends_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_billing_status_for_comped_org_hides_its_real_dead_subscription(
+    api_client: AsyncClient, db_session
+) -> None:
+    """A comped org must never show "subscribe now" / "trial ended" / "update your card" —
+    even when it has a real subscription row in a non-entitled status underneath, the
+    dashboard should render it as simply comped, not surface the dead subscription at all."""
+    project_id, org_id = await _register_and_create_project(api_client, db_session, suffix="st4")
+    await _add_subscription(db_session, uuid.UUID(org_id), SubscriptionStatus.CANCELED)
+    org = await OrganizationRepository(db_session).get(uuid.UUID(org_id))
+    assert org is not None
+    org.is_comped = True
+    await db_session.flush()
+
+    r = await api_client.get(f"/api/v1/orgs/{org_id}/billing/status")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["is_comped"] is True
+    assert body["is_entitled"] is True
+    assert body["has_subscription"] is False
+    assert body["status"] is None
+    assert body["no_card_trial_ends_at"] is None
+
+    r2 = await api_client.post(f"/api/v1/projects/{project_id}/agent-configs/dummy_agent/runs/trigger")
+    assert r2.status_code != 402

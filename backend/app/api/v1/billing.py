@@ -67,7 +67,23 @@ async def get_subscription_status(
 ) -> SubscriptionStatusResponse:
     """Read-only — what the dashboard renders (trial countdown, "subscribe now", etc.). Never
     talks to Polar; reads the local mirror app/services/billing_service.py's webhook handler
-    keeps in sync, the same source app/core/entitlements.py gates on."""
+    keeps in sync, the same source app/core/entitlements.py gates on.
+
+    Checked first, same as is_org_entitled: a comped org (Organization.is_comped) short-
+    circuits here too, so the dashboard never shows a "subscribe now" / "trial ended" /
+    "update your card" prompt to an account that's actually permanently entitled regardless
+    of what its real subscription row says."""
+    if org.is_comped:
+        return SubscriptionStatusResponse(
+            has_subscription=False,
+            status=None,
+            is_entitled=True,
+            trial_ends_at=None,
+            current_period_end=None,
+            no_card_trial_ends_at=None,
+            is_comped=True,
+        )
+
     subscription = await SubscriptionRepository(session).get_by_org(org.id)
     if subscription is None:
         # No Checkout completed yet — org is on its no-card trial (see

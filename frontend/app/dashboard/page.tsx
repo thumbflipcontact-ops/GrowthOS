@@ -41,6 +41,18 @@ function BillingCard({ orgId }: { orgId: string }) {
   if (error) return <div className="card error-banner">{error}</div>;
   if (!status) return <div className="card muted">Loading billing status...</div>;
 
+  if (status.is_comped) {
+    return (
+      <div className="card">
+        <div className="row">
+          <h2 style={{ margin: 0 }}>Billing</h2>
+          <span className="badge badge-success">complimentary</span>
+        </div>
+        <p className="muted">This account has free, unlimited access — you&apos;ll never be asked to subscribe or add a card.</p>
+      </div>
+    );
+  }
+
   if (!status.has_subscription) {
     if (status.is_entitled) {
       // No-card trial still running — see docs/billing/BILLING_ARCHITECTURE.md. Subscribing
