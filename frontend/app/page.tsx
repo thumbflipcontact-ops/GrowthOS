@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { LandingFooter } from "@/components/LandingFooter";
 import { LandingNav } from "@/components/LandingNav";
+import { PainPointTicker } from "@/components/PainPointTicker";
 import { api } from "@/lib/api-client";
 import type { PricingTier } from "@/lib/types";
 
@@ -114,6 +115,7 @@ export default function RootPage() {
   return (
     <>
       <LandingNav />
+      <PainPointTicker />
 
       <header className="hero">
         <span className="hero-badge">

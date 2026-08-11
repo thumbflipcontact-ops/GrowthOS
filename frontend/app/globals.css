@@ -886,3 +886,127 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* Pain-point ticker — a floating, auto-scrolling rail of real quotes from the daily
+   marketing/SEO research routine (see components/PainPointTicker.tsx). Fixed to the left edge
+   so it never competes with the hero's own layout; hidden below 1300px, since a fixed side
+   rail has nowhere to go once the hero content itself needs the width. */
+.pain-ticker {
+  position: fixed;
+  left: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 300px;
+  z-index: 5;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.72));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px 18px 6px;
+  box-shadow:
+    0 1px 2px rgba(20, 20, 30, 0.04),
+    0 20px 44px rgba(79, 70, 229, 0.1);
+}
+
+.pain-ticker::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 18px;
+  padding: 1px;
+  background: linear-gradient(160deg, var(--grad-1), transparent 40%, var(--grad-3) 130%);
+  opacity: 0.4;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.pain-ticker-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+
+.pain-ticker-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 100px;
+  background: linear-gradient(135deg, var(--grad-1), var(--grad-3));
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+  flex-shrink: 0;
+}
+
+.pain-ticker-window {
+  height: 420px;
+  overflow: hidden;
+  position: relative;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+}
+
+.pain-ticker-track {
+  animation: pain-ticker-scroll 42s linear infinite;
+}
+
+.pain-ticker:hover .pain-ticker-track {
+  animation-play-state: paused;
+}
+
+.pain-ticker-item {
+  padding: 14px 2px 20px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.pain-ticker-item p {
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+
+.pain-ticker-source {
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+@keyframes pain-ticker-scroll {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    /* Exactly half the track's height, since the item list is rendered twice — lands back on
+       an identical first frame, so the loop has no visible seam or jump. */
+    transform: translateY(-50%);
+  }
+}
+
+@media (max-width: 1300px) {
+  .pain-ticker {
+    display: none;
+  }
+}
