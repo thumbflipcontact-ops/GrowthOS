@@ -122,7 +122,7 @@ async def test_search_joins_multiple_terms_with_or_and_parens(monkeypatch) -> No
     plugin = create_plugin(_oauth_connection())
     await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["indexing", "crawl budget"]))
 
-    assert fake.search_calls[0][0] == "(indexing OR crawl budget) -is:retweet"
+    assert fake.search_calls[0][0] == '(indexing OR "crawl budget") -is:retweet'
 
 
 @pytest.mark.asyncio
@@ -134,6 +134,48 @@ async def test_search_single_term_has_no_parens(monkeypatch) -> None:
     await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["indexing"]))
 
     assert fake.search_calls[0][0] == "indexing -is:retweet"
+
+
+@pytest.mark.asyncio
+async def test_search_quotes_a_multi_word_term_as_an_exact_phrase(monkeypatch) -> None:
+    """Without quoting, X's query syntax treats space-separated words as an implicit AND of
+    separate words anywhere in the tweet — "no users" unquoted would match "no" and "users"
+    independently, not the phrase together. A single multi-word term needs no surrounding
+    parens (same as any other single-term search), just the quotes."""
+    fake = _FakeTwitterClient(search_response={"data": []})
+    _install_fake_client(monkeypatch, fake)
+
+    plugin = create_plugin(_oauth_connection())
+    await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["no users"]))
+
+    assert fake.search_calls[0][0] == '"no users" -is:retweet'
+
+
+@pytest.mark.asyncio
+async def test_search_quotes_a_long_phrase_term(monkeypatch) -> None:
+    fake = _FakeTwitterClient(search_response={"data": []})
+    _install_fake_client(monkeypatch, fake)
+
+    plugin = create_plugin(_oauth_connection())
+    await plugin.search(
+        PluginQuery(project_id=uuid.uuid4(), terms=["what's going on in the attic"])
+    )
+
+    assert fake.search_calls[0][0] == '"what\'s going on in the attic" -is:retweet'
+
+
+@pytest.mark.asyncio
+async def test_search_strips_embedded_double_quotes_from_a_term(monkeypatch) -> None:
+    """A stray `"` in user input must not be able to break out of the quoted phrase into raw
+    X query syntax — this plugin only ever sends plain keywords, never user-authored
+    operators, so the safe behavior is stripping it, not escaping or rejecting it."""
+    fake = _FakeTwitterClient(search_response={"data": []})
+    _install_fake_client(monkeypatch, fake)
+
+    plugin = create_plugin(_oauth_connection())
+    await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=['weird "quoted" term']))
+
+    assert fake.search_calls[0][0] == '"weird quoted term" -is:retweet'
 
 
 @pytest.mark.asyncio

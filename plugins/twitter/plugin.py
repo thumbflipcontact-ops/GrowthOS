@@ -103,7 +103,8 @@ def _build_client(connection: ResolvedConnection) -> TwitterClient | None:
 
 
 def _build_search_query(terms: list[str], config: TwitterConnectionConfig) -> str:
-    joined = " OR ".join(terms)
+    quoted = [_quote_term(term) for term in terms]
+    joined = " OR ".join(quoted)
     query = f"({joined})" if len(terms) > 1 else joined
     if config.exclude_retweets:
         query += " -is:retweet"
@@ -112,6 +113,17 @@ def _build_search_query(terms: list[str], config: TwitterConnectionConfig) -> st
     if config.lang:
         query += f" lang:{config.lang}"
     return query
+
+
+def _quote_term(term: str) -> str:
+    """X's query syntax treats space-separated words as an implicit AND of separate words,
+    not a phrase — "no users" unquoted matches any tweet containing both "no" and "users"
+    anywhere, in any order. Wrapping a multi-word term in quotes makes X match it as an
+    exact phrase instead. Any literal `"` in the term is stripped first so it can't break
+    out of the quoted phrase into raw query syntax — this plugin only ever sends plain
+    keywords, never passes through user-authored X query operators."""
+    cleaned = term.replace('"', "")
+    return f'"{cleaned}"' if " " in cleaned else cleaned
 
 
 def _created_at(tweet: dict) -> datetime:
