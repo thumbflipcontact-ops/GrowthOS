@@ -115,9 +115,11 @@ export default function RootPage() {
   return (
     <>
       <LandingNav />
-      <PainPointTicker />
 
-      <header className="hero">
+      <div className="hero-and-ticker">
+        <PainPointTicker />
+
+        <header className="hero">
         <span className="hero-badge">
           <span className="dot" /> Built for founders finding their first users
         </span>
@@ -140,7 +142,8 @@ export default function RootPage() {
           </a>
         </div>
         <p className="hero-note">No card required · cancel anytime, nothing charged until you subscribe</p>
-      </header>
+        </header>
+      </div>
 
       <section className="landing-section">
         <div className="section-heading">

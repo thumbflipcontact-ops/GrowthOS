@@ -888,11 +888,18 @@ button:disabled {
 }
 
 /* Pain-point ticker — a floating, auto-scrolling rail of real quotes from the daily
-   marketing/SEO research routine (see components/PainPointTicker.tsx). Fixed to the left edge
-   so it never competes with the hero's own layout; hidden below 1300px, since a fixed side
-   rail has nowhere to go once the hero content itself needs the width. */
+   marketing/SEO research routine (see components/PainPointTicker.tsx). Positioned absolute
+   within .hero-and-ticker (not fixed to the viewport) so it stays parked over the hero while
+   that section is in view, then scrolls away with the page like everything else once the user
+   scrolls past it — it must never follow the user down through later sections. Hidden below
+   1300px, since a side rail this wide has nowhere to go once the hero content itself needs
+   the width. */
+.hero-and-ticker {
+  position: relative;
+}
+
 .pain-ticker {
-  position: fixed;
+  position: absolute;
   left: 28px;
   top: 50%;
   transform: translateY(-50%);
