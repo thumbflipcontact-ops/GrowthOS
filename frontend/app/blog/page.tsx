@@ -12,6 +12,20 @@ export const metadata = {
 // matching page.tsx and be added to app/sitemap.ts.
 const POSTS = [
   {
+    href: "/blog/the-two-week-old-tweet-problem",
+    title: "The 2-Week-Old Tweet Problem: Why Manual X Search Misses Your Best Leads",
+    excerpt:
+      "By the time you remember to search X again, the intent signal has already expired. Here's why manual search structurally can't keep pace.",
+    date: "August 12, 2026",
+  },
+  {
+    href: "/blog/why-ai-twitter-automation-gets-accounts-banned",
+    title: "Why AI Twitter Automation Gets Accounts Banned (and How to Reply Safely)",
+    excerpt:
+      "X is actively restricting excessive automation — Tweet Hunter users report real account warnings and shadowbans tied to it. Here's the safe way around it.",
+    date: "August 12, 2026",
+  },
+  {
     href: "/blog/twitter-mentions-that-convert-dont-tag-you",
     title: "The X Mentions That Actually Convert Are the Ones That Don't Tag You",
     excerpt:
