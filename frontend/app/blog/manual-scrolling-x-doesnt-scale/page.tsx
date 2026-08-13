@@ -111,6 +111,15 @@ export default function ManualScrollingPost() {
           reject each one yourself — nothing is posted automatically, ever. It&apos;s the
           discovery and the first draft that get automated, not the judgment call.
         </p>
+        <p>
+          This matters even more once you notice how much of the relevant conversation never
+          mentions your handle at all — checking Notifications a few times a day misses it the
+          same way manual search does. See{" "}
+          <a href="/blog/twitter-mentions-that-convert-dont-tag-you">
+            the X mentions that actually convert are the ones that don&apos;t tag you
+          </a>{" "}
+          for why.
+        </p>
 
         <h2>Try it without the manual grind</h2>
         <p>

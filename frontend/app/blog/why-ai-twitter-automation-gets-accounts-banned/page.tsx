@@ -73,7 +73,9 @@ export default function AutomationBanRiskPost() {
           approving each reply before it posts doesn&apos;t just make the reply better — it
           changes the underlying behavior pattern from &quot;script posting unattended&quot; to
           &quot;person engaging in conversations,&quot; which is a different signal to whatever
-          is watching for abuse.
+          is watching for abuse. It&apos;s also why the replies stop{" "}
+          <a href="/blog/why-ai-twitter-replies-sound-like-a-bot">sounding like a bot</a> in the
+          first place — the same review step fixes both problems at once.
         </p>
 
         <h2>How Threadly&apos;s Approval Inbox works end-to-end</h2>

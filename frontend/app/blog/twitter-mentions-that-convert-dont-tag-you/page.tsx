@@ -64,7 +64,12 @@ export default function MentionsThatConvertPost() {
         <p>
           That&apos;s the real cost of manual, notification-based monitoring — not that you never
           find the right conversation, but that you find it too late to matter, and there&apos;s no
-          way to manually watch every relevant keyword around the clock.
+          way to manually watch every relevant keyword around the clock. It&apos;s the same
+          signal-to-noise problem that makes{" "}
+          <a href="/blog/manual-scrolling-x-doesnt-scale">
+            manually scrolling X for leads impossible to sustain
+          </a>{" "}
+          — mentions are just one more channel manual monitoring can&apos;t keep up with.
         </p>
 
         <h2>How a background agent catches what your Notifications tab can&apos;t</h2>

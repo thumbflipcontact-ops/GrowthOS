@@ -71,7 +71,12 @@ export default function AiRepliesSoundLikeABotPost() {
           replies posted faster than a human plausibly reads and writes. A tool that removes the
           human from the reply loop is, structurally, producing the same fingerprint spam
           detection is designed to catch — even when every individual reply is polite and
-          on-topic.
+          on-topic. For the mechanics of how that detection actually works, and what real account
+          warnings look like, see{" "}
+          <a href="/blog/why-ai-twitter-automation-gets-accounts-banned">
+            why AI Twitter automation gets accounts banned
+          </a>
+          .
         </p>
 
         <h2>How draft-then-approve keeps the speed without the risk</h2>
