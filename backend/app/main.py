@@ -17,6 +17,7 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.public.v1.router import public_api_router
 from app.api.v1.router import api_router
 from app.core.analytics import init_analytics
 from app.core.config import get_settings
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(api_router)
+    app.include_router(public_api_router)
     return app
 
 

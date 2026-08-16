@@ -55,6 +55,20 @@ _ARCHIVABLE_STATUSES = (
 # mark_published_manually — the only status this can start from.
 _MANUALLY_PUBLISHABLE_STATUSES = (ContentItemStatus.APPROVED,)
 
+# Public (non-underscore): both app/api/v1/content_items.py's approve route and
+# app/api/public/v1/content.py's public-API approve route need to decide whether to enqueue a
+# publish job, and need the same idempotency-keyed job id if they do — one source of truth
+# rather than two copies that could drift.
+MANUAL_PUBLISH_ONLY_PLATFORMS = {"twitter"}
+
+
+def publish_job_id(item_id: uuid.UUID) -> str:
+    """Deterministic Arq job id — a duplicate enqueue for the same content_item (a retried
+    API request, or approve followed by a manual retry-publish before the first attempt has
+    finished) is a no-op while one is already queued/running, per
+    docs/jobs/BACKGROUND_JOBS.md's idempotency-keyed publish jobs."""
+    return f"publish-{item_id}"
+
 
 class ContentApprovalService:
     def __init__(self, session: AsyncSession) -> None:

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     agent_configs,
+    api_keys,
     auth,
     billing,
     content_items,
@@ -26,3 +27,4 @@ api_router.include_router(oauth.router)
 api_router.include_router(agent_configs.router)
 api_router.include_router(knowledge_items.router)
 api_router.include_router(content_items.router)
+api_router.include_router(api_keys.router)

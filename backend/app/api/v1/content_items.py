@@ -41,27 +41,13 @@ from app.schemas.content import (
     PublishAttemptResponse,
     RejectContentItemRequest,
 )
-from app.services.content_approval import ContentApprovalService
+from app.services.content_approval import (
+    MANUAL_PUBLISH_ONLY_PLATFORMS,
+    ContentApprovalService,
+    publish_job_id,
+)
 
 router = APIRouter(prefix="/projects/{project_id}/content-items", tags=["content-items"])
-
-# X's own platform policy (Feb 2026) blocks a programmatic reply/quote unless the target
-# post's author already @mentioned this account or quoted it first — every organically
-# discovered post Conversation Finder finds fails that by construction, so an automated
-# publish attempt for a twitter item would always 403, permanently, regardless of retries.
-# Reproduced live: every attempt failed with "X returned 403: You can only reply to or quote
-# posts where you are mentioned or are the author." Approving a twitter item skips the
-# publish job entirely — the frontend instead shows the reply text and a link to the
-# original post for a human to post manually, then confirms it via mark-published below.
-_MANUAL_PUBLISH_ONLY_PLATFORMS = {"twitter"}
-
-
-def _publish_job_id(item_id: uuid.UUID) -> str:
-    """Deterministic Arq job id — a duplicate enqueue for the same content_item (a retried
-    API request, or approve followed by a manual retry-publish before the first attempt has
-    finished) is a no-op while one is already queued/running, per
-    docs/jobs/BACKGROUND_JOBS.md's idempotency-keyed publish jobs."""
-    return f"publish-{item_id}"
 
 
 async def _with_source_post(
@@ -131,11 +117,11 @@ async def approve_content_item(
         actor_user_id=current_user.id,
         org_id=project.org_id,
     )
-    if item.target_platform not in _MANUAL_PUBLISH_ONLY_PLATFORMS:
+    if item.target_platform not in MANUAL_PUBLISH_ONLY_PLATFORMS:
         await arq_redis.enqueue_job(
             "publish_content_item",
             str(item.id),
-            _job_id=_publish_job_id(item.id),
+            _job_id=publish_job_id(item.id),
             _queue_name="publish",
         )
     return item
@@ -223,7 +209,7 @@ async def retry_publish_content_item(
     await arq_redis.enqueue_job(
         "publish_content_item",
         str(item.id),
-        _job_id=_publish_job_id(item.id),
+        _job_id=publish_job_id(item.id),
         _queue_name="publish",
     )
     session.add(

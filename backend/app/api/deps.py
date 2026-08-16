@@ -10,21 +10,33 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 from arq import ArqRedis, create_pool
-from fastapi import Cookie, Depends, Request
+from fastapi import Cookie, Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.api_keys import hash_api_key, looks_like_api_key
 from app.core.config import Settings, get_settings
 from app.core.entitlements import require_org_entitled
-from app.core.errors import AuthenticationError, AuthorizationError, NotFoundError
+from app.core.errors import AuthenticationError, AuthorizationError, NotFoundError, TooManyRequests
 from app.core.plugin_catalog import PluginCatalog
 from app.core.rate_limit import RateLimiter
 from app.core.redis import build_redis_settings
 from app.core.security import SESSION_COOKIE_NAME, verify_session_token
+from app.models.api_key import ApiKey
 from app.models.identity import Organization, User
 from app.models.project import Project
+from app.repositories.api_key_repository import ApiKeyRepository
 from app.repositories.user_repository import MembershipRepository, UserRepository
+
+# Public-API rate limit — see app/api/public/v1/router.py, the only routes gated by this.
+# Keyed by api_key.id (authenticated traffic, not IP) inside require_api_key_project itself,
+# the same "one place to get this right" reasoning require_project_access's own docstring
+# gives for membership checks. In-process/single-replica only, same documented limitation as
+# every other RateLimiter instance in this file — see app/core/rate_limit.py's module
+# docstring for the Redis-backed migration path once that stops being true.
+_public_api_limiter = RateLimiter(capacity=120, refill_rate=2.0)  # 120 burst, 2/sec sustained
 
 # Process-local, in-memory login rate limiters — see app/core/rate_limit.py and
 # docs/reviews/PRODUCTION_READINESS_REVIEW.md S1. Module-level singletons (one process = one
@@ -170,3 +182,36 @@ async def require_active_subscription(
     `is_org_entitled` directly instead, since a job has no HTTP response to raise into."""
     await require_org_entitled(session, project.org_id)
     return project
+
+
+async def require_api_key_project(
+    session: AsyncSession = Depends(get_db),
+    authorization: str | None = Header(default=None),
+) -> tuple[Project, ApiKey]:
+    """The public-API counterpart to require_project_access — resolves `Authorization: Bearer
+    <key>` to (Project, ApiKey) instead of a session cookie to a User, and enforces the
+    public-API rate limit centrally so every /public/v1 route gets it for free. Raises
+    AuthenticationError (401) for anything wrong with the key (missing, malformed, unknown,
+    revoked) — never leaks which case it was, same "don't reveal which part was wrong"
+    posture app/services/auth_service.py's login already follows. Raises TooManyRequests
+    (429) if the key's bucket is empty."""
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise AuthenticationError("Missing or malformed Authorization header.")
+
+    token = authorization.removeprefix("Bearer ").strip()
+    if not looks_like_api_key(token):
+        raise AuthenticationError("Invalid API key.")
+
+    api_key = await ApiKeyRepository(session).get_by_hash(hash_api_key(token))
+    if api_key is None or api_key.revoked_at is not None:
+        raise AuthenticationError("Invalid API key.")
+
+    if not _public_api_limiter.try_acquire(str(api_key.id)):
+        raise TooManyRequests("Public API rate limit exceeded.")
+
+    project = await session.get(Project, api_key.project_id)
+    if project is None:
+        raise AuthenticationError("Invalid API key.")
+
+    api_key.last_used_at = datetime.now(UTC)
+    return project, api_key

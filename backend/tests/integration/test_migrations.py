@@ -28,6 +28,9 @@ EXPECTED_TABLES = {
     "competitor_observations",
     "daily_briefs",
     "subscriptions",
+    "api_keys",
+    "webhook_subscriptions",
+    "webhook_deliveries",
 }
 
 EXPECTED_ENUMS = {
@@ -40,6 +43,7 @@ EXPECTED_ENUMS = {
     "content_item_status",
     "contact_status",
     "subscription_status",
+    "webhook_delivery_status",
 }
 
 

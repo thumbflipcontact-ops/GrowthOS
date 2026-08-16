@@ -41,6 +41,9 @@ create table users (
     email           text not null unique,
     name            text not null,
     password_hash   text not null,
+    -- Set on both login and signup — see app/core/agent_lifecycle.py's 48h-inactivity sweep,
+    -- the only reader.
+    last_login_at   timestamptz,
     created_at      timestamptz not null default now()
 );
 
@@ -433,3 +436,65 @@ create table daily_briefs (
     created_at  timestamptz not null default now(),
     unique (project_id, brief_date)
 );
+
+-- ============================================================================
+-- Public API (n8n integration slice) — see app/api/deps.py's require_api_key_project,
+-- app/core/webhooks/dispatcher.py
+-- ============================================================================
+
+-- Project-scoped, not org-scoped — every existing route is already project-scoped and there
+-- is no "act across an org's projects" concept elsewhere in this API. key_hash is a SHA-256
+-- digest, never the raw token (see app/core/api_keys.py) — the raw token is shown to the
+-- caller exactly once, at creation.
+create table api_keys (
+    id                  uuid primary key default gen_random_uuid(),
+    project_id          uuid not null references projects(id) on delete cascade,
+    created_by_user_id  uuid references users(id) on delete set null,
+    name                text not null,
+    key_hash            text not null,
+    key_prefix          text not null,
+    last_used_at        timestamptz,
+    revoked_at          timestamptz,
+    created_at          timestamptz not null default now(),
+    unique (key_hash)
+);
+
+create index idx_api_keys_project on api_keys (project_id);
+
+-- Outbound webhook delivery. webhook_deliveries is deliberately independent of
+-- domain_events.dispatched_at (owned by the agent-subscription dispatcher, app/core/
+-- dispatcher.py) — a second, independent consumer of the same outbox tracks its own
+-- progress here, one row per (subscription, domain_event) pair.
+create table webhook_subscriptions (
+    id                      uuid primary key default gen_random_uuid(),
+    project_id              uuid not null references projects(id) on delete cascade,
+    created_by_api_key_id   uuid references api_keys(id) on delete set null,
+    target_url              text not null,
+    event_types             text[] not null default '{}',
+    secret                  text not null,
+    enabled                 boolean not null default true,
+    revoked_at              timestamptz,
+    created_at              timestamptz not null default now(),
+    updated_at              timestamptz not null default now()
+);
+
+create index idx_webhook_subscriptions_project on webhook_subscriptions (project_id);
+
+create type webhook_delivery_status as enum ('pending', 'success', 'failed');
+
+create table webhook_deliveries (
+    id                          uuid primary key default gen_random_uuid(),
+    webhook_subscription_id     uuid not null references webhook_subscriptions(id) on delete cascade,
+    domain_event_id             uuid not null references domain_events(id) on delete cascade,
+    status                      webhook_delivery_status not null default 'pending',
+    attempt_count               integer not null default 0,
+    next_attempt_at             timestamptz not null,
+    last_response_status        integer,
+    last_error                  text,
+    delivered_at                timestamptz,
+    created_at                  timestamptz not null default now(),
+    unique (webhook_subscription_id, domain_event_id)
+);
+
+create index idx_webhook_deliveries_pending on webhook_deliveries (next_attempt_at)
+    where status = 'pending';
