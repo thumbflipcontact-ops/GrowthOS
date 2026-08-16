@@ -1,0 +1,25 @@
+name: n8n node CI
+
+on:
+  pull_request:
+    paths:
+      - "integrations/n8n-nodes-threadly/**"
+  push:
+    branches: [main]
+    paths:
+      - "integrations/n8n-nodes-threadly/**"
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/n8n-nodes-threadly
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

@@ -5,8 +5,20 @@
 REST over JSON, versioned in the URL path (`/api/v1/...`). No GraphQL — the frontend's data
 needs are shaped closely enough around the domain model (projects → agents/knowledge/content)
 that REST resource design maps naturally, and GraphQL's flexibility isn't buying anything
-for a single-consumer (our own frontend) API. Revisit only if a public/partner API becomes a
-real requirement — see `docs/decisions/`.
+for a single-consumer (our own frontend) API. A public/partner API did become a real
+requirement (see "Public API" below) — it kept the same REST-over-JSON style rather than
+introducing a second API paradigm, since nothing about the public API's needs argued for
+GraphQL either.
+
+## Public API
+
+A second, separate router (`/public/v1/...`, `backend/app/api/public/v1/`) exists alongside
+the one described in the rest of this document, for external tools — starting with an n8n
+community node — to call. It is API-key-authed (`Authorization: Bearer <key>`, not the
+cookie session every other route in this doc uses) and deliberately narrower: five endpoints
+(list conversations/drafts/replies, approve/reject a draft) plus one webhook event,
+`conversation.discovered`. See `docs/api/PUBLIC_API.md` for the full reference — everything
+else in this document describes the frontend's own API only.
 
 ## Resource hierarchy
 
@@ -183,7 +195,8 @@ row and domain event in one transaction, exactly like a scheduled agent run — 
 
 ## What's intentionally not in v1
 
-- No public/partner API surface — this is the frontend's API, not a product in itself yet.
+- No org-scoped (multi-project) API keys for the public API — see `docs/api/PUBLIC_API.md`.
+  Every key is scoped to one project, matching this doc's own project-scoping convention.
 - No GraphQL, no gRPC.
 - No bulk-approve endpoint for content items — approval is deliberately per-item and
   per-click; batch approval would weaken the human-review guarantee the whole system exists

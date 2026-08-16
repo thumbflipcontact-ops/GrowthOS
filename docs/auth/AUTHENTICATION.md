@@ -92,4 +92,8 @@ each plugin's `README.md`.
 - Fine-grained per-resource permissions beyond `owner`/`member` (e.g. "can approve content
   but not manage plugin connections") — not needed until there's a second real user whose
   access should be limited.
-- API keys for any future public/partner API surface.
+
+API keys, built and shipped, are their own separate auth mechanism from everything else in
+this document — see `docs/api/PUBLIC_API.md` and `backend/app/api/deps.py`'s
+`require_api_key_project`. They authenticate `/public/v1/*` only; every route this document
+describes is still cookie-session-only.
