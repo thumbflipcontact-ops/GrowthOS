@@ -112,6 +112,15 @@ class Settings(BaseSettings):
     billing_checkout_success_url: str = Field(default="http://localhost:3000/billing/success")
     billing_portal_return_url: str = Field(default="http://localhost:3000/settings/billing")
 
+    # --- Transactional email (Resend) — see app/core/email/. Used today only by
+    # app/core/agent_lifecycle.py's cost-control sweep to notify a user their
+    # conversation_finder agent was auto-disabled. Optional at the type level, same "fail
+    # loudly at first use, not at import time" pattern as polar_access_token above — a
+    # deployment that hasn't set these up yet still boots; ResendClient raises
+    # EmailNotConfigured at first actual send attempt.
+    resend_api_key: SecretStr | None = Field(default=None)
+    resend_from_email: str | None = Field(default=None)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,

@@ -20,6 +20,7 @@ from app.api.deps import (
     require_project_access,
 )
 from app.core.agent_registry import load_agent
+from app.core.entitlements import require_org_entitled
 from app.core.errors import NotFoundError
 from app.models.agent import AgentConfig, AgentRun
 from app.models.audit import AuditLog
@@ -56,6 +57,14 @@ async def upsert_agent_config(
 ) -> AgentConfig:
     """Create-or-update — matches `agent_configs`' `unique(project_id, agent_key)` constraint,
     so this is safe to call repeatedly (e.g. re-saving a settings form)."""
+    if body.enabled:
+        # Turning an agent ON spends real, metered plugin API calls the same way triggering a
+        # run does (require_active_subscription above) — gate it the same way. Deliberately
+        # only on the enable path, not via the route's own dependency: turning an agent OFF, or
+        # editing its config while not entitled, must keep working unconditionally. See
+        # app/core/agent_lifecycle.py — without this check, its auto-disable-on-lapsed-trial
+        # sweep would be pointless, since the user could just flip it straight back on.
+        await require_org_entitled(session, project.org_id)
     return await AgentConfigService(session).upsert(
         project_id=project.id,
         org_id=project.org_id,

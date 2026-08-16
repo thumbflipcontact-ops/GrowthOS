@@ -327,6 +327,56 @@ async def test_billing_status_for_trialing_org(api_client: AsyncClient, db_sessi
 
 
 @pytest.mark.asyncio
+async def test_enabling_an_agent_config_is_blocked_once_no_card_trial_elapses(
+    api_client: AsyncClient, db_session
+) -> None:
+    """Closes the gap app/core/agent_lifecycle.py's auto-disable exists to guard: without this
+    check, a user auto-disabled for a lapsed trial could just flip conversation_finder straight
+    back on from Settings without ever subscribing."""
+    project_id, org_id = await _register_and_create_project(api_client, db_session, suffix="ac1")
+    await _expire_no_card_trial(db_session, org_id)
+
+    r = await api_client.put(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder",
+        json={"config": {}, "schedule_cron": None, "enabled": True},
+    )
+
+    assert r.status_code == 402
+    assert r.json()["error"]["code"] == "subscription_required"
+
+
+@pytest.mark.asyncio
+async def test_disabling_an_agent_config_still_works_once_no_card_trial_elapses(
+    api_client: AsyncClient, db_session
+) -> None:
+    """Turning an agent OFF, or editing its config while not entitled, must keep working
+    unconditionally — only the enable path is gated."""
+    project_id, org_id = await _register_and_create_project(api_client, db_session, suffix="ac2")
+    await _expire_no_card_trial(db_session, org_id)
+
+    r = await api_client.put(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder",
+        json={"config": {}, "schedule_cron": None, "enabled": False},
+    )
+
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_enabling_an_agent_config_succeeds_via_no_card_trial(
+    api_client: AsyncClient, db_session
+) -> None:
+    project_id, _org_id = await _register_and_create_project(api_client, db_session, suffix="ac3")
+
+    r = await api_client.put(
+        f"/api/v1/projects/{project_id}/agent-configs/conversation_finder",
+        json={"config": {}, "schedule_cron": None, "enabled": True},
+    )
+
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_billing_status_for_comped_org_hides_its_real_dead_subscription(
     api_client: AsyncClient, db_session
 ) -> None:

@@ -138,5 +138,22 @@ services:
       redis:
         condition: service_healthy
 
+  worker-agent-lifecycle:
+    # Hourly cost-control sweep — auto-disables conversation_finder for orgs that are inactive
+    # (no login in 48h) or no longer entitled (trial ended without subscribing, or a lapsed
+    # subscription). See app/jobs/agent_lifecycle.py and app/core/agent_lifecycle.py. Without
+    # this service, the job is written and tested but never actually runs, the same gap
+    # worker-oauth-refresh's own comment above describes.
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    command: ["arq", "app.jobs.agent_lifecycle.WorkerSettings"]
+    env_file: ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:

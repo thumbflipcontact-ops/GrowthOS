@@ -27,6 +27,17 @@ class AgentConfigRepository(Repository[AgentConfig]):
         )
         return list(result.scalars().all())
 
+    async def list_enabled_by_key(self, agent_key: str) -> list[AgentConfig]:
+        """What app/core/agent_lifecycle.py's cost-control sweep polls — every enabled
+        agent_config for a given agent_key, across every project, regardless of whether it has
+        a schedule (unlike list_enabled_with_schedule above)."""
+        result = await self.session.execute(
+            select(AgentConfig).where(
+                AgentConfig.enabled.is_(True), AgentConfig.agent_key == agent_key
+            )
+        )
+        return list(result.scalars().all())
+
     async def get_by_project_and_key(
         self, project_id: uuid.UUID, agent_key: str
     ) -> AgentConfig | None:

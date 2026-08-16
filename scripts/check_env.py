@@ -232,6 +232,23 @@ def _check_polar_billing_credentials(results: list[CheckResult], settings: objec
         )
 
 
+def _check_resend_credentials(results: list[CheckResult], settings: object) -> None:
+    api_key = getattr(settings, "resend_api_key", None)
+    from_email = getattr(settings, "resend_from_email", None)
+    if api_key and from_email:
+        results.append(CheckResult("Resend email credentials", "ok", "RESEND_* are set"))
+    else:
+        results.append(
+            CheckResult(
+                "Resend email credentials",
+                "warn",
+                "RESEND_API_KEY/RESEND_FROM_EMAIL not fully set",
+                "Not required until app/core/agent_lifecycle.py's sweep actually needs to "
+                "notify someone - see .env.example's Resend section.",
+            )
+        )
+
+
 def _check_anthropic_key(results: list[CheckResult], settings: object) -> None:
     value = settings.anthropic_api_key.get_secret_value()  # type: ignore[attr-defined]
     if not value or value in ("x", "test-anthropic-key") or value.startswith("test-"):
@@ -311,6 +328,7 @@ async def main() -> int:
     _check_plugin_catalog(results)
     _check_reddit_oauth_credentials(results)
     _check_polar_billing_credentials(results, settings)
+    _check_resend_credentials(results, settings)
     _check_anthropic_key(results, settings)
     if live:
         await _check_anthropic_live(results, settings)

@@ -13,6 +13,7 @@ per docs/security/SECURITY.md.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,7 +44,15 @@ class AuthService:
         self.session.add(organization)
         await self.session.flush()
 
-        user = User(email=email, name=name, password_hash=hash_password(password))
+        # A signup issues a session exactly like a login does — counts the same way for
+        # app/core/agent_lifecycle.py's 48h-inactivity check, so a user riding their signup
+        # session without ever hitting /auth/login again isn't falsely flagged as inactive.
+        user = User(
+            email=email,
+            name=name,
+            password_hash=hash_password(password),
+            last_login_at=datetime.now(UTC),
+        )
         self.session.add(user)
         await self.session.flush()
 
@@ -75,6 +84,7 @@ class AuthService:
         first_membership = result.scalars().first()
         org_id = first_membership.org_id if first_membership else None
 
+        user.last_login_at = datetime.now(UTC)
         await self._audit_login_attempt(
             org_id=org_id, actor_user_id=user.id, action="login.succeeded", target=email
         )

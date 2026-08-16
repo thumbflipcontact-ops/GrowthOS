@@ -79,11 +79,12 @@ class AgentConfigService:
         *,
         project_id: uuid.UUID,
         org_id: uuid.UUID,
-        actor_user_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
         agent_key: str,
         config: dict,
         schedule_cron: str | None,
         enabled: bool,
+        action_override: str | None = None,
     ) -> AgentConfig:
         agent = load_agent(agent_key)  # raises NotFoundError (404) for an unknown agent_key
         try:
@@ -118,12 +119,18 @@ class AgentConfigService:
             await self.session.refresh(record)
 
         # See CONTRIBUTING.md's plugin-connection precedent (app/services/plugin_connection.py):
-        # any project-scoped config a human writes through the API gets an audit_log row.
+        # any project-scoped config write gets an audit_log row — actor_user_id is None only
+        # for system-triggered writes (app/core/agent_lifecycle.py's cost-control sweep
+        # disabling an agent with no human actor), matching the AuditLog.actor_user_id=None
+        # precedent already used by app/jobs/publish.py for its own system-triggered rows.
+        # action_override lets that same caller record "agent_config.auto_disabled" instead of
+        # the default "agent_config.updated", without changing behavior for any other caller.
+        default_action = "agent_config.updated" if is_update else "agent_config.created"
         self.session.add(
             AuditLog(
                 org_id=org_id,
                 actor_user_id=actor_user_id,
-                action="agent_config.updated" if is_update else "agent_config.created",
+                action=action_override or default_action,
                 target=agent_key,
             )
         )

@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import enum
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, UniqueConstraint, text
+from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +44,11 @@ class User(UUIDPkMixin, CreatedAtMixin, Base):
     email: Mapped[str] = mapped_column(nullable=False, unique=True)
     name: Mapped[str] = mapped_column(nullable=False)
     password_hash: Mapped[str] = mapped_column(nullable=False)
+    # Set on both login (AuthService.authenticate) and signup (AuthService.register) — a new
+    # account issues a session exactly like a login does. Read by app/core/agent_lifecycle.py's
+    # inactivity sweep; nullable only because existing rows predate this column (migration
+    # e4f6a8b0c2d3 backfills them to created_at), never expected to be NULL going forward.
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="user")
 

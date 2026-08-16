@@ -96,6 +96,42 @@ async def test_register_login_me_logout_flow(api_client: AsyncClient) -> None:
     assert login.json()["id"] == user_id
 
 
+@pytest.mark.asyncio
+async def test_register_and_login_both_set_last_login_at(api_client: AsyncClient, db_session) -> None:
+    """See app/core/agent_lifecycle.py's 48h-inactivity sweep — both entry points that issue a
+    session must stamp User.last_login_at, or a user who never revisits /auth/login (riding
+    their long-lived signup session) would be falsely flagged as inactive."""
+    from app.repositories.user_repository import UserRepository
+
+    register = await api_client.post(
+        "/api/v1/auth/register",
+        json={
+            "org_name": "Acme",
+            "org_slug": "acme-last-login",
+            "email": "lastlogin@example.com",
+            "name": "Founder",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+    assert register.status_code == 201
+
+    user = await UserRepository(db_session).get_by_email("lastlogin@example.com")
+    assert user is not None
+    after_register = user.last_login_at
+    assert after_register is not None
+
+    await api_client.post("/api/v1/auth/logout")
+    login = await api_client.post(
+        "/api/v1/auth/login",
+        json={"email": "lastlogin@example.com", "password": "correct-horse-battery-staple"},
+    )
+    assert login.status_code == 200
+
+    await db_session.refresh(user)
+    assert user.last_login_at is not None
+    assert user.last_login_at >= after_register
+
+
 def _parse_set_cookie_attrs(set_cookie_header: str) -> dict[str, str | None]:
     attrs: dict[str, str | None] = {}
     for part in set_cookie_header.split(";")[1:]:
