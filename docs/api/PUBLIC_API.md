@@ -3,8 +3,10 @@
 A second, separate API surface from the one described in `docs/api/API_DESIGN.md` — that
 document covers the frontend's own API (`/api/v1/...`, cookie-session authed, one consumer:
 the Threadly dashboard). This one is for external tools, starting with the
-[n8n community node](https://github.com/thumbflipcontact-ops/GrowthOS/tree/main/integrations/n8n-nodes-threadly)
-(`n8n-nodes-threadly`).
+[n8n community node](https://github.com/thumbflipcontact-ops/n8n-nodes-threadly)
+(`n8n-nodes-threadly`) — a separate public repo (this one stays private, and npm provenance
+requires a public source repo), which duplicates the relevant parts of this reference in its
+own README.
 
 ## Auth
 
