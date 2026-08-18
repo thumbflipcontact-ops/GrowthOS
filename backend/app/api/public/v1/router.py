@@ -3,7 +3,7 @@ call — see app/api/deps.py's require_api_key_project. Deliberately a top-level
 (prefix `/public/v1`, registered directly in app/main.py as a sibling of the cookie-authed
 `api_router`), not nested under `/api/v1` — keeps this external contract visibly distinct from
 the dashboard API, which docs/api/API_DESIGN.md says can evolve freely since it has one
-consumer today.
+consumer today. A ClawHub skill for OpenClaw agents is another consumer of this same surface.
 """
 
 from __future__ import annotations

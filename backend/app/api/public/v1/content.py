@@ -3,7 +3,8 @@
 approve/reject actions. Every route here is a thin wrapper: the actual logic already lives in
 ContentApprovalService/ContentItemRepository/KnowledgeItemRepository — see
 app/api/v1/content_items.py and app/api/v1/knowledge_items.py, the cookie-authed dashboard
-routes wrapping the exact same underlying calls.
+routes wrapping the exact same underlying calls. The ClawHub skill for OpenClaw agents calls
+this same set of routes.
 
 Approve/reject via an API key is attributed to api_key.created_by_user_id, not left
 actor-less — content_items' review_fields_consistent CHECK constraint requires a real

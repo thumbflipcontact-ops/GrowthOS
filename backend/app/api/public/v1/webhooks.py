@@ -1,7 +1,10 @@
 """Public-API webhook subscription CRUD — an n8n trigger node registers/unregisters its own
 subscription when a workflow is activated/deactivated (n8n's standard
 webhookMethods.default.create/.delete pattern), so this must be API-key-authed like every
-other /public/v1 route, not dashboard-only. See app/services/webhook_subscription.py.
+other /public/v1 route, not dashboard-only. See app/services/webhook_subscription.py. Other
+/public/v1 consumers, such as an agent driven by the ClawHub skill, register subscriptions the
+same way, though typically only when they have a stable public endpoint of their own to
+receive deliveries on.
 """
 
 from __future__ import annotations

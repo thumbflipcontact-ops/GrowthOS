@@ -6,7 +6,10 @@ the Threadly dashboard). This one is for external tools, starting with the
 [n8n community node](https://github.com/thumbflipcontact-ops/n8n-nodes-threadly)
 (`n8n-nodes-threadly`) — a separate public repo (this one stays private, and npm provenance
 requires a public source repo), which duplicates the relevant parts of this reference in its
-own README.
+own README. A [ClawHub skill for OpenClaw agents](https://github.com/thumbflipcontact-ops/threadly-clawhub-skill)
+(`threadly`) is also available — likewise a separate public repo (ClawHub's publish provenance
+has the same public-source-repo requirement npm's does), documenting the same reference in its
+`SKILL.md`.
 
 ## Auth
 

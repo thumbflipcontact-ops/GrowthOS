@@ -440,6 +440,7 @@ create table daily_briefs (
 -- ============================================================================
 -- Public API (n8n integration slice) — see app/api/deps.py's require_api_key_project,
 -- app/core/webhooks/dispatcher.py
+-- Also used by the ClawHub skill for OpenClaw agents — same tables, same routes, same auth.
 -- ============================================================================
 
 -- Project-scoped, not org-scoped — every existing route is already project-scoped and there

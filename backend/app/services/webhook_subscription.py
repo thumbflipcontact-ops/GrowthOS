@@ -3,7 +3,8 @@ app/api/public/v1/webhooks.py (the only routes that call this — API-key-authed
 trigger node registers/unregisters its own subscription when a workflow is
 activated/deactivated, the same pattern n8n's webhookMethods.default.create/.delete expects)
 and app/core/webhooks/dispatcher.py (the only thing that reads `secret`/`target_url` again
-after creation).
+after creation). A ClawHub-skill-driven OpenClaw agent can register subscriptions through the
+same routes, given a stable public endpoint to receive deliveries on.
 """
 
 from __future__ import annotations

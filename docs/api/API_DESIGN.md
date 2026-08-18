@@ -18,7 +18,8 @@ community node — to call. It is API-key-authed (`Authorization: Bearer <key>`,
 cookie session every other route in this doc uses) and deliberately narrower: five endpoints
 (list conversations/drafts/replies, approve/reject a draft) plus one webhook event,
 `conversation.discovered`. See `docs/api/PUBLIC_API.md` for the full reference — everything
-else in this document describes the frontend's own API only.
+else in this document describes the frontend's own API only. A ClawHub skill for OpenClaw
+agents calls the same five-plus-webhook surface.
 
 ## Resource hierarchy
 
