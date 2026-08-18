@@ -12,6 +12,13 @@ export const metadata = {
 // matching page.tsx and be added to app/sitemap.ts.
 const POSTS = [
   {
+    href: "/blog/threadly-now-in-n8n-and-openclaw",
+    title: "Threadly Now Works Inside n8n and OpenClaw — Not Just Its Own Dashboard",
+    excerpt:
+      "Threadly's Approval Inbox now shows up wherever you already work: as an n8n community node, and as a ClawHub skill for OpenClaw agents.",
+    date: "August 18, 2026",
+  },
+  {
     href: "/blog/approval-before-posting-is-the-ai-tool-standard",
     title: "Why “Approve Before It Posts” Is Becoming the AI Tool Standard",
     excerpt:
