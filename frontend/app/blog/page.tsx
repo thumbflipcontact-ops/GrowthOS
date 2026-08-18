@@ -12,6 +12,13 @@ export const metadata = {
 // matching page.tsx and be added to app/sitemap.ts.
 const POSTS = [
   {
+    href: "/blog/approval-before-posting-is-the-ai-tool-standard",
+    title: "Why “Approve Before It Posts” Is Becoming the AI Tool Standard",
+    excerpt:
+      "Reddit reply tools and review-management platforms are marketing human approval as a feature, not an afterthought. Here's why that trend is happening across categories.",
+    date: "August 17, 2026",
+  },
+  {
     href: "/blog/the-two-week-old-tweet-problem",
     title: "The 2-Week-Old Tweet Problem: Why Manual X Search Misses Your Best Leads",
     excerpt:
