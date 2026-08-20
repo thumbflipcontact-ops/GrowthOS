@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { LandingFooter } from "@/components/LandingFooter";
 import { LandingNav } from "@/components/LandingNav";
 import { PainPointTicker } from "@/components/PainPointTicker";
@@ -84,6 +84,101 @@ const STEPS = [
 ];
 
 const PLATFORMS = [{ name: "X (Twitter)", soon: false }];
+
+// Official embed badge from tinystartups.com — each future launch site provides its own
+// distinct badge markup like this one, so entries here are whole components, not a shared
+// name/href template.
+function TinyStartupsBadge() {
+  const gradientId = useId();
+
+  return (
+    <a
+      href="https://www.tinystartups.com/startup/threadly"
+      target="_blank"
+      rel="noopener"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "14px",
+        padding: "14px 22px 14px 18px",
+        borderRadius: "14px",
+        textDecoration: "none",
+        fontFamily: "'Inter', system-ui, sans-serif",
+        background:
+          "linear-gradient(#fff,#fff) padding-box, linear-gradient(90deg,#3525E6,#D81FE0,#22B8F0) border-box",
+        border: "2px solid transparent",
+        color: "#0E0B1F",
+      }}
+    >
+      <svg width="56" height="56" viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id={gradientId} x1=".1" y1="0" x2=".9" y2="1">
+            <stop offset="0%" stopColor="#3525E6" />
+            <stop offset="55%" stopColor="#D81FE0" />
+            <stop offset="100%" stopColor="#22B8F0" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M50 6C52 32 68 48 94 50C68 52 52 68 50 94C48 68 32 52 6 50C32 48 48 32 50 6Z"
+          fill={`url(#${gradientId})`}
+        />
+      </svg>
+      <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+        <span
+          style={{
+            fontFamily: "monospace",
+            fontSize: "9px",
+            fontWeight: 600,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: "#6A6585",
+          }}
+        >
+          Launched on
+        </span>
+        <span style={{ fontSize: "22px", fontWeight: 800, letterSpacing: "-0.025em" }}>
+          Tiny Startups
+        </span>
+        <span style={{ fontSize: "11px", color: "#6A6585", marginTop: "4px" }}>
+          tinystartups.com
+        </span>
+      </span>
+    </a>
+  );
+}
+
+// Only real, confirmed placements go here — this renders as an "as featured on" trust signal,
+// so it must never claim coverage that doesn't exist yet.
+const FEATURED_ON = [{ key: "tinystartups", badge: <TinyStartupsBadge /> }];
+
+// Below this many real logos, scrolling would just show the same logo(s) repeating right next
+// to themselves — better to show them once, static, and switch on the moving belt once there
+// are enough distinct entries for it to actually read as a belt.
+const MIN_LOGOS_TO_SCROLL = 4;
+
+function FeaturedOnBelt() {
+  const scrolling = FEATURED_ON.length >= MIN_LOGOS_TO_SCROLL;
+  // Rendered twice back-to-back only when scrolling — same seamless-loop technique as
+  // PainPointTicker (render twice, animate 0% -> -50%), just horizontal instead of vertical.
+  const items = scrolling ? [...FEATURED_ON, ...FEATURED_ON] : FEATURED_ON;
+
+  return (
+    <section className="landing-section featured-on">
+      <div className="section-heading">
+        <h2>Featured on</h2>
+      </div>
+      <div className="featured-on-window">
+        <div className={`featured-on-track${scrolling ? "" : " static"}`}>
+          {items.map((item, i) => (
+            <div className="featured-on-slot" key={`${item.key}-${i}`}>
+              {item.badge}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export default function RootPage() {
   const [tiers, setTiers] = useState<PricingTier[] | null>(null);
@@ -214,6 +309,8 @@ export default function RootPage() {
           </div>
         </div>
       </section>
+
+      <FeaturedOnBelt />
 
       <LandingFooter />
     </>

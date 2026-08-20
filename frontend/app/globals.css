@@ -1017,3 +1017,52 @@ button:disabled {
     display: none;
   }
 }
+
+.featured-on-window {
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+}
+
+.featured-on-track {
+  display: flex;
+  width: max-content;
+  gap: 20px;
+  animation: featured-on-scroll 24s linear infinite;
+}
+
+.featured-on-window:hover .featured-on-track {
+  animation-play-state: paused;
+}
+
+/* Too few real logos to loop — show them once, centered, not moving. */
+.featured-on-track.static {
+  width: 100%;
+  justify-content: center;
+  animation: none;
+}
+
+/* Each badge fully owns its own visual styling (they're official embeds from each launch
+   site, and look different from one another) — this is layout only. */
+.featured-on-slot {
+  display: flex;
+  flex-shrink: 0;
+}
+
+@keyframes featured-on-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    /* Exactly half the track's width, since the item list is rendered twice — lands back on
+       an identical first frame, so the loop has no visible seam or jump. */
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .featured-on-track {
+    animation: none;
+  }
+}
