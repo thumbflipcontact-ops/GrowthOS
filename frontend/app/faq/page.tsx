@@ -12,6 +12,10 @@ const FAQS = [
     a: "It watches X for conversations that match your keywords and ICP, drafts a reply with Claude, and puts it in your Approval Inbox. Nothing goes out until you personally approve it.",
   },
   {
+    q: "What keywords should I use?",
+    a: "Specific phrases, not broad topics. \"Struggling to rank\" or \"nobody's finding my blog\" surfaces people actually complaining about your problem — a single word like \"SEO\" mostly catches noise, since almost anyone can mention a topic in passing. The more your keywords sound like something a frustrated person would actually type, the better the matches.",
+  },
+  {
     q: "Does Threadly post to X automatically?",
     a: "No. Every draft requires your explicit approval — this is a permanent feature of the product, not something available only in an early version. Once you approve a draft, you copy the reply and post it yourself in one click; Threadly never posts on your behalf.",
   },

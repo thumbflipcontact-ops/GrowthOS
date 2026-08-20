@@ -71,7 +71,7 @@ function TierBar({ tiers }: { tiers: PricingTier[] }) {
 const STEPS = [
   {
     title: "Tell it what you're building",
-    body: "Give Threadly your keywords and ICP once — the pain points, questions, and phrases your future users are already posting.",
+    body: "Give Threadly your keywords and ICP once — specific phrases people actually say, like \"struggling to rank,\" not broad topics like \"SEO.\" That's what tells it which conversations are worth a reply.",
   },
   {
     title: "It watches, so you don't have to",
