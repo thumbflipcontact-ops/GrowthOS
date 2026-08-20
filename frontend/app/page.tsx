@@ -124,18 +124,6 @@ function TinyStartupsBadge() {
         />
       </svg>
       <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
-        <span
-          style={{
-            fontFamily: "monospace",
-            fontSize: "9px",
-            fontWeight: 600,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: "#6A6585",
-          }}
-        >
-          Launched on
-        </span>
         <span style={{ fontSize: "22px", fontWeight: 800, letterSpacing: "-0.025em" }}>
           Tiny Startups
         </span>
