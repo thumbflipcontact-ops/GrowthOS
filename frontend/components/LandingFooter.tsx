@@ -33,6 +33,10 @@ export function LandingFooter() {
         <a href="/privacy">Privacy Policy</a>
         <a href="/terms">Terms &amp; Conditions</a>
       </div>
+      <div className="footer-partner">
+        Try <a href="https://hotspot.ink" target="_blank" rel="noopener noreferrer">hotspot.ink</a> to
+        boost visibility of your product.
+      </div>
       <div className="footer-copyright">© 2026 Threadly. All rights reserved.</div>
     </footer>
   );

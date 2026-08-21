@@ -153,7 +153,7 @@ function FeaturedOnBelt() {
   return (
     <section className="landing-section featured-on">
       <div className="section-heading">
-        <h2>Featured on</h2>
+        <h2>To be featured on</h2>
       </div>
       <div className="featured-on-window">
         <div className={`featured-on-track${scrolling ? "" : " static"}`}>

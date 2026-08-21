@@ -871,6 +871,17 @@ button:disabled {
   color: var(--text-muted);
 }
 
+.footer-partner {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.footer-partner a {
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
 .footer-copyright {
   margin-top: 14px;
   font-size: 12px;
