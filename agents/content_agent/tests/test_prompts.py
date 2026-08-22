@@ -96,3 +96,15 @@ def test_parse_draft_reply_raises_on_out_of_range_confidence() -> None:
         parse_draft_reply(
             json.dumps({"reply": "hi", "confidence": 5.0, "reasoning": "r", "evidence": []})
         )
+
+
+def test_parse_draft_reply_parses_a_model_decline_instead_of_raising() -> None:
+    # The model's own way of saying "nothing worth replying to" — see
+    # agents/content_agent/agent.py's run(), which turns this into a clean skip rather than
+    # treating it as a parsing failure.
+    text = json.dumps(
+        {"reply": "", "confidence": 0.0, "reasoning": "Not relevant to the project.", "evidence": []}
+    )
+    draft = parse_draft_reply(text)
+    assert draft.reply == ""
+    assert draft.confidence == 0.0

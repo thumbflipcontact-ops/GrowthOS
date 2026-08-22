@@ -12,7 +12,11 @@ from pydantic import BaseModel, Field, ValidationError
 
 
 class DraftReplyExtraction(BaseModel):
-    reply: str = Field(min_length=1)
+    # No min_length on reply: the model legitimately returns "" (paired with confidence 0.0)
+    # when it declines to draft at all — see agents/content_agent/agent.py's run(), which
+    # treats that combination as a clean skip, not a parsing failure. Whether an empty reply
+    # is usable is a business-logic question for the caller, not a parsing-validity one.
+    reply: str
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str
     evidence: list[str] = Field(default_factory=list)

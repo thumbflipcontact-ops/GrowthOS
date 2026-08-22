@@ -192,6 +192,23 @@ async def test_below_min_confidence_is_skipped() -> None:
 
 
 @pytest.mark.asyncio
+async def test_model_decline_is_skipped_not_a_parsing_error() -> None:
+    # The model returning reply="" + confidence=0.0 is it declining to draft (e.g. the
+    # knowledge_item's content isn't actually relevant) — a clean skip, same outcome as
+    # test_below_min_confidence_is_skipped, not a DraftParsingError.
+    item = _knowledge_item()
+    ctx, content, llm = _ctx(item=item, llm_response_text=_draft_json(reply="", confidence=0.0))
+
+    result = await ContentAgent().run(ctx)
+
+    assert result.content_items_created == 0
+    assert result.errors
+    assert "declined" in result.errors[0].lower()
+    assert content.created == []
+    assert len(llm.calls) == 1  # unlike below-min-confidence, this only resolves after asking
+
+
+@pytest.mark.asyncio
 async def test_no_grounding_text_is_skipped() -> None:
     item = _knowledge_item(title=None, body_excerpt=None)
     ctx, content, llm = _ctx(item=item)

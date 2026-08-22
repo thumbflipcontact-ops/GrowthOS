@@ -113,6 +113,15 @@ class ContentAgent:
             result.errors.append(str(exc))
             return result
 
+        # The model's own way of declining to draft at all (distinct from a low-but-nonzero
+        # confidence draft, which is still created — the human approval step is what filters
+        # those, not this agent). Not an error: same "nothing to draft" outcome as the
+        # min_confidence_for_reply check above, just decided by the model instead of the
+        # threshold.
+        if not draft.reply.strip() and draft.confidence <= 0:
+            result.errors.append(f"Model declined to draft a reply: {draft.reasoning}")
+            return result
+
         saved = await ctx.content.create_draft(
             project_id=ctx.project.id,
             type=content_type,
