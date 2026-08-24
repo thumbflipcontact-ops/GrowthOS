@@ -14,6 +14,8 @@ from app.api.deps import (
     get_db,
     get_login_account_limiter,
     get_login_ip_limiter,
+    get_password_reset_account_limiter,
+    get_password_reset_ip_limiter,
     get_settings_dep,
 )
 from app.core.config import Settings
@@ -28,8 +30,16 @@ from app.core.security import (
 )
 from app.models.identity import Organization, User
 from app.repositories.user_repository import MembershipRepository
-from app.schemas.auth import LoginRequest, OrganizationResponse, RegisterRequest, UserResponse
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    OrganizationResponse,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UserResponse,
+)
 from app.services.auth_service import AuthService
+from app.services.password_reset_service import PasswordResetService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -122,6 +132,42 @@ async def login(
 
     service = AuthService(session)
     user = await service.authenticate(email=body.email, password=body.password)
+    _set_session_cookies(response, str(user.id), settings)
+    return user
+
+
+@router.post("/forgot-password", status_code=204, response_model=None)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+    ip_limiter: RateLimiter = Depends(get_password_reset_ip_limiter),
+    account_limiter: RateLimiter = Depends(get_password_reset_account_limiter),
+) -> None:
+    # Same rate-limit-before-any-work shape as /login, and the same non-enumeration rule as
+    # AuthService.authenticate(): this always returns 204, whether or not the email has an
+    # account, so the response itself can never be used to check who's registered.
+    client_ip = request.client.host if request.client else "unknown"
+    if not ip_limiter.try_acquire(f"ip:{client_ip}"):
+        raise TooManyRequests("Too many attempts from this address. Try again shortly.")
+    if not account_limiter.try_acquire(f"account:{body.email}"):
+        raise TooManyRequests("Too many attempts for this account. Try again shortly.")
+
+    service = PasswordResetService(session, settings)
+    await service.request_reset(email=body.email)
+
+
+@router.post("/reset-password", response_model=UserResponse)
+async def reset_password(
+    body: ResetPasswordRequest,
+    response: Response,
+    session: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> User:
+    service = PasswordResetService(session, settings)
+    user = await service.reset_password(token=body.token, new_password=body.new_password)
+    # Same as register: a freshly-set password shouldn't require a second trip through login.
     _set_session_cookies(response, str(user.id), settings)
     return user
 

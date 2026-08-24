@@ -16,6 +16,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/privacy",
     "/login",
     "/signup",
+    "/forgot-password",
     "/blog",
     "/blog/threadly-now-in-n8n-and-openclaw",
     "/blog/approval-before-posting-is-the-ai-tool-standard",

@@ -84,6 +84,20 @@ export const api = {
     return apiFetch("/api/v1/auth/logout", { method: "POST" });
   },
 
+  requestPasswordReset(email: string): Promise<void> {
+    return apiFetch("/api/v1/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  resetPassword(token: string, newPassword: string): Promise<User> {
+    return apiFetch("/api/v1/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+  },
+
   me(): Promise<User> {
     return apiFetch("/api/v1/auth/me");
   },

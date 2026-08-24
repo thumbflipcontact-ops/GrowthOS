@@ -47,6 +47,20 @@ create table users (
     created_at      timestamptz not null default now()
 );
 
+-- token_hash is a SHA-256 digest (same scheme as api_keys.key_hash, see
+-- app/core/api_keys.py's hash_api_key, reused directly rather than duplicated) — the raw
+-- token is emailed to the user exactly once and never persisted. used_at nullable = still
+-- valid, same idiom as api_keys.revoked_at.
+create table password_reset_tokens (
+    id          uuid primary key default gen_random_uuid(),
+    user_id     uuid not null references users(id) on delete cascade,
+    token_hash  text not null,
+    expires_at  timestamptz not null,
+    used_at     timestamptz,
+    created_at  timestamptz not null default now(),
+    unique (token_hash)
+);
+
 create type membership_role as enum ('owner', 'member');
 
 create table memberships (

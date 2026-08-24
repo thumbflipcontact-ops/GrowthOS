@@ -11,6 +11,7 @@ pytestmark = pytest.mark.integration
 EXPECTED_TABLES = {
     "organizations",
     "users",
+    "password_reset_tokens",
     "memberships",
     "projects",
     "plugin_catalog",
