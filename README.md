@@ -129,3 +129,11 @@ cd backend && .venv/bin/python -m pytest -p no:cov        # (macOS/Linux)
 
 See `scripts/README.md` for what each script does and `docs/deployment/DEPLOYMENT.md` for
 environment-by-environment detail.
+
+## License
+
+AGPL-3.0 — see [LICENSE](LICENSE). Chosen over a permissive license specifically because
+GrowthOS is offered as a hosted service: AGPL's network-use clause means anyone who runs a
+modified version of GrowthOS as a service for others must also make that modified source
+available, closing the "fork it, host it, undercut the original" loophole that a permissive
+license leaves open.
