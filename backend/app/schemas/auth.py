@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import uuid
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+# Lowercased here, at the schema boundary, so every downstream consumer (AuthService,
+# UserRepository, the stored User.email column) always sees the same casing — rather than
+# each call site needing to remember to normalize it independently. Without this, an account
+# registered as "Name@Example.com" could never log in typing "name@example.com": User.email
+# equality in UserRepository.get_by_email is a case-sensitive Postgres `=`, so a login attempt
+# with different casing than what was typed at signup silently fails as "no such user."
+
+
+def _normalize_email(value: str) -> str:
+    return value.strip().lower()
 
 
 class RegisterRequest(BaseModel):
@@ -12,10 +23,14 @@ class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     password: str = Field(min_length=12, max_length=200)
 
+    _normalize_email = field_validator("email", mode="after")(_normalize_email)
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+    _normalize_email = field_validator("email", mode="after")(_normalize_email)
 
 
 class UserResponse(BaseModel):

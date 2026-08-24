@@ -97,6 +97,51 @@ async def test_register_login_me_logout_flow(api_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_login_with_different_email_casing_than_registered(api_client: AsyncClient) -> None:
+    # Real bug: a user who registered as "Name@Example.com" could never log back in typing
+    # "name@example.com" — User.email equality is a case-sensitive Postgres `=`. Fixed by
+    # normalizing email to lowercase at the RegisterRequest/LoginRequest schema boundary.
+    register = await api_client.post(
+        "/api/v1/auth/register",
+        json={
+            "org_name": "Acme",
+            "org_slug": "acme-case-casing",
+            "email": "Casing.Test@Example.com",
+            "name": "Founder",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+    assert register.status_code == 201
+    user_id = register.json()["id"]
+
+    login = await api_client.post(
+        "/api/v1/auth/login",
+        json={"email": "casing.test@example.com", "password": "correct-horse-battery-staple"},
+    )
+    assert login.status_code == 200
+    assert login.json()["id"] == user_id
+
+
+@pytest.mark.asyncio
+async def test_register_rejects_duplicate_email_regardless_of_casing(api_client: AsyncClient) -> None:
+    payload = {
+        "org_name": "Acme",
+        "org_slug": "acme-dup-casing-1",
+        "email": "Dup.Casing@Example.com",
+        "name": "Founder",
+        "password": "correct-horse-battery-staple",
+    }
+    first = await api_client.post("/api/v1/auth/register", json=payload)
+    assert first.status_code == 201
+
+    payload["org_slug"] = "acme-dup-casing-2"
+    payload["email"] = "dup.casing@example.com"
+    second = await api_client.post("/api/v1/auth/register", json=payload)
+    assert second.status_code == 422
+    assert second.json()["error"]["code"] == "validation_error"
+
+
+@pytest.mark.asyncio
 async def test_register_and_login_both_set_last_login_at(api_client: AsyncClient, db_session) -> None:
     """See app/core/agent_lifecycle.py's 48h-inactivity sweep — both entry points that issue a
     session must stamp User.last_login_at, or a user who never revisits /auth/login (riding
