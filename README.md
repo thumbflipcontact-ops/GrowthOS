@@ -1,5 +1,7 @@
 # GrowthOS
 
+![GrowthOS Approval Inbox — every AI-drafted reply requires a human click before it goes anywhere](docs/assets/approval-inbox.png)
+
 **Architecture: Version 2 (frozen).** See [ARCHITECTURE_FREEZE.md](ARCHITECTURE_FREEZE.md)
 for the freeze declaration and [ARCHITECTURE.md](ARCHITECTURE.md) for the canonical design.
 **Platform foundation: implemented and tested (Phase 1).** See
