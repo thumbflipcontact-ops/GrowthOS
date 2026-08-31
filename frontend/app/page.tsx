@@ -3,7 +3,6 @@
 import { useEffect, useId, useState } from "react";
 import { LandingFooter } from "@/components/LandingFooter";
 import { LandingNav } from "@/components/LandingNav";
-import { PainPointTicker } from "@/components/PainPointTicker";
 import { api } from "@/lib/api-client";
 import type { PricingTier } from "@/lib/types";
 
@@ -199,10 +198,7 @@ export default function RootPage() {
     <>
       <LandingNav />
 
-      <div className="hero-and-ticker">
-        <PainPointTicker />
-
-        <header className="hero">
+      <header className="hero">
         <span className="hero-badge">
           <span className="dot" /> Built for founders finding their first users
         </span>
@@ -225,8 +221,7 @@ export default function RootPage() {
           </a>
         </div>
         <p className="hero-note">No card required · cancel anytime, nothing charged until you subscribe</p>
-        </header>
-      </div>
+      </header>
 
       <section className="landing-section">
         <div className="section-heading">
