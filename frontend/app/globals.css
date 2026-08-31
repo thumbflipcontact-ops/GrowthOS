@@ -425,12 +425,12 @@ button:disabled {
 .hero-badge {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 16px 6px 8px;
+  gap: 12px;
+  padding: 16px 36px 16px 22px;
   border-radius: 100px;
   border: 1px solid #e8e2fb;
   background: var(--surface);
-  font-size: 12px;
+  font-size: 22px;
   font-weight: 600;
   color: #4f46e5;
   margin-bottom: 28px;
@@ -438,8 +438,8 @@ button:disabled {
 }
 
 .hero-badge .dot {
-  width: 7px;
-  height: 7px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--grad-1), var(--grad-3));
 }

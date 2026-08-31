@@ -200,7 +200,7 @@ export default function RootPage() {
 
       <header className="hero">
         <span className="hero-badge">
-          <span className="dot" /> Built for founders finding their first users
+          <span className="dot" /> Find leads on X
         </span>
         <h1>
           Your next customer is tweeting right now.{" "}
