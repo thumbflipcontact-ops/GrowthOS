@@ -626,6 +626,34 @@ button:disabled {
   margin: 0;
 }
 
+.proof-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 96px;
+}
+
+.proof-shot {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.proof-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.proof-shot figcaption {
+  padding: 16px 20px;
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
 .demo-frame {
   max-width: 900px;
   margin: 0 auto 96px;
@@ -893,7 +921,8 @@ button:disabled {
     font-size: 32px;
   }
   .steps-grid,
-  .feature-grid {
+  .feature-grid,
+  .proof-grid {
     grid-template-columns: 1fr;
   }
 }

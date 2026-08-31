@@ -241,6 +241,35 @@ export default function RootPage() {
 
       <section className="landing-section">
         <div className="section-heading">
+          <h2>Real drafts, real decisions</h2>
+          <p>Every reply is grounded in the actual post — and never goes out without you.</p>
+        </div>
+        <div className="proof-grid">
+          <figure className="proof-shot">
+            <img
+              src="/approval-inbox.png"
+              alt="Threadly's Approval Inbox showing an AI-drafted reply next to the original X post and the agent's reasoning for why it drafted that reply"
+            />
+            <figcaption>
+              Every draft comes with the original post and the AI&apos;s reasoning — read it
+              before you approve anything.
+            </figcaption>
+          </figure>
+          <figure className="proof-shot">
+            <img
+              src="/ready-to-post.png"
+              alt="Threadly's Ready to Post screen with buttons to copy the reply, open the original post on X, and mark it as posted"
+            />
+            <figcaption>
+              Approve a draft and it&apos;s yours to post — copy the reply, open X, paste it in.
+              Threadly never posts on its own.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section className="landing-section">
+        <div className="section-heading">
           <h2>See it in action</h2>
           <p>A real walkthrough of the actual product — not a mockup.</p>
         </div>
