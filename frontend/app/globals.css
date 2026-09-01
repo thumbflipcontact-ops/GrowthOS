@@ -654,6 +654,27 @@ button:disabled {
   line-height: 1.55;
 }
 
+.confidence-note {
+  max-width: 720px;
+  margin: 32px auto 0;
+  padding: 24px 28px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.confidence-note h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.confidence-note p {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
 .demo-frame {
   max-width: 900px;
   margin: 0 auto 96px;

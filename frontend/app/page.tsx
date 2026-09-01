@@ -266,6 +266,15 @@ export default function RootPage() {
             </figcaption>
           </figure>
         </div>
+        <div className="confidence-note">
+          <h3>What&apos;s the confidence score?</h3>
+          <p>
+            Claude rates its own reply as it drafts it — how good and appropriate it thinks
+            that specific reply is, on a scale of 0 to 1. Low scores aren&apos;t hidden or
+            auto-sent; they&apos;re flagged so you know exactly which drafts deserve a closer
+            look before you approve them.
+          </p>
+        </div>
       </section>
 
       <section className="landing-section">
