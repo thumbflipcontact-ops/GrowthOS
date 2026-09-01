@@ -274,13 +274,10 @@ export default function RootPage() {
           <p>A real walkthrough of the actual product — not a mockup.</p>
         </div>
         <div className="demo-frame">
-          <iframe
-            src="https://www.loom.com/embed/cf01ff136ed4416e84bfa106391029ec?hideEmbedTopBar=true"
-            title="Threadly product demo"
-            className="demo-embed"
-            allow="fullscreen"
-            allowFullScreen
-          />
+          <video src="/demo.mp4" controls preload="metadata" playsInline>
+            Your browser doesn&apos;t support embedded video —{" "}
+            <a href="/demo.mp4">download the demo</a> instead.
+          </video>
         </div>
       </section>
 
