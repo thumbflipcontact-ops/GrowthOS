@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "Threadly — Let AI find the conversation for you on X.";
+export const alt = "Threadly — AI finds your next customer on X.";
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -41,7 +41,7 @@ export default function OpengraphImage() {
             color: "#171717",
           }}
         >
-          Stop searching for the right conversation.{" "}
+          Your next customer is tweeting right now.{" "}
           <span
             style={{
               background: "linear-gradient(100deg, #4f46e5, #7c3aed 55%, #ec4899)",
@@ -49,7 +49,7 @@ export default function OpengraphImage() {
               color: "transparent",
             }}
           >
-            Let AI find it for you on X.
+            AI finds them before you scroll past.
           </span>
         </div>
 
