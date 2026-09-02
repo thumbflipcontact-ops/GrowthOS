@@ -25,6 +25,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/blog/twitter-mentions-that-convert-dont-tag-you",
     "/blog/why-ai-twitter-automation-gets-accounts-banned",
     "/blog/the-two-week-old-tweet-problem",
+    "/alternatives/tweet-hunter",
   ];
   return routes.map((route) => ({
     url: `${BASE_URL}${route}`,
