@@ -33,6 +33,10 @@ export function LandingFooter() {
         <a href="/privacy">Privacy Policy</a>
         <a href="/terms">Terms &amp; Conditions</a>
       </div>
+      <div className="footer-links">
+        <span>Compare:</span>
+        <a href="/alternatives/tweet-hunter">vs Tweet Hunter</a>
+      </div>
       <div className="footer-partner">
         Try <a href="https://topspot.ink" target="_blank" rel="noopener noreferrer">topspot.ink</a> to
         boost visibility of your product.

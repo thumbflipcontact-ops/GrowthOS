@@ -61,7 +61,9 @@ export default function AutomationBanRiskPost() {
           restrictions) isn&apos;t a bug in Tweet Hunter — it&apos;s what X&apos;s detection is
           designed to do to <em>any</em> tool that posts on your behalf without a human checking
           first. It happens to be the concrete, documented example, but the risk is generic to
-          the category, not specific to one company.
+          the category, not specific to one company. See our{" "}
+          <a href="/alternatives/tweet-hunter">full feature-by-feature comparison</a> for exactly
+          where Threadly and Tweet Hunter differ.
         </p>
 
         <h2>Why human approval breaks the pattern</h2>
