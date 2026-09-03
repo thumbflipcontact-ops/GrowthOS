@@ -96,7 +96,9 @@ export default function AutomationBanRiskPost() {
         <p>
           If the thing stopping you from scaling your X engagement is the fear of getting
           flagged, the fix is a tool that was built around that constraint from the start, not
-          one where human review is an afterthought.
+          one where human review is an afterthought. See how Threadly compares to{" "}
+          <a href="/alternatives/tweet-hunter">Tweet Hunter</a> or{" "}
+          <a href="/alternatives/hypefury">Hypefury</a> feature by feature.
         </p>
         <p>
           <a href="/signup">Start a 7-day free trial</a> — no card required.

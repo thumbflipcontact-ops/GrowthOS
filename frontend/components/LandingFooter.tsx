@@ -36,6 +36,7 @@ export function LandingFooter() {
       <div className="footer-links">
         <span>Compare:</span>
         <a href="/alternatives/tweet-hunter">vs Tweet Hunter</a>
+        <a href="/alternatives/hypefury">vs Hypefury</a>
       </div>
       <div className="footer-partner">
         Try <a href="https://topspot.ink" target="_blank" rel="noopener noreferrer">topspot.ink</a> to
