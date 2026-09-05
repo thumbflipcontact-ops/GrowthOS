@@ -27,6 +27,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/blog/the-two-week-old-tweet-problem",
     "/alternatives/tweet-hunter",
     "/alternatives/hypefury",
+    "/alternatives/xholic-ai",
   ];
   return routes.map((route) => ({
     url: `${BASE_URL}${route}`,
