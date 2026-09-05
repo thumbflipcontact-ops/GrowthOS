@@ -175,7 +175,12 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       await saveConfig();
       await api.triggerAgentRun(projectId, AGENT_KEY);
       setSavedMessage("Saved and run started — check back below in a moment.");
-      setTimeout(loadRuns, 3000);
+      // Keep the button disabled/pending through this wait, not just the two calls above —
+      // otherwise it flips back to "Run now" almost instantly with no visible change for
+      // several seconds, which reads as "the click didn't register" and invites re-clicking
+      // (confirmed via real rageclick events on this exact button).
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await loadRuns();
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {
         setError("Your subscription isn't active — start or resume it from the dashboard first.");
@@ -199,7 +204,7 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       </p>
 
       {error && <div className="error-banner">{error}</div>}
-      {savedMessage && <p className="muted">{savedMessage}</p>}
+      {savedMessage && <div className="success-banner">{savedMessage}</div>}
 
       <form onSubmit={handleSave}>
         <label htmlFor="keywords">Keywords</label>

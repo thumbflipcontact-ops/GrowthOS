@@ -151,6 +151,16 @@ button:disabled {
   margin-bottom: 16px;
 }
 
+.success-banner {
+  background: #e6f4ea;
+  border: 1px solid var(--success);
+  color: var(--success);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
 .badge {
   display: inline-block;
   padding: 2px 9px;
