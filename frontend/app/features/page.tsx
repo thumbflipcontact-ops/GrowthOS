@@ -4,13 +4,17 @@ import { LandingNav } from "@/components/LandingNav";
 export const metadata = {
   title: "Features — Threadly",
   description:
-    "What Threadly actually does: finds relevant conversations on X, drafts a reply with AI, and never posts anything without your approval.",
+    "What Threadly actually does: finds relevant conversations on Reddit, judges which ones are real leads, drafts a reply with AI, and never posts anything without your approval.",
 };
 
 const FEATURES = [
   {
     title: "Conversation Finder",
-    body: "Give it your keywords and ICP once. It scans X on a schedule and surfaces the posts that actually match what you're building — no more refreshing search tabs all day.",
+    body: "Give it your keywords and ICP once — or just your website, and it works out the specific phrases people actually use. It scans Reddit every 30 minutes, no login required, and surfaces the posts that actually match what you're building — no more refreshing search tabs all day.",
+  },
+  {
+    title: "AI lead scoring",
+    body: "Every match gets judged by Claude before it's saved — not just scored on shared keywords, but on whether it's a genuine lead and how strong their buying intent looks. That's what tells you which posts deserve a closer look.",
   },
   {
     title: "AI-drafted replies",
@@ -18,11 +22,11 @@ const FEATURES = [
   },
   {
     title: "Approval Inbox",
-    body: "Every draft sits in your Approval Inbox until you personally read and approve it. This is permanent — Threadly never publishes anything on its own, on any tier.",
+    body: "Every draft sits in your Approval Inbox with a lead-match score, a buying-intent flag, and Claude's own rating of the reply it wrote — until you personally read and approve it. This is permanent — Threadly never publishes anything on its own, on any tier.",
   },
   {
     title: "One-click posting",
-    body: "Approve a draft and it's ready to go: copy the reply text, jump straight to the original post on X, paste, and mark it posted. Takes seconds, but the actual posting is always yours.",
+    body: "Approve a draft and it's ready to go: copy the reply text, jump straight to the original post on Reddit, paste, and mark it posted. Takes seconds, but the actual posting is always yours.",
   },
   {
     title: "A record of everywhere you've replied",
@@ -49,8 +53,8 @@ export default function FeaturesPage() {
         </span>
         <h1>Built to find the conversation, not just post to one.</h1>
         <p className="lead">
-          Threadly watches X for conversations worth joining, drafts a reply with Claude, and
-          waits for you to say yes. Here&apos;s exactly what that looks like.
+          Threadly watches Reddit for conversations worth joining, drafts a reply with Claude,
+          and waits for you to say yes. Here&apos;s exactly what that looks like.
         </p>
         <div className="hero-ctas">
           <a href="/signup" className="btn btn-grad">

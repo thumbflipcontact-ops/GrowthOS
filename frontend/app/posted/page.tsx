@@ -68,7 +68,7 @@ function PostedCard({
       {postUrl && (
         <div className="hstack">
           <a href={postUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary">
-            View post on X ↗
+            View original post ↗
           </a>
         </div>
       )}

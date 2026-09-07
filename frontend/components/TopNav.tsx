@@ -17,9 +17,9 @@ export function TopNav() {
             <Logo size={24} />
             Threadly
           </a>
-          <a href="/settings/plugins">Connections</a>
-          <a href="/settings/agents">Agent settings</a>
+          <a href="/settings/agents">Leads Finder</a>
           <a href="/approvals">Approvals</a>
+          <a href="/ready-to-post">Ready to Post</a>
           <a href="/posted">Posted</a>
         </div>
         <button className="btn-secondary" onClick={handleLogout} type="button">

@@ -3,14 +3,11 @@ export default function BillingSuccessPage() {
     <div className="container">
       <h1>You&apos;re all set</h1>
       <div className="card">
-        <p>Your trial has started. Next, connect an account so Threadly has something to work with.</p>
-        <a href="/settings/plugins" className="btn">
-          Connect an account
+        <p>Your subscription is active. Head to your dashboard to keep finding leads.</p>
+        <a href="/dashboard" className="btn">
+          Go to dashboard
         </a>
       </div>
-      <p className="muted">
-        <a href="/dashboard">Go to dashboard</a>
-      </p>
     </div>
   );
 }

@@ -440,7 +440,7 @@ export default function AgentSettingsPage() {
     <>
       <TopNav />
       <div className="container-wide">
-        <h1>Agent settings</h1>
+        <h1>Leads Finder</h1>
         <p className="subtitle">Tell Threadly what to look for.</p>
         <AgentSettingsCard projectId={project.id} />
       </div>

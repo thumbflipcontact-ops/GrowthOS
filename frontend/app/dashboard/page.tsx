@@ -177,9 +177,6 @@ export default function DashboardPage() {
             <a href="/approvals" className="btn btn-secondary">
               Review drafted posts
             </a>
-            <a href="/settings/plugins" className="btn btn-secondary">
-              Connect Reddit to post replies automatically (optional)
-            </a>
           </div>
         </div>
       </div>

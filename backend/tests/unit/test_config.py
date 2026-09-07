@@ -92,7 +92,7 @@ def test_oauth_client_credentials_raises_when_only_one_half_is_set(monkeypatch: 
 def test_oauth_settings_have_sane_local_defaults() -> None:
     settings = Settings(**_base_env())
     assert settings.oauth_callback_base_url == "http://localhost:8000"
-    assert settings.oauth_frontend_redirect_url == "http://localhost:3000/settings/plugins"
+    assert settings.oauth_frontend_redirect_url == "http://localhost:3000/dashboard"
 
 
 def test_db_pool_settings_default_to_sqlalchemys_own_prior_implicit_defaults() -> None:

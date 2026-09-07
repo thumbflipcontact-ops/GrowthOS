@@ -69,7 +69,12 @@ class Settings(BaseSettings):
     # docs/auth/OAUTH2_ARCHITECTURE.md §3 on why this is one fixed URL, not
     # project-scoped/templated.
     oauth_callback_base_url: str = Field(default="http://localhost:8000")
-    oauth_frontend_redirect_url: str = Field(default="http://localhost:3000/settings/plugins")
+    # Points at /dashboard, not a dedicated connections page — frontend/app/settings/plugins/
+    # was removed (nothing in the UI currently starts an OAuth connect flow; approving a
+    # reddit content_item is unconditionally manual-publish regardless of any connection, see
+    # backend/app/services/content_approval.py's MANUAL_PUBLISH_ONLY_PLATFORMS), so this is
+    # just a safe landing spot for the OAuth callback route itself, which still exists.
+    oauth_frontend_redirect_url: str = Field(default="http://localhost:3000/dashboard")
 
     # --- Error tracking — see app/core/observability.py and
     # docs/reviews/PRODUCTION_READINESS_REVIEW.md O8/O9. Optional: every process runs exactly

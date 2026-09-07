@@ -9,19 +9,23 @@ export const metadata = {
 const FAQS = [
   {
     q: "What does Threadly do?",
-    a: "It watches X for conversations that match your keywords and ICP, drafts a reply with Claude, and puts it in your Approval Inbox. Nothing goes out until you personally approve it.",
+    a: "It watches Reddit for conversations that match your keywords and ICP, has Claude judge which ones are genuine leads worth a reply, drafts that reply, and puts it in your Approval Inbox. Nothing goes out until you personally approve it.",
   },
   {
     q: "What keywords should I use?",
     a: "Specific phrases, not broad topics. \"Struggling to rank\" or \"nobody's finding my blog\" surfaces people actually complaining about your problem — a single word like \"SEO\" mostly catches noise, since almost anyone can mention a topic in passing. The more your keywords sound like something a frustrated person would actually type, the better the matches.",
   },
   {
-    q: "Does Threadly post to X automatically?",
+    q: "Does Threadly post to Reddit automatically?",
     a: "No. Every draft requires your explicit approval — this is a permanent feature of the product, not something available only in an early version. Once you approve a draft, you copy the reply and post it yourself in one click; Threadly never posts on your behalf.",
   },
   {
+    q: "Do I need to connect a Reddit account to find leads?",
+    a: "No. Conversation Finder reads Reddit's public search — no login or connected account required. Connecting a Reddit account is entirely optional, and only relevant if a future publishing feature needs it.",
+  },
+  {
     q: "Which platforms does Threadly support?",
-    a: "X (Twitter) today.",
+    a: "Reddit today.",
   },
   {
     q: "Is there a free trial?",
@@ -44,8 +48,8 @@ const FAQS = [
     a: "Yes, self-serve from your dashboard's billing page. Cancellation takes effect at the end of your current billing period — no proration for partial periods.",
   },
   {
-    q: "Is my connected X account safe?",
-    a: "Yes. Connecting X uses OAuth, so Threadly never sees or stores your password. Access tokens are encrypted at rest, and disconnecting immediately revokes Threadly's access.",
+    q: "Is my connected Reddit account safe?",
+    a: "Yes. Connecting Reddit uses OAuth, so Threadly never sees or stores your password. Access tokens are encrypted at rest, and disconnecting immediately revokes Threadly's access.",
   },
 ];
 
