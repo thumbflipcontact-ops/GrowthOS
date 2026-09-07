@@ -56,6 +56,16 @@ def get_login_account_limiter() -> RateLimiter:
     return _login_account_limiter
 
 
+# No per-account limiter here (unlike login) — there's no account to key on until after
+# creation succeeds. IP-only, but still enough to blunt a single-source signup bot; a real
+# person has no reason to register more than a handful of times an hour from one address.
+_register_ip_limiter = RateLimiter(capacity=5, refill_rate=5 / 3600)  # 5 attempts / hour / IP
+
+
+def get_register_ip_limiter() -> RateLimiter:
+    return _register_ip_limiter
+
+
 # Tighter than login's — this endpoint also sends an email per successful match, so it's a
 # more attractive target for both inbox-spamming a victim and enumerating which emails have
 # accounts (the response itself never reveals that, but a sloppy rate limit could via timing

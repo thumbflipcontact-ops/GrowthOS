@@ -1,11 +1,12 @@
-"""Tests for POST /auth/login rate limiting — see docs/reviews/PRODUCTION_READINESS_REVIEW.md
-S1 and docs/reviews/PRODUCTION_HARDENING_REPORT.md.
+"""Tests for POST /auth/login and POST /auth/register rate limiting — see
+docs/reviews/PRODUCTION_READINESS_REVIEW.md S1 and docs/reviews/PRODUCTION_HARDENING_REPORT.md.
 
-Each test overrides the login rate limiters with tiny, test-specific capacities via FastAPI's
-dependency-override mechanism (app/api/deps.py's get_login_ip_limiter/
-get_login_account_limiter) — never the production-sized defaults (10/5min, 5/15min), and never
-the same singleton instance across tests, so this suite can trip the limit deterministically
-without waiting on real time or leaking rate-limit state into unrelated tests elsewhere.
+Each test overrides the relevant rate limiter(s) with tiny, test-specific capacities via
+FastAPI's dependency-override mechanism (app/api/deps.py's get_login_ip_limiter/
+get_login_account_limiter/get_register_ip_limiter) — never the production-sized defaults, and
+never the same singleton instance across tests, so this suite can trip the limit
+deterministically without waiting on real time or leaking rate-limit state into unrelated
+tests elsewhere.
 """
 
 from __future__ import annotations
@@ -65,6 +66,31 @@ api_client_tiny_ip_limit = _make_api_client_fixture(ip_capacity=2, account_capac
 api_client_tiny_account_limit = _make_api_client_fixture(ip_capacity=1000, account_capacity=2)
 
 
+@pytest_asyncio.fixture
+async def api_client_tiny_register_limit(db_session, _migrated_db):
+    from app.api.deps import get_arq_redis, get_db, get_register_ip_limiter
+    from app.main import app
+
+    ip_limiter = RateLimiter(capacity=2, refill_rate=0.0001)
+
+    async def override_get_db():
+        yield db_session
+
+    async def override_get_arq_redis():
+        return _FakeArqRedis()
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_arq_redis] = override_get_arq_redis
+    app.dependency_overrides[get_register_ip_limiter] = lambda: ip_limiter
+    try:
+        async with app.router.lifespan_context(app):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                yield client
+    finally:
+        app.dependency_overrides.clear()
+
+
 @pytest.mark.asyncio
 async def test_login_returns_429_once_the_per_ip_limit_is_exhausted(
     api_client_tiny_ip_limit: AsyncClient,
@@ -114,3 +140,36 @@ async def test_a_rate_limited_account_does_not_affect_a_different_account(
         "/api/v1/auth/login", json={"email": "someone-else@example.com", "password": "wrong"}
     )
     assert r.status_code == 401  # a different account's bucket is untouched — not 429
+
+
+@pytest.mark.asyncio
+async def test_register_returns_429_once_the_per_ip_limit_is_exhausted(
+    api_client_tiny_register_limit: AsyncClient,
+) -> None:
+    # A different email/org each call — registration succeeding (not some other rejection) is
+    # what proves the limiter, not the account layer, is what's isolated here.
+    for i in range(2):  # ip_capacity=2
+        r = await api_client_tiny_register_limit.post(
+            "/api/v1/auth/register",
+            json={
+                "org_name": f"Org {i}",
+                "org_slug": f"org-{i}",
+                "email": f"signup-{i}@example.com",
+                "name": "Test User",
+                "password": "a-valid-password-123",
+            },
+        )
+        assert r.status_code == 201
+
+    r = await api_client_tiny_register_limit.post(
+        "/api/v1/auth/register",
+        json={
+            "org_name": "Org 3",
+            "org_slug": "org-3",
+            "email": "signup-3@example.com",
+            "name": "Test User",
+            "password": "a-valid-password-123",
+        },
+    )
+    assert r.status_code == 429
+    assert r.json()["error"]["code"] == "too_many_requests"

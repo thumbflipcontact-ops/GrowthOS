@@ -107,3 +107,23 @@ def fake_redis():
     import fakeredis
 
     return fakeredis.FakeAsyncRedis()
+
+
+@pytest.fixture(autouse=True)
+def _generous_register_rate_limit():
+    """`get_register_ip_limiter`'s real instance is a process-wide singleton (capacity=5/hour)
+    shared across the whole pytest session, and nearly every integration test registers at
+    least one user as setup — same class of gotcha as the login/password-reset limiters (see
+    test_auth_rate_limiting.py, test_password_reset_api.py). Overridden globally here, rather
+    than duplicated into each test file's own `api_client` fixture, since essentially every
+    one of them would need it. Each test file's own fixture still layers its own overrides
+    (get_db, get_arq_redis, ...) on top of this in the same dependency_overrides dict."""
+    from app.api.deps import get_register_ip_limiter
+    from app.core.rate_limit import RateLimiter
+    from app.main import app
+
+    app.dependency_overrides[get_register_ip_limiter] = lambda: RateLimiter(
+        capacity=1000, refill_rate=1000
+    )
+    yield
+    app.dependency_overrides.pop(get_register_ip_limiter, None)

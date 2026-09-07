@@ -16,6 +16,7 @@ from app.api.deps import (
     get_login_ip_limiter,
     get_password_reset_account_limiter,
     get_password_reset_ip_limiter,
+    get_register_ip_limiter,
     get_settings_dep,
 )
 from app.core.config import Settings
@@ -94,10 +95,16 @@ def _set_session_cookies(response: Response, user_id: str, settings: Settings) -
 @router.post("/register", response_model=UserResponse, status_code=201)
 async def register(
     body: RegisterRequest,
+    request: Request,
     response: Response,
     session: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
+    ip_limiter: RateLimiter = Depends(get_register_ip_limiter),
 ) -> User:
+    client_ip = request.client.host if request.client else "unknown"
+    if not ip_limiter.try_acquire(f"ip:{client_ip}"):
+        raise TooManyRequests("Too many signups from this address. Try again shortly.")
+
     service = AuthService(session)
     user = await service.register(
         org_name=body.org_name,
