@@ -173,3 +173,43 @@ async def test_register_returns_429_once_the_per_ip_limit_is_exhausted(
     )
     assert r.status_code == 429
     assert r.json()["error"]["code"] == "too_many_requests"
+
+
+@pytest.mark.asyncio
+async def test_x_forwarded_for_is_what_the_limiter_actually_keys_on(
+    api_client_tiny_register_limit: AsyncClient,
+) -> None:
+    """Regression test for a real production bug: this service sits behind Railway's edge,
+    which proxies every request through a different internal address — without trusting
+    X-Forwarded-For (app/main.py's trust_forwarded_for middleware), every request looked like
+    a different "IP" to the limiter and it silently never limited anything. Two distinct
+    forwarded-for values must get independent buckets; the same value repeated must not."""
+
+    def _register(i: int, forwarded_for: str) -> dict:
+        return dict(
+            json={
+                "org_name": f"FwdOrg {i}",
+                "org_slug": f"fwd-org-{i}",
+                "email": f"fwd-signup-{i}@example.com",
+                "name": "Test User",
+                "password": "a-valid-password-123",
+            },
+            headers={"X-Forwarded-For": forwarded_for},
+        )
+
+    # Two calls from "1.1.1.1" exhaust its 2-token bucket (ip_capacity=2).
+    for i in range(2):
+        r = await api_client_tiny_register_limit.post(
+            "/api/v1/auth/register", **_register(i, "1.1.1.1")
+        )
+        assert r.status_code == 201
+    r = await api_client_tiny_register_limit.post(
+        "/api/v1/auth/register", **_register(2, "1.1.1.1")
+    )
+    assert r.status_code == 429
+
+    # A different forwarded-for value has its own untouched bucket.
+    r = await api_client_tiny_register_limit.post(
+        "/api/v1/auth/register", **_register(3, "2.2.2.2")
+    )
+    assert r.status_code == 201

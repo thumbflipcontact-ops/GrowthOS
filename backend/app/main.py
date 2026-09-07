@@ -84,6 +84,23 @@ def create_app() -> FastAPI:
     )
 
     @app.middleware("http")
+    async def trust_forwarded_for(request: Request, call_next):  # type: ignore[no-untyped-def]
+        # This service is never reached directly from the internet — Railway's edge is the
+        # only possible peer, and it round-robins through a different internal address per
+        # request (confirmed empirically: 6 requests from one source logged 6 different
+        # 100.64.0.x peers). Every per-IP rate limiter (login/password-reset/register) keys
+        # on request.client.host, so without this they were silently keying on a
+        # meaningless, different "IP" per request and never actually limiting anything.
+        # Trusting X-Forwarded-For's first entry unconditionally is standard and correct
+        # here specifically because Railway's edge — the only possible source of this
+        # request — sets/overwrites that header itself before forwarding internally.
+        forwarded_for = request.headers.get("x-forwarded-for")
+        if forwarded_for:
+            real_ip = forwarded_for.split(",")[0].strip()
+            request.scope["client"] = (real_ip, 0)
+        return await call_next(request)
+
+    @app.middleware("http")
     async def add_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]
         request.state.request_id = str(uuid.uuid4())
         structlog.contextvars.bind_contextvars(request_id=request.state.request_id)
