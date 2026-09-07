@@ -351,6 +351,11 @@ create table content_items (
     -- layer surfaces that as the documented 409 in docs/api/API_DESIGN.md, instead of a
     -- silent double-transition.
     version                 integer not null default 1,
+    -- Null until app/core/notifications.py's DraftReadyNotificationSweep has emailed the org
+    -- about this item reaching pending_review — prevents re-notifying on every sweep. Not
+    -- backfilled on the migration that added it: null is the correct value for every
+    -- pre-existing row ("not yet notified"), not a stand-in for missing data.
+    notified_at             timestamptz,
     created_at              timestamptz not null default now(),
     updated_at              timestamptz not null default now(),
 

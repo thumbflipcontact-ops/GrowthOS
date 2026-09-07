@@ -2,6 +2,12 @@
 sweep logic — `sweep_agent_lifecycle` here is a thin adapter around
 `AgentLifecycleSweep`, the same separation-of-concerns pattern app/jobs/oauth_refresh.py uses
 around app/core/oauth/refresh.py.
+
+Also runs `sweep_pending_review_notifications` (app/core/notifications.py's
+`DraftReadyNotificationSweep`) as a second cron job on this same process — deliberately not a
+separate Railway service: it's a light, infrequent, email-only sweep that needs nothing this
+worker doesn't already set up in `startup()` (a session_factory, Settings), so a second
+service would be pure operational overhead for no real benefit.
 """
 
 from __future__ import annotations
@@ -13,6 +19,7 @@ from app.core.agent_lifecycle import AgentLifecycleSweep
 from app.core.config import get_settings
 from app.core.db import create_engine, create_session_factory
 from app.core.migration_check import verify_database_is_migrated
+from app.core.notifications import DraftReadyNotificationSweep
 from app.core.observability import init_error_tracking
 from app.core.redis import build_redis_settings
 
@@ -29,6 +36,18 @@ async def sweep_agent_lifecycle(ctx: dict) -> int:
         if disabled:
             logger.info("agent_lifecycle.cycle_complete", disabled=disabled)
         return disabled
+
+
+async def sweep_pending_review_notifications(ctx: dict) -> int:
+    settings = get_settings()
+    session_factory = ctx["session_factory"]
+
+    async with session_factory() as session:
+        sweep = DraftReadyNotificationSweep(session, settings)
+        notified = await sweep.run()
+        if notified:
+            logger.info("notifications.cycle_complete", projects_notified=notified)
+        return notified
 
 
 async def startup(ctx: dict) -> None:
@@ -52,13 +71,20 @@ async def shutdown(ctx: dict) -> None:
 
 class WorkerSettings:
     queue_name = "agent_lifecycle"
-    functions = [sweep_agent_lifecycle]
-    # Hourly — these are date-granularity conditions (48h inactivity, a 7-day trial boundary),
-    # not the tight-deadline case oauth_refresh has; being caught up to ~1 hour late costs at
-    # most ~1 extra hour of a few metered API calls for the affected org, immaterial next to
-    # the cost this job guards against. Consistent with app/services/agent_config.py's own
-    # 6-hour minimum-interval philosophy for conversation_finder-adjacent cost logic.
-    cron_jobs = [cron(sweep_agent_lifecycle, minute=0)]
+    functions = [sweep_agent_lifecycle, sweep_pending_review_notifications]
+    cron_jobs = [
+        # Hourly — these are date-granularity conditions (48h inactivity, a 7-day trial
+        # boundary), not the tight-deadline case oauth_refresh has; being caught up to ~1
+        # hour late costs at most ~1 extra hour of a few metered API calls for the affected
+        # org, immaterial next to the cost this job guards against. Consistent with
+        # app/services/agent_config.py's own 6-hour minimum-interval philosophy for
+        # conversation_finder-adjacent cost logic.
+        cron(sweep_agent_lifecycle, minute=0),
+        # Every 30 minutes — frequent enough that a new draft doesn't sit unnoticed for
+        # hours, infrequent enough that a run finding several new items in one cycle always
+        # batches them into one email per member rather than spamming per-item.
+        cron(sweep_pending_review_notifications, minute={0, 30}),
+    ]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = build_redis_settings(get_settings())

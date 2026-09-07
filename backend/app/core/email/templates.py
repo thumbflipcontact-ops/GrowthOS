@@ -45,6 +45,25 @@ def conversation_finder_disabled_not_entitled(
     return subject, html_body
 
 
+def drafts_ready_for_review(
+    *, user_name: str, project_name: str, count: int, approvals_url: str
+) -> tuple[str, str]:
+    name = escape(user_name)
+    project = escape(project_name)
+    url = escape(approvals_url)
+    reply_word = "reply" if count == 1 else "replies"
+    subject = f"{count} new AI-drafted {reply_word} ready for your review"
+    html_body = f"""
+    <p>Hi {name},</p>
+    <p>Threadly found {count} new Reddit {reply_word} worth joining for
+    <strong>{project}</strong>, and drafted a reply for each one.</p>
+    <p><a href="{url}">Review and approve them</a></p>
+    <p>Nothing gets posted until you personally approve it.</p>
+    <p>— The Threadly Team</p>
+    """.strip()
+    return subject, html_body
+
+
 def password_reset_requested(*, user_name: str, reset_url: str) -> tuple[str, str]:
     name = escape(user_name)
     # reset_url is our own server-generated link (frontend_origin + a urlsafe token), not
@@ -85,6 +104,7 @@ def email_verification_requested(*, user_name: str, verify_url: str) -> tuple[st
 __all__ = [
     "conversation_finder_disabled_inactivity",
     "conversation_finder_disabled_not_entitled",
+    "drafts_ready_for_review",
     "email_verification_requested",
     "password_reset_requested",
 ]

@@ -19,6 +19,15 @@ import { useSession } from "@/lib/useSession";
 // post themselves, rather than waiting on a publish job.
 const MANUAL_PUBLISH_ONLY_PLATFORMS = new Set(["twitter", "reddit"]);
 
+// item.source_confidence — how well the original post matched the search keywords (0-1,
+// agents/conversation_finder/ranking.py's score_result()) — deliberately distinct from the
+// "Draft quality" number next to it, which rates the AI's own reply, not the lead itself.
+function LeadMatchBadge({ score }: { score: string }) {
+  const pct = Math.round(Number(score) * 100);
+  const badgeClass = pct >= 70 ? "badge-success" : pct >= 40 ? "badge-warn" : "badge-muted";
+  return <span className={`badge ${badgeClass}`}>Lead match: {pct}%</span>;
+}
+
 // The Approval Inbox is the highest-stakes surface in this app — it is the only UI that can
 // approve or reject a content_item. Every interaction here biases toward making the human
 // reviewer actually read what they're approving: one item, fully expanded, at a time.
@@ -89,7 +98,12 @@ function ApprovalCard({
           />
           <span className="badge badge-muted">{item.target_platform ?? item.type}</span>
         </div>
-        <span className="muted">confidence: {Number(item.confidence).toFixed(2)}</span>
+        <div className="hstack" style={{ gap: 8 }}>
+          {item.source_confidence !== null && <LeadMatchBadge score={item.source_confidence} />}
+          <span className="muted" style={{ fontSize: 13 }}>
+            Draft quality: {Number(item.confidence).toFixed(2)}
+          </span>
+        </div>
       </div>
 
       <SourcePost item={item} />
@@ -104,7 +118,7 @@ function ApprovalCard({
 
       {manualPublishOnly && (
         <p className="muted" style={{ fontSize: 13 }}>
-          X doesn&apos;t allow posting this automatically — approving moves it to
+          Threadly can&apos;t post this one automatically — approving moves it to
           &ldquo;Ready to post&rdquo; below, where you can copy it and post it yourself.
         </p>
       )}
@@ -199,8 +213,11 @@ function ReadyToPostCard({ item, projectId, onResolved }: { item: ContentItem; p
   return (
     <div className="card">
       <div className="row">
-        <span className="badge badge-muted">{item.target_platform ?? item.type}</span>
-        <span className="badge badge-success">ready to post</span>
+        <div className="hstack" style={{ gap: 8 }}>
+          <span className="badge badge-muted">{item.target_platform ?? item.type}</span>
+          <span className="badge badge-success">ready to post</span>
+        </div>
+        {item.source_confidence !== null && <LeadMatchBadge score={item.source_confidence} />}
       </div>
 
       <SourcePost item={item} />
@@ -215,7 +232,7 @@ function ReadyToPostCard({ item, projectId, onResolved }: { item: ContentItem; p
         </button>
         {postUrl && (
           <a href={postUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
-            Open post on X ↗
+            Open original post ↗
           </a>
         )}
         <button type="button" className="btn-secondary" onClick={handleMarkPosted} disabled={busy}>

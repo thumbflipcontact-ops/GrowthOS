@@ -93,6 +93,9 @@ class ContentItem(UUIDPkMixin, TimestampMixin, Base):
     # Optimistic concurrency guard on the approve/reject transition — see
     # docs/reviews/DESIGN_REVIEW.md §3.2 and docs/architecture/LOCKED_DECISIONS.md L12.
     version: Mapped[int] = mapped_column(nullable=False, default=1, server_default=text("1"))
+    # Null until app/core/notifications.py's DraftReadyNotificationSweep has emailed the org
+    # about this item reaching pending_review — prevents re-notifying on every sweep.
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ContentPublishAttempt(UUIDPkMixin, CreatedAtMixin, Base):

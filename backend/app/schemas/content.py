@@ -62,6 +62,12 @@ class ContentItemResponse(BaseModel):
     # response, which the frontend never re-renders the source post from).
     source_title: str | None = None
     source_body: str | None = None
+    # The triggering knowledge_item's own relevance score (agents/conversation_finder/
+    # ranking.py's score_result(), 0-1) — a DIFFERENT number from this item's own `confidence`
+    # above (the drafting agent's self-rated quality of the reply it wrote). This is "how well
+    # did this post match your search," not "how good is this draft." Same population caveat
+    # as source_title/source_body: only set via _with_source_post, None otherwise.
+    source_confidence: Decimal | None = None
 
     model_config = {"from_attributes": True}
 

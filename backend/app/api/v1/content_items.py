@@ -69,6 +69,7 @@ async def _with_source_post(
                 update={
                     "source_title": source.title if source else None,
                     "source_body": source.body_excerpt if source else None,
+                    "source_confidence": source.confidence if source else None,
                 }
             )
         )

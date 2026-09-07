@@ -1,15 +1,35 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
-from app.models.content import ContentItem, ContentPublishAttempt
+from app.models.content import ContentItem, ContentItemStatus, ContentPublishAttempt
 from app.repositories.base import Repository
 
 
 class ContentItemRepository(Repository[ContentItem]):
     model = ContentItem
+
+    async def list_pending_review_unnotified(self) -> list[ContentItem]:
+        """Every content_item that reached pending_review but hasn't been emailed about yet
+        — see app/core/notifications.py's DraftReadyNotificationSweep. Global, not
+        project-scoped: the sweep groups results by project_id itself."""
+        result = await self.session.execute(
+            select(ContentItem).where(
+                ContentItem.status == ContentItemStatus.PENDING_REVIEW,
+                ContentItem.notified_at.is_(None),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def mark_notified(self, item_ids: list[uuid.UUID], *, now: datetime) -> None:
+        if not item_ids:
+            return
+        await self.session.execute(
+            update(ContentItem).where(ContentItem.id.in_(item_ids)).values(notified_at=now)
+        )
 
     async def list_by_project(
         self,

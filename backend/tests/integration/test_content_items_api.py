@@ -134,6 +134,9 @@ async def test_list_and_get_content_items_include_the_full_source_post(
     assert body["source_body"] == (
         "The full original tweet text, every single word of it, unabbreviated."
     )
+    # The lead-relevance score (how well the post matched the search) — distinct from this
+    # item's own `confidence` (0.75, the drafting agent's self-rated reply quality).
+    assert Decimal(body["source_confidence"]) == Decimal("0.8")
 
     get_response = await api_client.get(
         f"/api/v1/projects/{project_id}/content-items/{item.id}"
@@ -142,6 +145,22 @@ async def test_list_and_get_content_items_include_the_full_source_post(
     assert get_response.json()["source_body"] == (
         "The full original tweet text, every single word of it, unabbreviated."
     )
+    assert Decimal(get_response.json()["source_confidence"]) == Decimal("0.8")
+
+
+@pytest.mark.asyncio
+async def test_content_item_without_a_knowledge_item_has_null_source_confidence(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    client = ContentDraftClient(db_session)
+    item = await client.create_draft(
+        project_id=uuid.UUID(project_id), type="reddit_reply", body="hi", confidence=Decimal("0.5")
+    )
+    await db_session.flush()
+
+    r = await api_client.get(f"/api/v1/projects/{project_id}/content-items/{item.id}")
+    assert r.status_code == 200
+    assert r.json()["source_confidence"] is None
 
 
 @pytest.mark.asyncio

@@ -123,8 +123,30 @@ function BillingCard({ orgId }: { orgId: string }) {
 
 export default function DashboardPage() {
   const { loading, user, organization, project, error } = useSession();
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
-  if (loading) {
+  useEffect(() => {
+    if (!project) return;
+    // The cheapest reliable "has this project been set up yet" signal: no conversation_finder
+    // config exists yet, or one exists with no keywords — same check
+    // frontend/app/settings/agents/page.tsx already does. Covers every entry point into the
+    // app (verify-email, login, a returning direct visit) from this one gate, and also a user
+    // who started onboarding, skipped it, and came back later.
+    api
+      .listAgentConfigs(project.id)
+      .then((configs) => {
+        const existing = configs.find((c) => c.agent_key === "conversation_finder");
+        const hasKeywords = Array.isArray(existing?.config.keywords) && existing.config.keywords.length > 0;
+        if (!hasKeywords) {
+          window.location.href = "/onboarding";
+          return;
+        }
+        setCheckingOnboarding(false);
+      })
+      .catch(() => setCheckingOnboarding(false)); // non-fatal — just show the dashboard as-is
+  }, [project]);
+
+  if (loading || checkingOnboarding) {
     return (
       <div className="container">
         <p className="muted">Loading...</p>
@@ -152,11 +174,11 @@ export default function DashboardPage() {
         <div className="card">
           <h2>Get started</h2>
           <div className="stack">
-            <a href="/settings/plugins" className="btn btn-secondary">
-              Connect an account (X)
-            </a>
             <a href="/approvals" className="btn btn-secondary">
               Review drafted posts
+            </a>
+            <a href="/settings/plugins" className="btn btn-secondary">
+              Connect Reddit to post replies automatically (optional)
             </a>
           </div>
         </div>

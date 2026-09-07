@@ -68,6 +68,10 @@ export interface ContentItem {
   // just the short evidence quotes above. Both null if there's no linked knowledge_item.
   source_title: string | null;
   source_body: string | null;
+  // The triggering knowledge_item's own relevance score (0-1, how well the post matched the
+  // search) — a DIFFERENT number from `confidence` above (the AI's self-rated quality of the
+  // drafted reply itself). Null under the same conditions as source_title/source_body.
+  source_confidence: string | null;
   version: number;
   created_at: string;
   updated_at: string;
