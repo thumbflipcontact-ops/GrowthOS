@@ -23,7 +23,11 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
   const [suggestUrl, setSuggestUrl] = useState("");
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
-  const [enabled, setEnabled] = useState(false);
+  // Defaults to on, not off — "connect and it just watches for you" is the whole product
+  // promise (see onboarding/page.tsx, which already saves with enabled: true); a project
+  // visiting this page for the first time with no saved config yet should get the same
+  // hands-off default, not silently do nothing until someone finds and checks this box.
+  const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
