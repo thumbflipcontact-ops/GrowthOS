@@ -23,11 +23,8 @@ function OnboardingForm({ projectId }: { projectId: string }) {
     setSuggesting(true);
     try {
       const { keywords: suggested } = await api.suggestKeywords(projectId, suggestUrl.trim());
-      // Merge, never replace — if someone typed something first, don't destroy it.
-      setKeywords((existing) => [
-        ...existing,
-        ...suggested.filter((k) => !existing.includes(k)),
-      ]);
+      // Replaces, not merges — see the identical note in settings/agents/page.tsx.
+      setKeywords(suggested);
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Could not read that website. Try a different URL."

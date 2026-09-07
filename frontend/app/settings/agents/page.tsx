@@ -145,12 +145,12 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
     setSuggesting(true);
     try {
       const { keywords: suggested } = await api.suggestKeywords(projectId, suggestUrl.trim());
-      // Suggestion only — merges with (never replaces) whatever's already typed, so a user
-      // who already has keywords doesn't lose them by trying this out.
-      setKeywords((existing) => [
-        ...existing,
-        ...suggested.filter((k) => !existing.includes(k)),
-      ]);
+      // Replaces, not merges — re-analyzing a URL is meant to give a fresh list for that
+      // site, not pile new suggestions on top of whatever was there before (which, after a
+      // second/different URL, just left old and new keywords mixed together with no way to
+      // tell which came from where). Removing or re-adding individual keywords is a click
+      // away now that they're chips, so nothing is lost by not merging.
+      setKeywords(suggested);
     } catch (err) {
       setSuggestError(
         err instanceof ApiError ? err.message : "Could not read that website. Try a different URL."

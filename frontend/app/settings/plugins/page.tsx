@@ -83,6 +83,40 @@ function PluginRow({
     }
   }
 
+  // Reddit search works automatically for every project with no Reddit account at all (see
+  // backend/app/api/v1/projects.py::create_project()'s auto-connect) — that connection row
+  // has status "connected" (so conversation_finder actually uses it) but granted_scopes is
+  // always empty, since no OAuth ever ran for it. Showing that row with the same
+  // "connected"/"Disconnect" treatment a real account gets is actively misleading (nobody
+  // logged into anything) and dangerous (Disconnect would silently turn off lead discovery,
+  // with no obvious way back — "Connect" only offers a real OAuth flow). A real,
+  // OAuth-completed Reddit connection always has granted_scopes set, so that's the reliable
+  // signal to tell the two apart.
+  const isRedditSearchOnly =
+    entry.plugin_key === "reddit" && connection !== undefined && connection.granted_scopes.length === 0;
+
+  if (isRedditSearchOnly) {
+    return (
+      <div className="card">
+        <div className="row">
+          <div>
+            <h2 style={{ margin: 0 }}>{label}</h2>
+            <span className="badge badge-success">search active</span>
+          </div>
+          <button type="button" className="btn-secondary" onClick={handleConnect} disabled={busy}>
+            Connect account to post automatically
+          </button>
+        </div>
+        <p className="muted" style={{ marginTop: 8 }}>
+          Threadly is already finding Reddit leads for this project — no login needed.
+          Connecting an account here is optional, and only needed if you want replies posted
+          automatically instead of copying them yourself.
+        </p>
+        {error && <p className="error-banner">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <div className="row">
