@@ -46,7 +46,7 @@ export default function IntegrationsAnnouncementPost() {
             n8n-nodes-threadly
           </a>{" "}
           is a community node for n8n. A trigger node fires whenever Threadly discovers a new
-          relevant conversation on X — no polling, it registers a real webhook — and action
+          relevant conversation on Reddit — no polling, it registers a real webhook — and action
           nodes let a workflow list conversations, list drafts awaiting review, and approve or
           reject a specific draft. If you already have an n8n instance running your other
           automations, this lets Threadly&apos;s output land in the same place instead of a
