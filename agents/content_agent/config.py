@@ -12,14 +12,27 @@ from pydantic import BaseModel, Field
 
 class ContentAgentConfig(BaseModel):
     min_confidence_for_reply: float = Field(
-        default=0.4,
+        default=0.2,
         ge=0.0,
         le=1.0,
         description=(
             "The triggering knowledge_item's own confidence (see "
             "agents/conversation_finder/ranking.py) below which this agent drafts nothing "
             "for it. Substitutes for the original spec's min_buying_intent_for_reply — "
-            "buying_intent isn't populated by anything yet, see README.md."
+            "buying_intent isn't populated by anything yet, see README.md. Matches "
+            "ConversationFinderConfig.min_score_to_save (0.2), not meaningfully higher — "
+            "real production data showed a clearly relevant post (matching half of 8 "
+            "configured keywords, all in the body) scoring only ~0.21 under "
+            "ranking.py's formula, which normalizes against every configured keyword "
+            "and a title-match ceiling regardless of whether this specific post's "
+            "matches were in the title at all. With realistic keyword-list sizes (8-10, "
+            "exactly what the AI keyword-suggestion tool itself produces) and the common "
+            "case of body-only matches, a materially higher bar here would silently "
+            "reject most items conversation_finder already decided were worth saving — "
+            "leaving 'save' and 'draft' as two bars in name but not in practice. Revisit "
+            "once scoring moves beyond pure keyword-matching (e.g. an LLM-enrichment "
+            "pass, see conversation_finder's own README) and produces a wider, more "
+            "reliable spread of scores to actually distinguish on."
         ),
     )
     max_reply_length: int = Field(

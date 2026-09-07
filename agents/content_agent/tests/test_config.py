@@ -8,7 +8,7 @@ from agents.content_agent.config import ContentAgentConfig
 
 def test_defaults() -> None:
     config = ContentAgentConfig()
-    assert config.min_confidence_for_reply == 0.4
+    assert config.min_confidence_for_reply == 0.2
     assert config.max_reply_length == 10_000
     assert config.max_tweet_length == 280
     assert config.temperature == 0.7
