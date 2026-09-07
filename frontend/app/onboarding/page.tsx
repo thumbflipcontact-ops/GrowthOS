@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { KeywordChips } from "@/components/KeywordChips";
 import { ApiError, api } from "@/lib/api-client";
 import { useSession } from "@/lib/useSession";
 
@@ -8,16 +9,9 @@ import { useSession } from "@/lib/useSession";
 // platform-wide floor, same constant frontend/app/settings/agents/page.tsx uses.
 const SCHEDULE_CRON = "0 */6 * * *";
 
-function textToKeywords(text: string): string[] {
-  return text
-    .split(",")
-    .map((k) => k.trim())
-    .filter(Boolean);
-}
-
 function OnboardingForm({ projectId }: { projectId: string }) {
   const [suggestUrl, setSuggestUrl] = useState("");
-  const [keywordsText, setKeywordsText] = useState("");
+  const [keywords, setKeywords] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,11 +22,12 @@ function OnboardingForm({ projectId }: { projectId: string }) {
     setError(null);
     setSuggesting(true);
     try {
-      const { keywords } = await api.suggestKeywords(projectId, suggestUrl.trim());
+      const { keywords: suggested } = await api.suggestKeywords(projectId, suggestUrl.trim());
       // Merge, never replace — if someone typed something first, don't destroy it.
-      const existing = textToKeywords(keywordsText);
-      const merged = [...existing, ...keywords.filter((k) => !existing.includes(k))];
-      setKeywordsText(merged.join(", "));
+      setKeywords((existing) => [
+        ...existing,
+        ...suggested.filter((k) => !existing.includes(k)),
+      ]);
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : "Could not read that website. Try a different URL."
@@ -44,7 +39,6 @@ function OnboardingForm({ projectId }: { projectId: string }) {
 
   async function handleStart(e: React.FormEvent) {
     e.preventDefault();
-    const keywords = textToKeywords(keywordsText);
     if (keywords.length === 0) {
       setError("Add at least one keyword first — type your own or suggest some from your website.");
       return;
@@ -87,15 +81,15 @@ function OnboardingForm({ projectId }: { projectId: string }) {
 
       <form onSubmit={handleStart} style={{ marginTop: 20 }}>
         <label htmlFor="keywords">Keywords</label>
-        <input
+        <KeywordChips
           id="keywords"
-          value={keywordsText}
-          onChange={(e) => setKeywordsText(e.target.value)}
-          placeholder="e.g. crawl budget, technical SEO, site audit"
+          keywords={keywords}
+          onChange={setKeywords}
+          placeholder="Type a keyword and press Enter"
         />
         <p className="muted">
-          Comma-separated. Threadly searches Reddit for posts matching any of these — edit
-          them however you like before starting.
+          Threadly searches Reddit for posts matching any of these — remove one, add your
+          own, edit however you like before starting.
         </p>
         <button type="submit" className="btn-block" disabled={starting}>
           {starting ? "Starting..." : "Start finding leads"}

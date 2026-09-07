@@ -189,6 +189,72 @@ button:disabled {
   color: var(--text-muted);
 }
 
+/* Keyword chip editor — see components/KeywordChips.tsx. Reuses the same pill shape as
+   .badge, styled like a normal input so it reads as "one field," not a badge list. */
+.chip-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.chip-input:focus-within {
+  outline: 2px solid var(--text);
+  outline-offset: -1px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 10px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #e6f4ea;
+  color: var(--success);
+  white-space: nowrap;
+}
+
+.chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 100px;
+  background: none;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.chip-remove:hover {
+  opacity: 1;
+  background: rgba(30, 107, 58, 0.15);
+}
+
+.chip-input input {
+  flex: 1;
+  min-width: 140px;
+  border: none;
+  padding: 3px 4px;
+  outline: none;
+}
+
+.chip-input input:focus {
+  outline: none;
+}
+
 .row {
   display: flex;
   align-items: center;

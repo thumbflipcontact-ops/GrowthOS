@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { KeywordChips } from "@/components/KeywordChips";
 import { TopNav } from "@/components/TopNav";
 import { ApiError, api } from "@/lib/api-client";
 import type { AgentRun } from "@/lib/types";
@@ -11,21 +12,14 @@ const AGENT_KEY = "conversation_finder";
 // platform-wide floor. Only option for now since nothing shorter is actually accepted.
 const SCHEDULE_CRON = "0 */6 * * *";
 
-function keywordsToText(keywords: unknown): string {
-  return Array.isArray(keywords) ? keywords.join(", ") : "";
-}
-
-function textToKeywords(text: string): string[] {
-  return text
-    .split(",")
-    .map((k) => k.trim())
-    .filter(Boolean);
+function normalizeKeywords(keywords: unknown): string[] {
+  return Array.isArray(keywords) ? keywords : [];
 }
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 function AgentSettingsCard({ projectId }: { projectId: string }) {
-  const [keywordsText, setKeywordsText] = useState("");
+  const [keywords, setKeywords] = useState<string[]>([]);
   const [suggestUrl, setSuggestUrl] = useState("");
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -105,7 +99,7 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       .then((configs) => {
         const existing = configs.find((c) => c.agent_key === AGENT_KEY);
         if (existing) {
-          setKeywordsText(keywordsToText(existing.config.keywords));
+          setKeywords(normalizeKeywords(existing.config.keywords));
           setEnabled(existing.enabled);
         }
       })
@@ -150,12 +144,13 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
     setSuggestError(null);
     setSuggesting(true);
     try {
-      const { keywords } = await api.suggestKeywords(projectId, suggestUrl.trim());
+      const { keywords: suggested } = await api.suggestKeywords(projectId, suggestUrl.trim());
       // Suggestion only — merges with (never replaces) whatever's already typed, so a user
       // who already has keywords doesn't lose them by trying this out.
-      const existing = textToKeywords(keywordsText);
-      const merged = [...existing, ...keywords.filter((k) => !existing.includes(k))];
-      setKeywordsText(merged.join(", "));
+      setKeywords((existing) => [
+        ...existing,
+        ...suggested.filter((k) => !existing.includes(k)),
+      ]);
     } catch (err) {
       setSuggestError(
         err instanceof ApiError ? err.message : "Could not read that website. Try a different URL."
@@ -167,7 +162,7 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
 
   async function saveConfig() {
     await api.upsertAgentConfig(projectId, AGENT_KEY, {
-      config: { keywords: textToKeywords(keywordsText) },
+      config: { keywords },
       schedule_cron: SCHEDULE_CRON,
       enabled,
     });
@@ -249,13 +244,13 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
 
       <form onSubmit={handleSave} style={{ marginTop: 16 }}>
         <label htmlFor="keywords">Keywords</label>
-        <input
+        <KeywordChips
           id="keywords"
-          value={keywordsText}
-          onChange={(e) => setKeywordsText(e.target.value)}
+          keywords={keywords}
+          onChange={setKeywords}
           placeholder="e.g. crawl budget, technical SEO, site audit"
         />
-        <p className="muted">Comma-separated. Threadly searches for posts matching any of these.</p>
+        <p className="muted">Threadly searches for posts matching any of these.</p>
 
         <label htmlFor="enabled" className="hstack" style={{ alignItems: "center", marginTop: 14 }}>
           <input
