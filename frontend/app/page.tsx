@@ -74,11 +74,11 @@ const STEPS = [
   },
   {
     title: "It watches, so you don't have to",
-    body: "Conversation Finder scans Reddit on a schedule — no login required — and drafts a reply with Claude the moment something's worth joining. No more refreshing search tabs all day.",
+    body: "Conversation Finder scans Reddit every 30 minutes — no login required — then Claude reads each match to judge whether it's a genuine lead and how strong their buying intent is, not just whether it shares a keyword. Worth-joining posts get a drafted reply. No more refreshing search tabs all day.",
   },
   {
     title: "You approve — or you don't",
-    body: "Every draft sits in your Approval Inbox until you personally read and approve it. Threadly will never publish on its own, ever.",
+    body: "Every draft sits in your Approval Inbox with a lead-match score, a buying-intent flag, and Claude's own rating of the reply it wrote — so you know exactly what you're looking at before you approve anything. Threadly will never publish on its own, ever.",
   },
 ];
 
