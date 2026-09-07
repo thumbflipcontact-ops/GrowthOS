@@ -89,13 +89,16 @@ def _auth(full_key: str) -> dict[str, str]:
 
 
 async def _make_pending_review_item(db_session, project_id: str, **overrides: object):
+    # "dummy" is a generic, non-manual-only platform key — see MANUAL_PUBLISH_ONLY_PLATFORMS
+    # (app/services/content_approval.py) for which real platforms opt out of auto-publish, and
+    # their own dedicated tests below.
     client = ContentDraftClient(db_session)
     item = await client.create_draft(
         project_id=uuid.UUID(project_id),
         type=overrides.pop("type", "tweet"),
         body=overrides.pop("body", "A helpful reply."),
         confidence=Decimal("0.75"),
-        target_platform=overrides.pop("target_platform", "reddit"),
+        target_platform=overrides.pop("target_platform", "dummy"),
     )
     item.status = ContentItemStatus.PENDING_REVIEW
     await db_session.flush()
@@ -207,7 +210,7 @@ async def test_approve_draft_attributes_to_key_creator_and_enqueues_publish(
     fake_arq_redis: _FakeArqRedis,
 ) -> None:
     project_id, full_key = project_and_key
-    item = await _make_pending_review_item(db_session, project_id, target_platform="reddit")
+    item = await _make_pending_review_item(db_session, project_id)
 
     from app.repositories.api_key_repository import ApiKeyRepository
 
@@ -223,7 +226,7 @@ async def test_approve_draft_attributes_to_key_creator_and_enqueues_publish(
     body = r.json()
     assert body["status"] == "approved"
     assert body["reviewed_by_user_id"] == str(creator_id)
-    assert len(fake_arq_redis.enqueued) == 1  # reddit is publishable, unlike twitter
+    assert len(fake_arq_redis.enqueued) == 1  # "dummy" is publishable, unlike twitter/reddit
 
 
 @pytest.mark.asyncio
@@ -235,6 +238,24 @@ async def test_approve_draft_skips_publish_job_for_twitter(
 ) -> None:
     project_id, full_key = project_and_key
     item = await _make_pending_review_item(db_session, project_id, target_platform="twitter")
+
+    r = await api_client.post(f"/public/v1/drafts/{item.id}/approve", headers=_auth(full_key))
+    assert r.status_code == 200
+    assert fake_arq_redis.enqueued == []
+
+
+@pytest.mark.asyncio
+async def test_approve_draft_skips_publish_job_for_reddit(
+    api_client: AsyncClient,
+    project_and_key: tuple[str, str],
+    db_session,
+    fake_arq_redis: _FakeArqRedis,
+) -> None:
+    """Most projects have no Publishable Reddit connection — search works without one, but
+    posting still needs a real OAuth connection few projects will have. See
+    app/services/content_approval.py's MANUAL_PUBLISH_ONLY_PLATFORMS."""
+    project_id, full_key = project_and_key
+    item = await _make_pending_review_item(db_session, project_id, target_platform="reddit")
 
     r = await api_client.post(f"/public/v1/drafts/{item.id}/approve", headers=_auth(full_key))
     assert r.status_code == 200

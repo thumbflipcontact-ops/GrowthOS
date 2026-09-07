@@ -223,14 +223,17 @@ async def test_content_items_require_project_access(api_client: AsyncClient) -> 
     assert r.status_code == 401
 
 
-async def _make_pending_review_item(db_session, project_id: str):
+async def _make_pending_review_item(db_session, project_id: str, *, platform: str = "dummy"):
+    # A generic, non-manual-only platform key — see MANUAL_PUBLISH_ONLY_PLATFORMS
+    # (app/services/content_approval.py) for which real platforms opt out of this, and their
+    # own dedicated tests below.
     client = ContentDraftClient(db_session)
     item = await client.create_draft(
         project_id=uuid.UUID(project_id),
         type="reddit_reply",
         body="A helpful reply.",
         confidence=Decimal("0.75"),
-        target_platform="reddit",
+        target_platform=platform,
         target_ref="t3_abc123",
     )
     item.status = ContentItemStatus.PENDING_REVIEW
@@ -289,6 +292,47 @@ async def test_approve_skips_the_publish_job_for_a_twitter_item(
     assert r.status_code == 200
     assert r.json()["status"] == "approved"
     assert fake_arq_redis.enqueued == []
+
+
+@pytest.mark.asyncio
+async def test_approve_skips_the_publish_job_for_a_reddit_item(
+    api_client: AsyncClient, project_id: str, db_session, fake_arq_redis: _FakeArqRedis
+) -> None:
+    """Most projects have no Publishable Reddit connection at all — search works with no
+    connected account (plugins/reddit/plugin.py), but posting still needs a real OAuth
+    connection few projects will have. Approving a reddit item must never enqueue a publish
+    attempt that's guaranteed to fail with "no valid credentials yet." See
+    app/services/content_approval.py's MANUAL_PUBLISH_ONLY_PLATFORMS."""
+    item = await _make_pending_review_item(db_session, project_id, platform="reddit")
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/approve",
+        json={"version": item.version},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "approved"
+    assert fake_arq_redis.enqueued == []
+
+
+@pytest.mark.asyncio
+async def test_mark_published_works_for_an_approved_reddit_item(
+    api_client: AsyncClient, project_id: str, db_session, fake_arq_redis: _FakeArqRedis
+) -> None:
+    item = await _make_pending_review_item(db_session, project_id, platform="reddit")
+
+    approve = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/approve",
+        json={"version": item.version},
+    )
+    assert approve.status_code == 200
+    approved_version = approve.json()["version"]
+
+    r = await api_client.post(
+        f"/api/v1/projects/{project_id}/content-items/{item.id}/mark-published",
+        json={"version": approved_version},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "published"
 
 
 @pytest.mark.asyncio

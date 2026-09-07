@@ -11,10 +11,13 @@ import { useSession } from "@/lib/useSession";
 // X's own platform policy (Feb 2026) blocks a programmatic reply/quote unless the target
 // post's author already @mentioned this account or quoted it first — every organically
 // discovered post fails that by construction, so the backend never even attempts to
-// auto-publish a twitter item (see backend/app/api/v1/content_items.py's
-// _MANUAL_PUBLISH_ONLY_PLATFORMS). This is the frontend's matching list: which platforms an
-// approved item needs a human to post themselves, rather than waiting on a publish job.
-const MANUAL_PUBLISH_ONLY_PLATFORMS = new Set(["twitter"]);
+// auto-publish a twitter item. Reddit is manual-only too, since most projects have no
+// connected (Publishable) Reddit account — search works without one, but posting still
+// needs a real OAuth connection few projects will have. See backend/app/services/
+// content_approval.py's MANUAL_PUBLISH_ONLY_PLATFORMS, the source of truth this mirrors —
+// this is the frontend's matching list: which platforms an approved item needs a human to
+// post themselves, rather than waiting on a publish job.
+const MANUAL_PUBLISH_ONLY_PLATFORMS = new Set(["twitter", "reddit"]);
 
 // The Approval Inbox is the highest-stakes surface in this app — it is the only UI that can
 // approve or reject a content_item. Every interaction here biases toward making the human

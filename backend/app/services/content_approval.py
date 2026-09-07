@@ -53,13 +53,20 @@ _ARCHIVABLE_STATUSES = (
 # app/jobs/publish.py at all (see app/api/v1/content_items.py's approve route). An approved
 # twitter item is instead posted by a human directly on X, then told to this service via
 # mark_published_manually — the only status this can start from.
+#
+# reddit is manual-only for a different reason: plugins/reddit/plugin.py's search() works
+# with no connected account (see its README's "Public sitewide search"), so most projects
+# have no Publishable Reddit connection at all — auto-publish would just fail with
+# publish_error on every approval. This also matches the product's own stated promise
+# ("Threadly never posts on its own") — if a real per-user OAuth connect flow is ever
+# finished and made a real, deliberate default later, this is the one line to change.
 _MANUALLY_PUBLISHABLE_STATUSES = (ContentItemStatus.APPROVED,)
 
 # Public (non-underscore): both app/api/v1/content_items.py's approve route and
 # app/api/public/v1/content.py's public-API approve route need to decide whether to enqueue a
 # publish job, and need the same idempotency-keyed job id if they do — one source of truth
 # rather than two copies that could drift.
-MANUAL_PUBLISH_ONLY_PLATFORMS = {"twitter"}
+MANUAL_PUBLISH_ONLY_PLATFORMS = {"twitter", "reddit"}
 
 
 def publish_job_id(item_id: uuid.UUID) -> str:
