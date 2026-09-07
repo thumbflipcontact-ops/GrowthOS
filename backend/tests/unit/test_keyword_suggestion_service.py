@@ -117,3 +117,39 @@ async def test_suggest_raises_when_model_response_has_no_keywords_list(monkeypat
 
     with pytest.raises(ValidationError):
         await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+
+
+@pytest.mark.asyncio
+async def test_suggest_drops_sentence_length_outliers(monkeypatch) -> None:
+    # Real production incident: long, sentence-like keywords ("affordable way to promote my
+    # website") reliably return zero Reddit search results even for a common topic — Reddit's
+    # search requires every word to co-occur. The prompt asks for short keywords directly;
+    # this is the defensive backstop for whenever the model doesn't fully comply.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<p>content</p>")
+
+    _patch_transport(monkeypatch, handler)
+    llm = _FakeLLM(
+        '{"keywords": ["crawl budget", '
+        '"looking for an affordable way to promote my website", '
+        '"cheap hosting"]}'
+    )
+
+    keywords = await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+
+    assert keywords == ["crawl budget", "cheap hosting"]
+
+
+@pytest.mark.asyncio
+async def test_suggest_falls_back_to_unfiltered_list_if_everything_is_long(monkeypatch) -> None:
+    # Never return nothing just because every suggestion happened to be long — some result
+    # beats silently empty keywords.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<p>content</p>")
+
+    _patch_transport(monkeypatch, handler)
+    llm = _FakeLLM('{"keywords": ["looking for an affordable way to promote my website"]}')
+
+    keywords = await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+
+    assert keywords == ["looking for an affordable way to promote my website"]

@@ -27,9 +27,20 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 _SYSTEM_PROMPT = """You suggest Reddit search keywords for a product, given its own website
-text. Respond with only a JSON object: {"keywords": ["...", "..."]}. Suggest 5 to 10 short
-keywords or phrases a potential customer would actually type in a Reddit post or comment when
-describing the problem this product solves — not the product's own name or marketing jargon.
+text. Respond with only a JSON object: {"keywords": ["...", "..."]}.
+
+Suggest 5 to 10 keywords, each just 1-3 words long — short enough to plausibly appear
+verbatim inside a real Reddit post or comment, not a full sentence describing the problem.
+Longer phrases almost never match anything real: Reddit's search treats them as requiring
+every word to co-occur, so specific multi-word sentences reliably return zero results even
+when the topic itself is common.
+
+Good examples (ship these): "crawl budget", "technical SEO", "site audit", "need developer",
+"cheap hosting", "MVP help".
+Bad examples (never produce these — reject anything this long or sentence-like): "how to
+improve my site's crawl budget", "looking for an affordable way to promote my website",
+"need a developer for my startup MVP".
+
 Never invent claims about the product beyond what the page text says."""
 
 
@@ -48,7 +59,14 @@ class KeywordSuggestionService:
             temperature=0.3,
         )
         completion = await llm.complete(request)
-        return _parse_keywords(completion.text)
+        keywords = _parse_keywords(completion.text)
+        # Defensive, not the primary mechanism — the prompt above is what actually gets short
+        # keywords most of the time. This just drops the occasional sentence-length outlier
+        # the model ignores the instruction for, rather than shipping something that will
+        # reliably return zero Reddit search results. Falls back to the unfiltered list rather
+        # than returning nothing if every suggestion happened to be long.
+        short_enough = [k for k in keywords if len(k.split()) <= 4]
+        return short_enough or keywords
 
     async def _fetch_text(self, url: str) -> str:
         try:
