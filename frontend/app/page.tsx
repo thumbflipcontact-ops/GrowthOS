@@ -247,16 +247,6 @@ export default function RootPage() {
         <div className="proof-grid">
           <figure className="proof-shot">
             <img
-              src="/approval-inbox.png"
-              alt="Threadly's Approval Inbox showing an AI-drafted reply next to the original post and the agent's reasoning for why it drafted that reply"
-            />
-            <figcaption>
-              Every draft comes with the original post and the AI&apos;s reasoning — read it
-              before you approve anything.
-            </figcaption>
-          </figure>
-          <figure className="proof-shot">
-            <img
               src="/ready-to-post.png"
               alt="Threadly's Ready to Post screen with buttons to copy the reply, open the original post, and mark it as posted"
             />
@@ -267,12 +257,17 @@ export default function RootPage() {
           </figure>
         </div>
         <div className="confidence-note">
-          <h3>What&apos;s the confidence score?</h3>
+          <h3>What do &ldquo;Lead match,&rdquo; &ldquo;High intent,&rdquo; and &ldquo;Draft quality&rdquo; mean?</h3>
           <p>
-            Claude rates its own reply as it drafts it — how good and appropriate it thinks
-            that specific reply is, on a scale of 0 to 1. Low scores aren&apos;t hidden or
-            auto-sent; they&apos;re flagged so you know exactly which drafts deserve a closer
-            look before you approve them.
+            Every drafted reply comes with three signals, not just one. <strong>Lead match</strong>{" "}
+            is Claude&apos;s read on how genuinely relevant the post is to what you&apos;re
+            looking for — not just shared keywords, but whether it&apos;s actually the kind of
+            conversation you searched for. <strong>High intent</strong> flags posts where the
+            author looks like they&apos;re actively seeking a solution right now, not just
+            discussing the topic in passing. <strong>Draft quality</strong> is a separate
+            number: how good Claude thinks the reply it wrote is. A great lead can still get a
+            rough draft, and a so-so lead can get a great one — that&apos;s why both are shown,
+            so you always know what you&apos;re approving.
           </p>
         </div>
       </section>
