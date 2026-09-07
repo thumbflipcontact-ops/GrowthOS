@@ -68,6 +68,11 @@ class ContentItemResponse(BaseModel):
     # did this post match your search," not "how good is this draft." Same population caveat
     # as source_title/source_body: only set via _with_source_post, None otherwise.
     source_confidence: Decimal | None = None
+    # The LLM lead-scoring pass's own judgment (agents/conversation_finder/prompts.py) — None
+    # whenever that pass didn't cover this item (fell back to the deterministic score, or the
+    # item predates this feature), same population caveat as source_title/source_body above.
+    source_buying_intent: str | None = None
+    source_pain_point: str | None = None
 
     model_config = {"from_attributes": True}
 

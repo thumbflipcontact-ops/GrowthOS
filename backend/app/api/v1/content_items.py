@@ -70,6 +70,8 @@ async def _with_source_post(
                     "source_title": source.title if source else None,
                     "source_body": source.body_excerpt if source else None,
                     "source_confidence": source.confidence if source else None,
+                    "source_buying_intent": source.buying_intent.value if source else None,
+                    "source_pain_point": source.pain_point if source else None,
                 }
             )
         )

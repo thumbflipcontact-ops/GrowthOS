@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.knowledge import KnowledgeItem
+from app.models.knowledge import BuyingIntent, KnowledgeItem
 from app.repositories.knowledge_repository import KnowledgeItemRepository
 
 
@@ -46,6 +46,8 @@ class KnowledgeBaseClient:
         body_excerpt: str | None = None,
         platform_metadata: dict | None = None,
         source_agent_run_id: uuid.UUID | None = None,
+        buying_intent: BuyingIntent | str | None = None,
+        pain_point: str | None = None,
     ) -> tuple[KnowledgeItem, bool]:
         """Writes a newly discovered item, or refreshes the existing row for the same
         `(project_id, url)` in place — see `knowledge_items`' `unique(project_id, url)`
@@ -60,11 +62,21 @@ class KnowledgeBaseClient:
         docs/reviews/CONTENT_AGENT_IMPLEMENTATION_REPORT.md for why they were added. This
         client never interprets them.
 
-        Deliberately does not touch `problem`/`industry`/`product`/`pain_point`/
-        `buying_intent`/`suggested_*` — those are LLM-derived fields with no extraction step
-        yet (Conversation Finder has no LLM integration, see ROADMAP.md); they stay at the
-        model's schema defaults until a future enrichment pass populates them.
+        `buying_intent`/`pain_point` are the LLM-scoring pass's output (see
+        agents/conversation_finder/agent.py and prompts.py) — optional because that pass is a
+        soft-failing enhancement layer, not every call has them. Left `None` (the model's own
+        schema defaults — `BuyingIntent.NONE`/`None`) falls back to exactly this method's
+        pre-LLM behavior. `buying_intent` accepts a plain string (the enum's value, e.g.
+        `"high"`) as well as a `BuyingIntent` — agents/conversation_finder/agent.py
+        deliberately never imports the enum itself (see its own docstring), so this is where
+        the plain string `LeadScore.buying_intent` gets converted. `problem`/`industry`/
+        `product`/`suggested_*` are still untouched — those remain
+        `agents/knowledge_base_agent`'s planned cross-item job, not a per-item extraction
+        this method does.
         """
+        if buying_intent is not None and not isinstance(buying_intent, BuyingIntent):
+            buying_intent = BuyingIntent(buying_intent)
+
         existing = await self.get_by_url(project_id, url)
         if existing is not None:
             existing.tags = tags
@@ -73,6 +85,10 @@ class KnowledgeBaseClient:
             existing.body_excerpt = body_excerpt
             existing.platform_metadata = platform_metadata or {}
             existing.source_agent_run_id = source_agent_run_id
+            if buying_intent is not None:
+                existing.buying_intent = buying_intent
+            if pain_point is not None:
+                existing.pain_point = pain_point
             await self.session.flush()
             return existing, False
 
@@ -86,6 +102,8 @@ class KnowledgeBaseClient:
             title=title,
             body_excerpt=body_excerpt,
             platform_metadata=platform_metadata or {},
+            **({"buying_intent": buying_intent} if buying_intent is not None else {}),
+            **({"pain_point": pain_point} if pain_point is not None else {}),
         )
         item = await self.items.add(item)
         return item, True

@@ -28,6 +28,29 @@ function LeadMatchBadge({ score }: { score: string }) {
   return <span className={`badge ${badgeClass}`}>Lead match: {pct}%</span>;
 }
 
+// item.source_buying_intent — the LLM lead-scoring pass's own judgment
+// (agents/conversation_finder/prompts.py), "none"/"low"/"medium"/"high". Only "high"/"medium"
+// get a badge — "low"/"none" aren't worth calling out, and older/fallback items (no LLM pass)
+// have this null and render nothing here, exactly as before this feature existed.
+function LeadIntentBadge({ intent }: { intent: string }) {
+  if (intent !== "high" && intent !== "medium") return null;
+  const badgeClass = intent === "high" ? "badge-success" : "badge-warn";
+  const label = intent === "high" ? "High intent" : "Medium intent";
+  return <span className={`badge ${badgeClass}`}>{label}</span>;
+}
+
+// item.source_pain_point — the LLM lead-scoring pass's one-sentence reasoning for its score,
+// written for a person deciding whether to reply (see prompts.py's SYSTEM_PROMPT) — the
+// closest honest equivalent to MentionCatch's own "why this lead" line, without claiming the
+// separate Buying Intent / Problem Fit / Urgency breakdown this doesn't produce.
+function WhyThisLead({ pain_point }: { pain_point: string }) {
+  return (
+    <p className="muted" style={{ fontSize: 13 }}>
+      <strong>Why this lead:</strong> {pain_point}
+    </p>
+  );
+}
+
 // The Approval Inbox is the highest-stakes surface in this app — it is the only UI that can
 // approve or reject a content_item. Every interaction here biases toward making the human
 // reviewer actually read what they're approving: one item, fully expanded, at a time.
@@ -100,6 +123,9 @@ function ApprovalCard({
         </div>
         <div className="hstack" style={{ gap: 8 }}>
           {item.source_confidence !== null && <LeadMatchBadge score={item.source_confidence} />}
+          {item.source_buying_intent !== null && (
+            <LeadIntentBadge intent={item.source_buying_intent} />
+          )}
           <span className="muted" style={{ fontSize: 13 }}>
             Draft quality: {Number(item.confidence).toFixed(2)}
           </span>
@@ -107,6 +133,8 @@ function ApprovalCard({
       </div>
 
       <SourcePost item={item} />
+
+      {item.source_pain_point && <WhyThisLead pain_point={item.source_pain_point} />}
 
       <div className="content-body">{item.body}</div>
 
@@ -217,10 +245,17 @@ function ReadyToPostCard({ item, projectId, onResolved }: { item: ContentItem; p
           <span className="badge badge-muted">{item.target_platform ?? item.type}</span>
           <span className="badge badge-success">ready to post</span>
         </div>
-        {item.source_confidence !== null && <LeadMatchBadge score={item.source_confidence} />}
+        <div className="hstack" style={{ gap: 8 }}>
+          {item.source_confidence !== null && <LeadMatchBadge score={item.source_confidence} />}
+          {item.source_buying_intent !== null && (
+            <LeadIntentBadge intent={item.source_buying_intent} />
+          )}
+        </div>
       </div>
 
       <SourcePost item={item} />
+
+      {item.source_pain_point && <WhyThisLead pain_point={item.source_pain_point} />}
 
       <div className="content-body">{item.body}</div>
 

@@ -72,6 +72,12 @@ export interface ContentItem {
   // search) — a DIFFERENT number from `confidence` above (the AI's self-rated quality of the
   // drafted reply itself). Null under the same conditions as source_title/source_body.
   source_confidence: string | null;
+  // The LLM lead-scoring pass's own judgment (agents/conversation_finder/prompts.py) — null
+  // whenever that pass didn't cover this item (fell back to the deterministic score, or the
+  // item predates this feature). source_buying_intent is "none"/"low"/"medium"/"high" when
+  // set, never an empty string.
+  source_buying_intent: string | null;
+  source_pain_point: string | null;
   version: number;
   created_at: string;
   updated_at: string;

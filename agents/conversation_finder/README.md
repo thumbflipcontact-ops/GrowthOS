@@ -31,7 +31,10 @@ agent that answers "which online discussions are worth a closer look."
 4. Deduplicates within the run (by URL) and against existing `knowledge_items` (also by URL,
    via `ctx.knowledge_base.upsert_discovery` — a re-discovered thread refreshes its
    tags/confidence in place rather than raising the unique constraint or duplicating a row).
-5. Writes rows scoring at or above `min_score_to_save`, each publishing a
+5. For whatever survives that pre-filter, makes one batched LLM call (see §LLM scoring
+   below) judging genuine relevance and buying intent — falling back to the deterministic
+   keyword score if that call fails.
+6. Writes rows scoring at or above `min_score_to_save`, each publishing a
    `knowledge_item.created` domain event in the same transaction (only for genuinely new
    rows — refreshing an existing one is not a new fact worth another event). Does **not**
    draft a reply itself — a future content-drafting agent would subscribe to that event and
@@ -46,17 +49,33 @@ it only reads `PluginResult.title`/`.body`, which every `Searchable` plugin retu
 of platform, never a `platform_metadata` key (opaque and plugin-specific, see
 `plugins/_shared/base.py`). Matched terms (lowercased, deduplicated) become the item's `tags`.
 
-## What Phase 2A does not do
+As of the LLM scoring pass below, this deterministic score is used two ways: as a cheap
+pre-filter (anything scoring `0` skips the LLM call entirely — no keyword's words appear at
+all) and as the fallback `confidence` for any candidate the LLM pass doesn't cover.
 
-**No LLM integration** (explicitly out of scope, see `ROADMAP.md`). This agent does not call
-an LLM, so it does not populate `knowledge_items.problem`/`industry`/`product`/`pain_point`/
-`buying_intent`/`suggested_reply`/`suggested_article`/`suggested_product_idea` — those stay
-at the model's schema defaults (`buying_intent="none"`, everything else `null`) until a
-future enrichment pass fills them in. `confidence` here means "how well this result matches
-the configured search terms" (a deterministic score — see `ranking.py`), not an LLM's
-judgment of buying intent; treat it accordingly when reading `knowledge_items` written by
-this agent. See `docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`'s "Scoping
-decisions" section for the full reasoning.
+## LLM scoring
+
+`agent.py`'s `run()` gathers every plugin's deduped, pre-filtered results for the whole run,
+then makes **one** batched LLM call (`agents/conversation_finder/prompts.py`) asking it to
+judge each candidate's genuine relevance (not just shared keywords), `buying_intent`
+(`none`/`low`/`medium`/`high` — the same field `KnowledgeItem` already had, previously always
+`"none"`), and a one-sentence `reasoning`, which is stored as `pain_point`. Results are
+matched back to candidates by URL (echoed back by the model), not by array position, since
+nothing guarantees a model preserves order or count exactly.
+
+One call per run, not one per candidate — deliberately the first batched LLM call in this
+codebase, given how many raw results a single run can produce (see
+`max_results_per_platform`). If the call raises, the response doesn't parse, or a specific
+candidate's URL is missing from the response, that candidate falls back to exactly the
+deterministic `score_result()` behavior described above (`confidence` = keyword score, no
+`buying_intent`/`pain_point`) — recorded as a run error, never a run failure. LLM scoring is
+a pure enhancement layer: a bad response degrades to what shipped before this feature
+existed, never to worse. `problem`/`industry`/`product`/`suggested_reply`/`suggested_article`/
+`suggested_product_idea` remain unpopulated — those are `agents/knowledge_base_agent`'s
+planned cross-item job (outcome tracking and pattern-mining over many items), not something
+this per-run, per-candidate pass does. See
+`docs/reviews/CONVERSATION_FINDER_IMPLEMENTATION_REPORT.md`'s "Scoping decisions" section for
+the original (pre-LLM) reasoning this section supersedes.
 
 ## Reads
 

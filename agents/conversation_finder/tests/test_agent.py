@@ -1,11 +1,16 @@
 """End-to-end tests for ConversationFinderAgent.run() against a mocked plugin registry,
-knowledge base, and event publisher — see docs/agents/AGENT_ARCHITECTURE.md §Testing ("every
-agent's test suite runs against a mocked PluginRegistry ... and a mocked/recorded
-LLMProvider response" — Phase 2A has no LLM, so no LLM double is needed here).
+knowledge base, event publisher, and LLM provider — see docs/agents/AGENT_ARCHITECTURE.md
+§Testing ("every agent's test suite runs against a mocked PluginRegistry ... and a
+mocked/recorded LLMProvider response"). `_ctx()`'s default `_FakeLLM` auto-echoes a
+plausible LeadScoreBatch for whatever candidates were actually sent to it, so every test that
+doesn't care about LLM scoring specifically (most of the ones below, predating the LLM
+scoring pass) keeps behaving exactly as it did before that pass existed — see
+_score_candidates_with_llm-specific tests further down for the LLM-scoring contract itself.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -18,6 +23,7 @@ from plugins._shared.base import PluginQuery, PluginResult
 
 from agents._shared.base import AgentContext
 from agents.conversation_finder.agent import AGENT, ConversationFinderAgent
+from agents.conversation_finder.prompts import LeadScore, LeadScoreBatch
 
 
 @dataclass
@@ -66,6 +72,8 @@ class _FakeKnowledgeBase:
         title: str | None = None,
         body_excerpt: str | None = None,
         platform_metadata: dict[str, Any] | None = None,
+        buying_intent: str | None = None,
+        pain_point: str | None = None,
     ) -> tuple[SimpleNamespace, bool]:
         created = url not in self.existing_urls
         self.existing_urls.add(url)
@@ -78,6 +86,8 @@ class _FakeKnowledgeBase:
                 "title": title,
                 "body_excerpt": body_excerpt,
                 "platform_metadata": platform_metadata,
+                "buying_intent": buying_intent,
+                "pain_point": pain_point,
             }
         )
         item = SimpleNamespace(
@@ -87,9 +97,43 @@ class _FakeKnowledgeBase:
             url=url,
             tags=tags,
             confidence=confidence,
-            buying_intent=SimpleNamespace(value="none"),
+            buying_intent=SimpleNamespace(value=buying_intent or "none"),
         )
         return item, created
+
+
+_PROMPT_URL_RE = re.compile(r"url: (\S+)")
+
+
+def _auto_lead_score_response(request: Any) -> str:
+    """Default `_FakeLLM` behavior: echo back a plausible high-relevance LeadScore for every
+    candidate actually present in the batched prompt, so tests that don't care about LLM
+    scoring specifically don't need to hand-construct a response for it."""
+    user_message = next(m for m in request.messages if m.role == "user")
+    urls = _PROMPT_URL_RE.findall(user_message.content)
+    batch = LeadScoreBatch(
+        scores=[
+            LeadScore(url=url, relevance=1.0, buying_intent="high", reasoning="Looks relevant.")
+            for url in urls
+        ]
+    )
+    return batch.model_dump_json()
+
+
+@dataclass
+class _FakeLLM:
+    response_text: str | None = None
+    raises: bool = False
+    calls: list[Any] = field(default_factory=list)
+
+    async def complete(self, request: Any) -> SimpleNamespace:
+        self.calls.append(request)
+        if self.raises:
+            raise RuntimeError("llm blew up")
+        text = self.response_text if self.response_text is not None else _auto_lead_score_response(
+            request
+        )
+        return SimpleNamespace(text=text)
 
 
 @dataclass
@@ -106,7 +150,9 @@ class _FakeEventPublisher:
 
 def _project(icp_keywords: list[str] | None = None) -> SimpleNamespace:
     icp_config = {"keywords": icp_keywords} if icp_keywords is not None else {}
-    return SimpleNamespace(id=uuid.uuid4(), icp_config=icp_config)
+    return SimpleNamespace(
+        id=uuid.uuid4(), icp_config=icp_config, name="Acme", brand_voice={}
+    )
 
 
 def _ctx(
@@ -116,6 +162,7 @@ def _ctx(
     project: SimpleNamespace | None = None,
     knowledge_base: _FakeKnowledgeBase | None = None,
     events: _FakeEventPublisher | None = None,
+    llm: _FakeLLM | None = None,
 ) -> tuple[AgentContext, _FakeKnowledgeBase, _FakeEventPublisher]:
     kb = knowledge_base or _FakeKnowledgeBase()
     ev = events or _FakeEventPublisher()
@@ -128,7 +175,7 @@ def _ctx(
         project=project or _project(),  # type: ignore[arg-type]
         config=config,
         plugins=_FakeRegistry(plugins),  # type: ignore[arg-type]
-        llm=None,  # type: ignore[arg-type]  # conversation_finder never calls ctx.llm
+        llm=llm or _FakeLLM(),  # type: ignore[arg-type]
         knowledge_base=kb,  # type: ignore[arg-type]
         content=None,  # type: ignore[arg-type]  # conversation_finder never calls ctx.content
         events=ev,  # type: ignore[arg-type]
@@ -343,6 +390,208 @@ async def test_passes_title_body_excerpt_and_platform_metadata_through_verbatim(
     assert saved["title"] == "Crawl budget question"
     assert saved["body_excerpt"] == "Full post body about crawl budget."
     assert saved["platform_metadata"] == {"subreddit": "SEO", "thing_id": "t3_abc123"}
+
+
+@pytest.mark.asyncio
+async def test_llm_score_and_reasoning_are_saved_as_confidence_and_pain_point() -> None:
+    plugin = _FakePlugin(
+        key="reddit", results=[_result("https://x.invalid/1", title="crawl budget")]
+    )
+    response = LeadScoreBatch(
+        scores=[
+            LeadScore(
+                url="https://x.invalid/1",
+                relevance=0.9,
+                buying_intent="high",
+                reasoning="Actively asking for a crawl budget tool.",
+            )
+        ]
+    ).model_dump_json()
+    ctx, kb, _ = _ctx(
+        plugins=[plugin],
+        config={"keywords": ["crawl budget"]},
+        llm=_FakeLLM(response_text=response),
+    )
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 1
+    saved = kb.saved_calls[0]
+    assert saved["confidence"] == Decimal("0.9")
+    assert saved["buying_intent"] == "high"
+    assert saved["pain_point"] == "Actively asking for a crawl budget tool."
+
+
+@pytest.mark.asyncio
+async def test_llm_scores_are_matched_back_to_candidates_by_url_not_order() -> None:
+    plugin = _FakePlugin(
+        key="reddit",
+        results=[
+            _result("https://x.invalid/a", title="crawl budget"),
+            _result("https://x.invalid/b", title="crawl budget"),
+        ],
+    )
+    # Response lists "b" before "a" and uses different scores — matching must go by url, not
+    # by the order candidates were sent in.
+    response = LeadScoreBatch(
+        scores=[
+            LeadScore(url="https://x.invalid/b", relevance=0.3, buying_intent="low", reasoning="b"),
+            LeadScore(url="https://x.invalid/a", relevance=0.8, buying_intent="high", reasoning="a"),
+        ]
+    ).model_dump_json()
+    ctx, kb, _ = _ctx(
+        plugins=[plugin],
+        config={"keywords": ["crawl budget"]},
+        llm=_FakeLLM(response_text=response),
+    )
+
+    await ConversationFinderAgent().run(ctx)
+
+    by_url = {c["url"]: c for c in kb.saved_calls}
+    assert by_url["https://x.invalid/a"]["confidence"] == Decimal("0.8")
+    assert by_url["https://x.invalid/b"]["confidence"] == Decimal("0.3")
+
+
+@pytest.mark.asyncio
+async def test_candidate_missing_from_llm_response_falls_back_to_keyword_score() -> None:
+    plugin = _FakePlugin(
+        key="reddit",
+        results=[
+            _result("https://x.invalid/covered", title="crawl budget"),
+            _result("https://x.invalid/missing", title="crawl budget"),
+        ],
+    )
+    # Only one of the two candidates is echoed back by the model.
+    response = LeadScoreBatch(
+        scores=[
+            LeadScore(
+                url="https://x.invalid/covered",
+                relevance=0.95,
+                buying_intent="high",
+                reasoning="covered",
+            )
+        ]
+    ).model_dump_json()
+    ctx, kb, _ = _ctx(
+        plugins=[plugin],
+        config={"keywords": ["crawl budget"]},
+        llm=_FakeLLM(response_text=response),
+    )
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 2
+    by_url = {c["url"]: c for c in kb.saved_calls}
+    assert by_url["https://x.invalid/covered"]["confidence"] == Decimal("0.95")
+    assert by_url["https://x.invalid/covered"]["buying_intent"] == "high"
+    # Fell back to the deterministic keyword score — same value ranking.score_result() would
+    # produce for a single-term title match — with no buying_intent/pain_point set.
+    missing = by_url["https://x.invalid/missing"]
+    assert missing["buying_intent"] is None
+    assert missing["pain_point"] is None
+    assert missing["confidence"] > 0
+
+
+@pytest.mark.asyncio
+async def test_llm_call_raising_falls_back_to_keyword_score_for_every_candidate() -> None:
+    plugin = _FakePlugin(
+        key="reddit", results=[_result("https://x.invalid/1", title="crawl budget")]
+    )
+    ctx, kb, _ = _ctx(
+        plugins=[plugin],
+        config={"keywords": ["crawl budget"]},
+        llm=_FakeLLM(raises=True),
+    )
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 1
+    saved = kb.saved_calls[0]
+    assert saved["buying_intent"] is None
+    assert saved["pain_point"] is None
+    assert saved["confidence"] > 0
+    assert any("AI lead scoring" in e for e in result.errors)
+
+
+@pytest.mark.asyncio
+async def test_unparseable_llm_response_falls_back_to_keyword_score_for_every_candidate() -> None:
+    plugin = _FakePlugin(
+        key="reddit", results=[_result("https://x.invalid/1", title="crawl budget")]
+    )
+    ctx, kb, _ = _ctx(
+        plugins=[plugin],
+        config={"keywords": ["crawl budget"]},
+        llm=_FakeLLM(response_text="not json at all"),
+    )
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 1
+    saved = kb.saved_calls[0]
+    assert saved["buying_intent"] is None
+    assert saved["pain_point"] is None
+    assert any("AI lead scoring" in e for e in result.errors)
+
+
+@pytest.mark.asyncio
+async def test_llm_relevance_gates_min_score_to_save_not_the_keyword_score() -> None:
+    """A candidate that clears the cheap keyword pre-filter (score > 0) but that the LLM
+    judges as not actually relevant should NOT be saved — min_score_to_save must gate on
+    whichever score actually ends up on the item, not the pre-filter score."""
+    plugin = _FakePlugin(
+        key="reddit", results=[_result("https://x.invalid/1", title="crawl budget tool")]
+    )
+    response = LeadScoreBatch(
+        scores=[
+            LeadScore(
+                url="https://x.invalid/1",
+                relevance=0.05,
+                buying_intent="none",
+                reasoning="Uses the words but isn't actually about this.",
+            )
+        ]
+    ).model_dump_json()
+    ctx, kb, _ = _ctx(
+        plugins=[plugin],
+        config={"keywords": ["crawl budget"], "min_score_to_save": 0.2},
+        llm=_FakeLLM(response_text=response),
+    )
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 0
+    assert kb.saved_calls == []
+
+
+@pytest.mark.asyncio
+async def test_candidates_across_multiple_plugins_are_scored_in_one_batched_llm_call() -> None:
+    plugin_a = _FakePlugin(key="reddit", results=[_result("https://x.invalid/a", title="crawl budget")])
+    plugin_b = _FakePlugin(key="dummy", results=[_result("https://x.invalid/b", title="crawl budget")])
+    llm = _FakeLLM()
+    ctx, kb, _ = _ctx(
+        plugins=[plugin_a, plugin_b], config={"keywords": ["crawl budget"]}, llm=llm
+    )
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 2
+    assert len(llm.calls) == 1  # one call scores both plugins' candidates together
+    user_message = next(m for m in llm.calls[0].messages if m.role == "user")
+    assert "https://x.invalid/a" in user_message.content
+    assert "https://x.invalid/b" in user_message.content
+
+
+@pytest.mark.asyncio
+async def test_llm_is_not_called_when_there_are_no_candidates() -> None:
+    plugin = _FakePlugin(key="reddit", results=[_result("https://x.invalid/1", body="unrelated")])
+    llm = _FakeLLM()
+    ctx, kb, _ = _ctx(plugins=[plugin], config={"keywords": ["crawl budget"]}, llm=llm)
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 0
+    assert llm.calls == []
+    assert kb.saved_calls == []
 
 
 @pytest.mark.asyncio
