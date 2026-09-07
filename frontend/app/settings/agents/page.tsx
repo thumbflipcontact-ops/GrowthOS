@@ -221,9 +221,11 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
     <div className="card">
       <h2>Conversation Finder</h2>
       <p className="muted">
-        Searches your connected accounts for conversations matching these keywords, then drafts
-        a reply for your approval. Runs automatically every 30 minutes once enabled, or trigger
-        a run right now to test it.
+        Enter your website below and press &ldquo;Suggest&rdquo; — Claude reads your site and
+        generates a list of specific phrases people actually search for. Every 30 minutes (or
+        right away if you press &ldquo;Run now&rdquo;), Threadly searches Reddit for posts
+        matching those keywords, and any worth replying to show up as drafts on the{" "}
+        <a href="/approvals">Approvals</a> page for you to review.
       </p>
 
       {error && <div className="error-banner">{error}</div>}
