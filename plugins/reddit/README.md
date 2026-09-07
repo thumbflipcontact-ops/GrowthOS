@@ -60,15 +60,25 @@ before anyone has picked subreddits); `search()` simply returns nothing until it
 
 ## `search()` — public sitewide search
 
-Calls `GET /search.json` on `www.reddit.com` — Reddit's public, unauthenticated search
+Calls `GET /search.rss` on `www.reddit.com` — Reddit's public, unauthenticated search
 endpoint, sitewide (not restricted to any subreddit), joining `PluginQuery.terms` with `OR`.
-**No OAuth token or connected account is required** — this is deliberate: a project gets
-Reddit lead discovery from the moment it's created (see
+**RSS, not JSON** — `GET /search.json` was tried first and confirmed via direct production
+testing to return HTTP 403 with a bot-detection HTML challenge page from Railway's datacenter
+IP range; `/search.rss` returns a normal 200 with real Atom XML from the same IP. This matches
+MentionCatch's own stated architecture ("reads Reddit's public RSS feeds and search results").
+`client.py`'s `_parse_search_rss()` maps Atom `<entry>` elements back to the same dict shape
+the JSON endpoint would have produced (`name`/`title`/`permalink`/`selftext`/`author`/
+`subreddit`/`created_utc`), so `plugin.py`'s `_to_plugin_result()`/`_created_at()` needed no
+changes — `score`/`num_comments` don't exist in RSS and are simply omitted, since nothing
+downstream reads them. **No OAuth token or connected account is required** — this is
+deliberate: a project gets Reddit lead discovery from the moment it's created (see
 `backend/app/api/v1/projects.py::create_project()`, which auto-creates a `CONNECTED`,
 credential-less `PluginConnection` for every new project), with connecting an account only
 ever needed to actually reply (see `publish()` below). Results are filtered by
 `PluginQuery.since` if given and capped at `PluginQuery.limit`; a failed or rate-limited call
-returns `[]` rather than raising, same contract as every other plugin's `search()`.
+returns `[]` rather than raising, same contract as every other plugin's `search()` — this is
+exactly what silently masked the JSON endpoint's 403s as "0 raw results" in the dashboard
+instead of a visible error, which is how the switch to RSS was actually caught.
 
 `RedditConnectionConfig.subreddits` and `RedditClient.search_subreddit()` (the original,
 OAuth-authenticated, per-subreddit search) still exist but are **not called by `search()`
