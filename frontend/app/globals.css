@@ -1111,3 +1111,69 @@ button:disabled {
     animation: none;
   }
 }
+
+/* Onboarding's post-save "scanning" screen — see app/onboarding/page.tsx. The progress bar
+   has no real per-keyword signal to report (search doesn't report that granularity), so it's
+   a deliberately simulated fill toward ~90% while polling for the real run to finish, then
+   snapped to 100% right as it actually completes. */
+.scan-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 16px;
+}
+
+.scan-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 100%;
+  background: #e6f4ea;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  animation: scan-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes scan-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-icon {
+    animation: none;
+  }
+}
+
+.scan-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--success);
+  margin-bottom: 8px;
+}
+
+.scan-bar-track {
+  width: 100%;
+  max-width: 320px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  margin-top: 24px;
+  overflow: hidden;
+}
+
+.scan-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--success);
+  transition: width 0.6s ease;
+}
