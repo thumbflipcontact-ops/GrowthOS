@@ -277,11 +277,18 @@ export default function RootPage() {
           <h2>See it in action</h2>
           <p>A real walkthrough of the actual product — not a mockup.</p>
         </div>
-        <div className="demo-frame">
-          <video src="/demo.mp4" controls preload="metadata" playsInline>
-            Your browser doesn&apos;t support embedded video —{" "}
-            <a href="/demo.mp4">download the demo</a> instead.
-          </video>
+        <div className="demo-frame" style={{ position: "relative", paddingBottom: "75%", height: 0 }}>
+          {/* Loom embed (oEmbed-reported aspect ratio is 1920x1440, hence the 75% above) —
+              replaces the old self-hosted /demo.mp4. See
+              https://www.loom.com/share/b4ab34fd594e4befb6913c1869fab50e */}
+          <iframe
+            src="https://www.loom.com/embed/b4ab34fd594e4befb6913c1869fab50e"
+            title="Threadly demo — approving and posting AI Reddit replies"
+            frameBorder={0}
+            allow="fullscreen"
+            allowFullScreen
+            style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+          />
         </div>
       </section>
 

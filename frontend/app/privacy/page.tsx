@@ -16,7 +16,7 @@ export default function PrivacyPage() {
 
       <article className="legal">
         <h1>Privacy Policy</h1>
-        <p className="updated">Last updated: August 7, 2026</p>
+        <p className="updated">Last updated: September 7, 2026</p>
 
         <p>
           This Privacy Policy explains what information Threadly (&quot;Threadly,&quot;
@@ -38,7 +38,7 @@ export default function PrivacyPage() {
 
         <h3>1.2 Connected platform data</h3>
         <p>
-          When you connect an account (X/Twitter) via OAuth, we receive and
+          When you connect an account (Reddit) via OAuth, we receive and
           store an access token (and refresh token, where the platform provides one) that lets
           Threadly act on your behalf within the scopes you approved during that platform&apos;s
           own consent screen. These tokens are encrypted at rest. We never see or store your
@@ -46,9 +46,11 @@ export default function PrivacyPage() {
           platform&apos;s own site.
         </p>
         <p>
-          Using that connection, Threadly reads public posts and conversations on the connected
-          platform matching the keywords and criteria you configure, in order to identify
-          conversations that may be relevant to you and draft a suggested reply.
+          Finding conversations on Reddit does not require connecting an account — Threadly
+          reads Reddit&apos;s public search matching the keywords and criteria you configure, in
+          order to identify conversations that may be relevant to you and draft a suggested
+          reply, with no login needed. Connecting an account via OAuth is optional and only
+          relevant to a future capability to publish a reply directly through that connection.
         </p>
 
         <h3>1.3 Content you create in Threadly</h3>
@@ -112,7 +114,7 @@ export default function PrivacyPage() {
         <ul>
           <li><strong>Polar</strong> — subscription billing and payment processing (merchant of record).</li>
           <li><strong>Anthropic</strong> — AI processing to draft replies (Claude API).</li>
-          <li><strong>X (Twitter)</strong> — the platform you explicitly connect via OAuth; we exchange data with it only within the scopes you grant.</li>
+          <li><strong>Reddit</strong> — the platform Threadly searches; if you choose to connect an account via OAuth, we exchange data with it only within the scopes you grant.</li>
           <li><strong>Railway</strong> and <strong>Vercel</strong> — infrastructure providers hosting our backend, database, and website.</li>
         </ul>
         <p>We do not sell your personal information to anyone, ever.</p>

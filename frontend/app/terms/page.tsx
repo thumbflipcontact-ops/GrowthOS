@@ -16,7 +16,7 @@ export default function TermsPage() {
 
       <article className="legal">
         <h1>Terms &amp; Conditions</h1>
-        <p className="updated">Last updated: August 7, 2026</p>
+        <p className="updated">Last updated: September 7, 2026</p>
 
         <p>
           These Terms &amp; Conditions (&quot;Terms&quot;) govern your access to and use of
@@ -29,7 +29,7 @@ export default function TermsPage() {
         <h2>1. What Threadly does</h2>
         <p>
           Threadly is an AI-assisted social monitoring and reply-drafting tool. It connects to
-          social platforms you authorize (X/Twitter), searches for conversations
+          social platforms you authorize (Reddit), searches for conversations
           matching criteria you configure, and drafts a suggested reply using AI. It never
           publishes, posts, or sends anything on your behalf automatically —{" "}
           <strong>every draft requires your explicit approval before it is published</strong>.
@@ -63,12 +63,12 @@ export default function TermsPage() {
 
         <h2>5. Connecting third-party platforms</h2>
         <p>
-          When you connect X/Twitter, you authorize Threadly to access that
+          When you connect Reddit, you authorize Threadly to access that
           account via the OAuth scopes granted during that platform&apos;s own consent flow, and
           to draft and, upon your approval, publish content through that connection. You are
           solely responsible for ensuring your use of Threadly, and any content approved and
           published through it, complies with that platform&apos;s own Terms of Service and
-          policies. Threadly is not affiliated with, endorsed by, or responsible for X/Twitter
+          policies. Threadly is not affiliated with, endorsed by, or responsible for Reddit
           or any other third-party platform, and we are not responsible for
           their availability, API changes, rate limits, or account actions they take (including
           suspension) as a result of activity on your connected account. You can disconnect any
