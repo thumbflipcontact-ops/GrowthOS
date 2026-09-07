@@ -167,7 +167,7 @@ async def test_upsert_rejects_a_schedule_more_frequent_than_the_platform_floor(
             actor_user_id=user.id,
             agent_key="conversation_finder",
             config={},
-            schedule_cron="*/5 * * * *",  # every 5 minutes — far under the 6-hour floor
+            schedule_cron="*/5 * * * *",  # every 5 minutes — under the 30-minute floor
             enabled=True,
         )
 
@@ -184,8 +184,8 @@ async def test_upsert_accepts_a_schedule_at_exactly_the_platform_floor(db_sessio
         actor_user_id=user.id,
         agent_key="conversation_finder",
         config={},
-        schedule_cron="0 */6 * * *",  # every 6 hours — exactly the floor, must not be rejected
+        schedule_cron="*/30 * * * *",  # every 30 minutes — exactly the floor, must not be rejected
         enabled=True,
     )
 
-    assert config.schedule_cron == "0 */6 * * *"
+    assert config.schedule_cron == "*/30 * * * *"

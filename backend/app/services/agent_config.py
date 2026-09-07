@@ -26,15 +26,18 @@ from app.repositories.agent_repository import AgentConfigRepository
 
 # The floor on how often any schedule-triggered agent may run, platform-wide — not
 # agent-specific (deliberately: this file's own docstring rule is "no agent-specific code
-# here or ever should be"). Exists because a schedule-triggered agent's cost is not fixed —
-# Conversation Finder's per-run plugin search calls are billed by the external platform per
-# result read (e.g. X's pay-per-use pricing, see plugins/twitter/README.md), so an
-# unbounded schedule_cron lets one customer's cost scale past what a flat subscription price
-# covers, with no corresponding revenue increase. See docs/billing/BILLING_ARCHITECTURE.md's
-# per-customer cost worksheet for the numbers behind this specific value — 6 hours (4
-# runs/day) keeps expected per-customer plugin-search cost comfortably under the
-# subscription price with real margin, while still checking often enough to be useful.
-MINIMUM_SCHEDULE_INTERVAL_SECONDS = 6 * 60 * 60
+# here or ever should be"). Originally set to 6 hours because X's pay-per-use search pricing
+# (see plugins/twitter/README.md) meant an unbounded schedule_cron let one customer's cost
+# scale past what a flat subscription price covers. Since the Reddit pivot, the primary
+# constraint is different: Reddit's public search has no per-call monetary cost at all, but a
+# very tight shared rate limit instead (confirmed via direct production testing — Reddit can
+# 429 a second request within about a second of the first; see plugins/reddit/plugin.py's
+# _PUBLIC_RATE_LIMITER). 30 minutes is short enough to feel responsive (matching what
+# competing tools show) while a project's single search call per run stays well inside that
+# shared budget even with a handful of projects running close together. If a paid-API
+# plugin (X, LinkedIn) is ever reconnected for real customers, this floor needs revisiting
+# for THAT plugin's cost reasons — the rate-limit reasoning above doesn't apply to it.
+MINIMUM_SCHEDULE_INTERVAL_SECONDS = 30 * 60
 
 
 def _validate_cron(cron_expression: str) -> None:

@@ -98,6 +98,31 @@ def test_empty_title_string_is_treated_the_same_as_none() -> None:
     assert score == 1.0
 
 
+def test_multi_word_term_matches_without_the_exact_phrase() -> None:
+    # Real production incident: "x growth tool" essentially never appears verbatim in a real
+    # post, even one that's clearly on-topic. Each word present, in any order/position, is
+    # enough — matching the looser bar Reddit's own search already used to find this result.
+    score, matched = score_result(
+        _result(title="tips to boost growth on x using this tool"), ["x growth tool"]
+    )
+    assert score == 1.0
+    assert matched == ["x growth tool"]
+
+
+def test_single_letter_term_does_not_match_inside_other_words() -> None:
+    # "x" must not match as a substring of "next"/"example" — word-boundary matching, not
+    # `term in text`. Directly relevant to this exact keyword ("x" for X/Twitter).
+    score, matched = score_result(_result(title="next example post, nothing relevant"), ["x"])
+    assert score == 0.0
+    assert matched == []
+
+
+def test_single_letter_term_matches_as_its_own_word() -> None:
+    score, matched = score_result(_result(title="how to grow on x fast"), ["x"])
+    assert score == 1.0
+    assert matched == ["x"]
+
+
 def test_body_only_match_still_scores_lower_than_a_title_match_on_the_same_result() -> None:
     # The core "title beats body" signal (test_title_match_scores_higher_than_body_match)
     # must still hold *when a title is actually present* — the fix only changes the ceiling

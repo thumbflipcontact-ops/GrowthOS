@@ -11,6 +11,7 @@ reasoning.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 from plugins._shared.base import PluginResult
@@ -19,6 +20,24 @@ from plugins._shared.base import PluginResult
 # titles are a stronger, human-authored relevance signal on every platform this searches.
 _TITLE_MATCH_WEIGHT = 0.7
 _BODY_MATCH_WEIGHT = 0.3
+
+
+def _term_present(term: str, text: str) -> bool:
+    """A multi-word term is "present" when each of its words appears somewhere in `text` as
+    its own word — not when the exact multi-word phrase appears contiguously. Real
+    production incident: a keyword like "x growth tool" essentially never appears verbatim
+    in an actual post, even one that's clearly about exactly that — someone writes "tools to
+    grow on x," not the keyword back at us. Reddit's own search (which already fetched this
+    result) treats an unquoted multi-word query as an implicit AND of tokens, not an exact
+    phrase either — this matches that same, more realistic bar, rather than being stricter
+    than the search that found the result in the first place.
+
+    Word-boundary matching (not `term in text`) specifically to avoid a single-letter or
+    short term like "x" matching as a substring of unrelated words ("next", "example") — a
+    real problem for exactly the kind of product (X/Twitter growth tools) whose own brand
+    name is a single ambiguous letter."""
+    words = term.split()
+    return all(re.search(rf"\b{re.escape(word)}\b", text) for word in words)
 
 
 def score_result(result: PluginResult, terms: Sequence[str]) -> tuple[float, list[str]]:
@@ -42,8 +61,8 @@ def score_result(result: PluginResult, terms: Sequence[str]) -> tuple[float, lis
     matched: list[str] = []
     weight_total = 0.0
     for term in cleaned_terms:
-        in_title = term in title
-        in_body = term in body
+        in_title = _term_present(term, title)
+        in_body = _term_present(term, body)
         if in_title or in_body:
             matched.append(term)
         if in_title:

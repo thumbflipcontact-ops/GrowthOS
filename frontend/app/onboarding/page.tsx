@@ -7,7 +7,7 @@ import { useSession } from "@/lib/useSession";
 
 // Matches MINIMUM_SCHEDULE_INTERVAL_SECONDS in backend/app/services/agent_config.py — the
 // platform-wide floor, same constant frontend/app/settings/agents/page.tsx uses.
-const SCHEDULE_CRON = "0 */6 * * *";
+const SCHEDULE_CRON = "*/30 * * * *";
 
 // How long to keep polling for the triggered run to finish before giving up and moving on
 // anyway — a stuck worker shouldn't strand someone on this screen forever.

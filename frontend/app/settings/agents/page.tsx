@@ -10,7 +10,7 @@ import { useSession } from "@/lib/useSession";
 const AGENT_KEY = "conversation_finder";
 // Matches MINIMUM_SCHEDULE_INTERVAL_SECONDS in backend/app/services/agent_config.py — the
 // platform-wide floor. Only option for now since nothing shorter is actually accepted.
-const SCHEDULE_CRON = "0 */6 * * *";
+const SCHEDULE_CRON = "*/30 * * * *";
 
 function normalizeKeywords(keywords: unknown): string[] {
   return Array.isArray(keywords) ? keywords : [];
@@ -218,8 +218,8 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       <h2>Conversation Finder</h2>
       <p className="muted">
         Searches your connected accounts for conversations matching these keywords, then drafts
-        a reply for your approval. Runs automatically every 6 hours once enabled, or trigger a
-        run right now to test it.
+        a reply for your approval. Runs automatically every 30 minutes once enabled, or trigger
+        a run right now to test it.
       </p>
 
       {error && <div className="error-banner">{error}</div>}
@@ -260,7 +260,7 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
             onChange={(e) => setEnabled(e.target.checked)}
             style={{ width: "auto" }}
           />
-          <span>Run automatically every 6 hours</span>
+          <span>Run automatically every 30 minutes</span>
         </label>
 
         <div className="hstack" style={{ marginTop: 20 }}>
