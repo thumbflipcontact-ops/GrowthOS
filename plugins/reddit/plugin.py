@@ -21,10 +21,13 @@ _RATE_LIMITER = RateLimiter(capacity=60, refill_rate=1.0)
 
 # Reddit's public, unauthenticated search endpoint is far more easily rate-limited/blocked than
 # the OAuth API, and — unlike _RATE_LIMITER above — it's hit from one shared outbound IP across
-# every Threadly project, not a per-user OAuth client. Deliberately conservative (10/min) and a
-# single shared bucket (_PUBLIC_BUCKET_KEY, not a real project_id) rather than one budget per
-# project. See README.md's "Public sitewide search" section.
-_PUBLIC_RATE_LIMITER = RateLimiter(capacity=10, refill_rate=10 / 60)
+# every Threadly project, not a per-user OAuth client. Confirmed via direct production testing
+# that Reddit can 429 a *second* request within roughly a second of the first, from the same
+# IP — the originally-assumed 10/min budget was nowhere near conservative enough and let real
+# runs silently starve each other. Single shared bucket (_PUBLIC_BUCKET_KEY, not a real
+# project_id), capacity kept small enough that a handful of concurrent project runs can't burst
+# past what Reddit itself tolerates. See README.md's "Public sitewide search" section.
+_PUBLIC_RATE_LIMITER = RateLimiter(capacity=3, refill_rate=3 / 60)
 _PUBLIC_BUCKET_KEY = "shared"
 
 
@@ -47,12 +50,20 @@ class RedditPlugin:
         if not query.terms:
             return []
         if not _PUBLIC_RATE_LIMITER.try_acquire(plugin_key="reddit", project_id=_PUBLIC_BUCKET_KEY):
-            return []  # throttled — never raise, matches every other plugin's rate-limit contract
-
-        try:
-            posts = await search_public(query.terms, limit=query.limit)
-        except RedditAPIError:
+            # Our own deliberate self-throttle, not a failure — nothing went wrong, we just
+            # chose not to call Reddit this cycle, so this stays silent same as every other
+            # plugin's rate-limit contract.
             return []
+
+        # Unlike the self-throttle above, a RedditAPIError here (a real 403/429/network
+        # failure from Reddit itself) is deliberately NOT swallowed — it propagates so
+        # agents/conversation_finder/agent.py's own per-plugin exception handler records it
+        # as a visible "reddit: search failed — ..." run error. Swallowing this into an
+        # indistinguishable-from-genuinely-no-matches `[]` was exactly what let Reddit's
+        # actual rate-limiting/blocking respond invisibly as "0 raw results" in production —
+        # see README.md's "Public sitewide search" section. conversation_finder's per-plugin
+        # try/except already guarantees this can't fail the whole discovery run.
+        posts = await search_public(query.terms, limit=query.limit)
 
         results: list[PluginResult] = []
         for post in posts:

@@ -188,14 +188,19 @@ async def test_search_returns_empty_with_no_terms(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_returns_empty_when_reddit_api_errors(monkeypatch) -> None:
+async def test_search_propagates_reddit_api_errors(monkeypatch) -> None:
+    # Deliberately NOT swallowed — see plugin.py's search() docstring/comment. A silent `[]`
+    # here is indistinguishable from "genuinely no matches," which is exactly what hid
+    # Reddit's real production rate-limiting/blocking as "0 raw results" with no visible
+    # cause. agents/conversation_finder/agent.py's own per-plugin try/except is what actually
+    # guarantees one plugin's failure can't fail the whole discovery run — not this plugin
+    # swallowing its own errors.
     fake = _FakeSearchPublic(raises=RedditAPIError("boom"))
     _install_fake_search_public(monkeypatch, fake)
 
     plugin = create_plugin(_oauth_connection())
-    results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
-
-    assert results == []  # never raises, matches every other plugin's search() contract
+    with pytest.raises(RedditAPIError):
+        await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
 
 
 @pytest.mark.asyncio

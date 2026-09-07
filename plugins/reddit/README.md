@@ -75,10 +75,20 @@ deliberate: a project gets Reddit lead discovery from the moment it's created (s
 `backend/app/api/v1/projects.py::create_project()`, which auto-creates a `CONNECTED`,
 credential-less `PluginConnection` for every new project), with connecting an account only
 ever needed to actually reply (see `publish()` below). Results are filtered by
-`PluginQuery.since` if given and capped at `PluginQuery.limit`; a failed or rate-limited call
-returns `[]` rather than raising, same contract as every other plugin's `search()` — this is
-exactly what silently masked the JSON endpoint's 403s as "0 raw results" in the dashboard
-instead of a visible error, which is how the switch to RSS was actually caught.
+`PluginQuery.since` if given and capped at `PluginQuery.limit`.
+
+**A Reddit-side failure (403/429/network error) is deliberately NOT swallowed into `[]`** —
+it propagates out of `search()`, unlike every other plugin's convention. This is a direct
+fix for the actual production incident that exposed the RSS-vs-JSON issue above in the first
+place: `search()` originally caught `RedditAPIError` and returned `[]`, which made a real
+Reddit-side failure indistinguishable from "genuinely no matching posts" — the dashboard
+showed "0 raw results" with no way to tell which had happened, twice (first the JSON
+endpoint's 403s, then a 429 from a too-generous rate budget). `agents/conversation_finder/
+agent.py`'s own per-plugin `try/except` is what actually guarantees one plugin's failure
+can't fail the whole discovery run — that safety net already existed one layer up, so this
+plugin swallowing its own errors was redundant *and* was hiding real signal. The only thing
+that still returns `[]` silently is our *own* deliberate self-throttle (see below) — nothing
+went wrong there, we just chose not to call Reddit that cycle.
 
 `RedditConnectionConfig.subreddits` and `RedditClient.search_subreddit()` (the original,
 OAuth-authenticated, per-subreddit search) still exist but are **not called by `search()`
@@ -86,13 +96,18 @@ today** — kept, not deleted, as a dormant capability a future "narrow to my fa
 subreddits" power-user feature could reuse.
 
 **Rate limiting for the public endpoint** is deliberately much more conservative than the
-OAuth rate limiter below (10/min, see `plugin.py`'s `_PUBLIC_RATE_LIMITER`), and is a single
-bucket shared across every project (`_PUBLIC_BUCKET_KEY`) rather than one per project — this
-hits Reddit from one shared outbound IP regardless of which project's search triggered it.
-Reddit's terms treat any commercial/monetized use of its API as requiring a negotiated
-agreement (no self-serve pricing exists for this); this endpoint is used deliberately
-conservatively and in good faith while that's evaluated further, not as a settled-safe
-approach — see the platform's own outreach to Reddit's developer platform team.
+OAuth rate limiter below (see `plugin.py`'s `_PUBLIC_RATE_LIMITER`), and is a single bucket
+shared across every project (`_PUBLIC_BUCKET_KEY`) rather than one per project — this hits
+Reddit from one shared outbound IP regardless of which project's search triggered it. The
+budget was originally set to 10/min on the (wrong) assumption Reddit's own limit was roughly
+that generous — direct production testing showed Reddit can 429 a *second* request within
+about a second of the first from the same IP, so the budget was cut to 3/min; this number is
+still a guess, not a confirmed safe ceiling, and may need to go lower still if 429s keep
+showing up in real run errors (see above — they're visible now, so this is actually
+observable going forward). Reddit's terms treat any commercial/monetized use of its API as
+requiring a negotiated agreement (no self-serve pricing exists for this); this endpoint is
+used deliberately conservatively and in good faith while that's evaluated further, not as a
+settled-safe approach — see the platform's own outreach to Reddit's developer platform team.
 
 ## `publish()`
 
@@ -112,9 +127,11 @@ anything):
 - `_RATE_LIMITER` (60/min) — Reddit's documented OAuth-client rate limit, gating `publish()`
   and `health_check()`. A throttled `publish()` call returns
   `PublishResult(success=False, error="Rate limited...")`.
-- `_PUBLIC_RATE_LIMITER` (10/min, shared across every project) — a deliberately conservative
-  budget for the public, unauthenticated `search()` endpoint (see above). A throttled
-  `search()` call returns `[]` rather than raising.
+- `_PUBLIC_RATE_LIMITER` (3/min, shared across every project) — a deliberately conservative
+  budget for the public, unauthenticated `search()` endpoint (see above). Our own
+  self-throttle still returns `[]` quietly when this budget is exhausted; an actual
+  rate-limit response *from Reddit* (a 429 that got through the budget anyway, or any other
+  Reddit-side failure) raises instead — see above.
 
 ## Known constraints
 
