@@ -20,13 +20,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/blog",
     "/blog/threadly-now-in-n8n-and-openclaw",
     "/blog/approval-before-posting-is-the-ai-tool-standard",
-    "/blog/manual-scrolling-x-doesnt-scale",
-    "/blog/why-ai-twitter-replies-sound-like-a-bot",
-    "/blog/twitter-mentions-that-convert-dont-tag-you",
-    "/blog/why-ai-twitter-automation-gets-accounts-banned",
-    "/blog/the-two-week-old-tweet-problem",
-    // The 4 /alternatives/* pages (X-comparison content, from before the Reddit pivot) are
-    // deliberately excluded from indexing here, not deleted — still reachable by direct URL.
+    // 5 other blog posts (X/Twitter-specific pain points — X's ban policy, tweet decay, X
+    // mentions) were unpublished, not just de-indexed, since they no longer match what the
+    // product does post-Reddit-pivot: frontend/app/blog/{the-two-week-old-tweet-problem,
+    // why-ai-twitter-automation-gets-accounts-banned, twitter-mentions-that-convert-dont-tag-you,
+    // why-ai-twitter-replies-sound-like-a-bot, manual-scrolling-x-doesnt-scale}.
+    // The 4 /alternatives/* pages (Hypefury, Tweet Hunter, Xholic AI, Bisonary — all X-only
+    // tools) were deleted outright, not just de-indexed — a comparison against a competitor
+    // that doesn't touch Reddit at all no longer makes sense for a Reddit-only product.
   ];
   return routes.map((route) => ({
     url: `${BASE_URL}${route}`,

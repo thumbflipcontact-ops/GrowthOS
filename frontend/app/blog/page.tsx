@@ -4,7 +4,7 @@ import { LandingNav } from "@/components/LandingNav";
 export const metadata = {
   title: "Blog — Threadly",
   description:
-    "Notes on finding real conversations on X, replying well, and growing without a growth team.",
+    "Notes on finding real conversations on Reddit, replying well, and growing without a growth team.",
 };
 
 // Hand-written posts, same pattern as the FAQ/use-cases arrays — no CMS, just a page per post
@@ -25,41 +25,6 @@ const POSTS = [
       "Reddit reply tools and review-management platforms are marketing human approval as a feature, not an afterthought. Here's why that trend is happening across categories.",
     date: "August 17, 2026",
   },
-  {
-    href: "/blog/the-two-week-old-tweet-problem",
-    title: "The 2-Week-Old Tweet Problem: Why Manual X Search Misses Your Best Leads",
-    excerpt:
-      "By the time you remember to search X again, the intent signal has already expired. Here's why manual search structurally can't keep pace.",
-    date: "August 12, 2026",
-  },
-  {
-    href: "/blog/why-ai-twitter-automation-gets-accounts-banned",
-    title: "Why AI Twitter Automation Gets Accounts Banned (and How to Reply Safely)",
-    excerpt:
-      "X is actively restricting excessive automation — Tweet Hunter users report real account warnings and shadowbans tied to it. Here's the safe way around it.",
-    date: "August 12, 2026",
-  },
-  {
-    href: "/blog/twitter-mentions-that-convert-dont-tag-you",
-    title: "The X Mentions That Actually Convert Are the Ones That Don't Tag You",
-    excerpt:
-      "Checking Notifications isn't social listening. The conversations most worth replying to on X never mention your handle at all.",
-    date: "August 11, 2026",
-  },
-  {
-    href: "/blog/why-ai-twitter-replies-sound-like-a-bot",
-    title: "Why AI Twitter Replies Sound Like a Bot (and How Human Approval Fixes It)",
-    excerpt:
-      "Full automation makes AI replies feel generic and template-based — and it's exactly the pattern X flags as spam. Here's why the fix is a human in the loop, not less AI.",
-    date: "August 11, 2026",
-  },
-  {
-    href: "/blog/manual-scrolling-x-doesnt-scale",
-    title: "Why Manually Scrolling X For Leads Doesn't Scale (And What Actually Fixes It)",
-    excerpt:
-      "The signal-to-noise ratio of manual monitoring is brutal, and the moment you stop scrolling is the moment you miss the conversation. Here's what actually works instead.",
-    date: "August 10, 2026",
-  },
 ];
 
 export default function BlogIndexPage() {
@@ -73,7 +38,7 @@ export default function BlogIndexPage() {
         </span>
         <h1>Notes on finding conversations, not just scheduling posts.</h1>
         <p className="lead">
-          Short, specific writing on the actual problem of growing on X as a founder — no
+          Short, specific writing on the actual problem of growing on Reddit as a founder — no
           generic &quot;10 tips&quot; filler.
         </p>
       </header>

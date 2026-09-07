@@ -131,11 +131,7 @@ export default function ApprovalStandardPost() {
           first. These are genuinely useful, well-built features for what they&apos;re designed
           to do. But structurally, they&apos;re betting that the content decision itself doesn&apos;t
           need a human checkpoint — the same bet the Reddit and review-response categories have
-          been moving away from. (We&apos;ve written separately about{" "}
-          <a href="/blog/why-ai-twitter-automation-gets-accounts-banned">
-            what that bet has actually cost Tweet Hunter users on X specifically
-          </a>{" "}
-          — this post is about the broader pattern, not that one case.)
+          been moving away from.
         </p>
 
         <h2>What approval-first actually looks like day to day</h2>

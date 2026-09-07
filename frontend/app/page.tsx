@@ -241,39 +241,6 @@ export default function RootPage() {
 
       <section className="landing-section">
         <div className="section-heading">
-          <h2>Real drafts, real decisions</h2>
-          <p>Every reply is grounded in the actual post — and never goes out without you.</p>
-        </div>
-        <div className="proof-grid">
-          <figure className="proof-shot">
-            <img
-              src="/ready-to-post.png"
-              alt="Threadly's Ready to Post screen with buttons to copy the reply, open the original post, and mark it as posted"
-            />
-            <figcaption>
-              Approve a draft and it&apos;s yours to post — copy the reply, open the thread,
-              paste it in. Threadly never posts on its own.
-            </figcaption>
-          </figure>
-        </div>
-        <div className="confidence-note">
-          <h3>What do &ldquo;Lead match,&rdquo; &ldquo;High intent,&rdquo; and &ldquo;Draft quality&rdquo; mean?</h3>
-          <p>
-            Every drafted reply comes with three signals, not just one. <strong>Lead match</strong>{" "}
-            is Claude&apos;s read on how genuinely relevant the post is to what you&apos;re
-            looking for — not just shared keywords, but whether it&apos;s actually the kind of
-            conversation you searched for. <strong>High intent</strong> flags posts where the
-            author looks like they&apos;re actively seeking a solution right now, not just
-            discussing the topic in passing. <strong>Draft quality</strong> is a separate
-            number: how good Claude thinks the reply it wrote is. A great lead can still get a
-            rough draft, and a so-so lead can get a great one — that&apos;s why both are shown,
-            so you always know what you&apos;re approving.
-          </p>
-        </div>
-      </section>
-
-      <section className="landing-section">
-        <div className="section-heading">
           <h2>See it in action</h2>
           <p>A real walkthrough of the actual product — not a mockup.</p>
         </div>
