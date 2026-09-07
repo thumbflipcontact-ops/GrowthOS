@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "Threadly — AI finds your next customer on X.";
+export const alt = "Threadly — AI finds your next customer on Reddit.";
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -41,7 +41,7 @@ export default function OpengraphImage() {
             color: "#171717",
           }}
         >
-          Your next customer is tweeting right now.{" "}
+          Your next customer is already on Reddit.{" "}
           <span
             style={{
               background: "linear-gradient(100deg, #4f46e5, #7c3aed 55%, #ec4899)",

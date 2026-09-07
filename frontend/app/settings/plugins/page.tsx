@@ -19,14 +19,16 @@ const PLUGIN_LABELS: Record<string, string> = {
   reddit: "Reddit",
 };
 
-// LinkedIn's own API has no third-party post-search access at any tier — Threadly only
-// supports platforms it can actually discover conversations on. Reddit's OAuth app was never
-// finished being set up (its OAuth client credentials aren't configured on the backend), and
-// testing it requires a working, non-banned Reddit account this project doesn't currently
-// have — so for now Threadly only supports X. Neither plugin package is deleted (see
-// plugins/linkedin/, plugins/reddit/), both are just kept out of every customer-facing
-// surface until they're actually ready.
-const UNSUPPORTED_PLUGIN_KEYS = new Set(["linkedin", "reddit"]);
+// Threadly pivoted its primary discovery platform from X to Reddit — X support isn't
+// deleted (see plugins/twitter/), just kept out of this connect UI. Note this page only ever
+// covers *replying*: Reddit search itself needs no connection at all (every project is
+// auto-connected for search-only at creation time, see
+// backend/app/api/v1/projects.py::create_project()) — what shows up here for "reddit" is
+// purely the optional "connect an account so Threadly can post your approved replies" step.
+// LinkedIn's own API has no third-party post-search access at any tier, so it stays hidden
+// too — neither plugin package is deleted (see plugins/linkedin/, plugins/twitter/), both are
+// just kept out of every customer-facing surface until they're actually ready.
+const UNSUPPORTED_PLUGIN_KEYS = new Set(["linkedin", "twitter"]);
 
 function PluginRow({
   entry,

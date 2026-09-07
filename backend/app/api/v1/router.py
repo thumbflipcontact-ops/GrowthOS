@@ -9,6 +9,7 @@ from app.api.v1 import (
     billing,
     content_items,
     health,
+    keyword_suggestions,
     knowledge_items,
     oauth,
     plugin_connections,
@@ -25,6 +26,7 @@ api_router.include_router(plugins.router)
 api_router.include_router(plugin_connections.router)
 api_router.include_router(oauth.router)
 api_router.include_router(agent_configs.router)
+api_router.include_router(keyword_suggestions.router)
 api_router.include_router(knowledge_items.router)
 api_router.include_router(content_items.router)
 api_router.include_router(api_keys.router)

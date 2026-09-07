@@ -2,10 +2,17 @@
 failure paths (tampered state, unauthenticated callback) — see
 docs/auth/OAUTH2_ARCHITECTURE.md §3, §5.1, §5.4.
 
-Injects a fake OAuth-capable plugin manifest via the get_plugin_catalog dependency override
-(no real installed OAuth plugin package exists yet — Reddit is explicitly out of scope) and
-mocks the provider's token/revoke endpoints via httpx.MockTransport, the same techniques
-already used in test_oauth_client.py and test_oauth_connection_service.py.
+Injects a fake OAuth-capable "testoauth" plugin manifest via the get_plugin_catalog dependency
+override (alongside whatever's actually installed, e.g. the real `reddit` plugin — see
+discover_installed_plugins() below) and mocks the provider's token/revoke endpoints via
+httpx.MockTransport, the same techniques already used in test_oauth_client.py and
+test_oauth_connection_service.py.
+
+Every project auto-gets a `reddit` connection at creation time now (see
+app/api/v1/projects.py::create_project() — Reddit search needs no OAuth), so every
+plugin-connections list in this file has one more row than just "testoauth" — tests below
+look up the `testoauth` connection by `plugin_key` (see `_find`) rather than assuming list
+order or a specific length.
 """
 
 from __future__ import annotations
@@ -127,6 +134,10 @@ def _extract_state(authorize_url: str) -> str:
     return params["state"][0]
 
 
+def _find(connections: list[dict], plugin_key: str) -> dict | None:
+    return next((c for c in connections if c["plugin_key"] == plugin_key), None)
+
+
 @pytest.mark.asyncio
 async def test_start_returns_an_authorize_url(api_client: AsyncClient, project_id: str) -> None:
     r = await api_client.post(f"/api/v1/projects/{project_id}/plugin-connections/testoauth/oauth/start")
@@ -163,12 +174,11 @@ async def test_full_connect_flow(api_client: AsyncClient, project_id: str) -> No
 
     listed = await api_client.get(f"/api/v1/projects/{project_id}/plugin-connections")
     assert listed.status_code == 200
-    connections = listed.json()
-    assert len(connections) == 1
-    assert connections[0]["plugin_key"] == "testoauth"
-    assert connections[0]["status"] == "connected"
-    assert connections[0]["granted_scopes"] == ["read"]
-    assert connections[0]["token_expires_at"] is not None
+    connection = _find(listed.json(), "testoauth")
+    assert connection is not None
+    assert connection["status"] == "connected"
+    assert connection["granted_scopes"] == ["read"]
+    assert connection["token_expires_at"] is not None
 
 
 @pytest.mark.asyncio
@@ -184,7 +194,7 @@ async def test_callback_rejects_tampered_state(api_client: AsyncClient, project_
     assert "error=authentication_error" in callback.headers["location"]
 
     listed = await api_client.get(f"/api/v1/projects/{project_id}/plugin-connections")
-    assert listed.json() == []  # nothing was created
+    assert _find(listed.json(), "testoauth") is None  # nothing was created
 
 
 @pytest.mark.asyncio
@@ -209,7 +219,8 @@ async def test_reconnect_updates_the_same_connection(api_client: AsyncClient, pr
     await api_client.get(f"/api/v1/oauth/testoauth/callback?code=c1&state={state1}")
 
     first_list = await api_client.get(f"/api/v1/projects/{project_id}/plugin-connections")
-    first_id = first_list.json()[0]["id"]
+    first = _find(first_list.json(), "testoauth")
+    assert first is not None
 
     start2 = await api_client.post(
         f"/api/v1/projects/{project_id}/plugin-connections/testoauth/oauth/start"
@@ -218,8 +229,9 @@ async def test_reconnect_updates_the_same_connection(api_client: AsyncClient, pr
     await api_client.get(f"/api/v1/oauth/testoauth/callback?code=c2&state={state2}")
 
     second_list = await api_client.get(f"/api/v1/projects/{project_id}/plugin-connections")
-    assert len(second_list.json()) == 1  # still one connection, not two
-    assert second_list.json()[0]["id"] == first_id
+    testoauth_connections = [c for c in second_list.json() if c["plugin_key"] == "testoauth"]
+    assert len(testoauth_connections) == 1  # still one connection, not two
+    assert testoauth_connections[0]["id"] == first["id"]
 
 
 @pytest.mark.asyncio
@@ -231,17 +243,22 @@ async def test_disconnect_clears_the_connection(api_client: AsyncClient, project
     await api_client.get(f"/api/v1/oauth/testoauth/callback?code=c&state={state}")
 
     connections = (await api_client.get(f"/api/v1/projects/{project_id}/plugin-connections")).json()
-    connection_id = connections[0]["id"]
+    connection = _find(connections, "testoauth")
+    assert connection is not None
 
     disconnect = await api_client.post(
-        f"/api/v1/projects/{project_id}/plugin-connections/{connection_id}/oauth/disconnect"
+        f"/api/v1/projects/{project_id}/plugin-connections/{connection['id']}/oauth/disconnect"
     )
     assert disconnect.status_code == 204
 
-    after = (await api_client.get(f"/api/v1/projects/{project_id}/plugin-connections")).json()
-    assert after[0]["status"] == "disconnected"
-    assert after[0]["token_expires_at"] is None
-    assert after[0]["granted_scopes"] == []
+    after = _find(
+        (await api_client.get(f"/api/v1/projects/{project_id}/plugin-connections")).json(),
+        "testoauth",
+    )
+    assert after is not None
+    assert after["status"] == "disconnected"
+    assert after["token_expires_at"] is None
+    assert after["granted_scopes"] == []
 
 
 @pytest.mark.asyncio
@@ -275,5 +292,6 @@ async def test_multiple_labels_produce_separate_connections(
     await api_client.get(f"/api/v1/oauth/testoauth/callback?code=c2&state={state2}")
 
     connections = (await api_client.get(f"/api/v1/projects/{project_id}/plugin-connections")).json()
-    assert len(connections) == 2
-    assert {c["label"] for c in connections} == {"default", "second-account"}
+    testoauth_connections = [c for c in connections if c["plugin_key"] == "testoauth"]
+    assert len(testoauth_connections) == 2
+    assert {c["label"] for c in testoauth_connections} == {"default", "second-account"}

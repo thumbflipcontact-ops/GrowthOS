@@ -18,10 +18,10 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.usethreadly.co"),
-  title: "Threadly — AI finds your Leads on X",
+  title: "Threadly — AI finds your Leads on Reddit",
   description: DESCRIPTION,
   openGraph: {
-    title: "Threadly — AI finds your next customer on X",
+    title: "Threadly — AI finds your next customer on Reddit",
     description: DESCRIPTION,
     url: "https://www.usethreadly.co",
     siteName: "Threadly",
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Threadly — AI finds your next customer on X",
+    title: "Threadly — AI finds your next customer on Reddit",
     description: DESCRIPTION,
   },
 };

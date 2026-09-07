@@ -70,11 +70,11 @@ function TierBar({ tiers }: { tiers: PricingTier[] }) {
 const STEPS = [
   {
     title: "Tell it what you're building",
-    body: "Give Threadly your keywords and ICP once — specific phrases people actually say, like \"struggling to rank,\" not broad topics like \"SEO.\" That's what tells it which conversations are worth a reply.",
+    body: "Give Threadly your website — or type keywords and your ICP yourself — and it works out specific phrases people actually say, like \"struggling to rank,\" not broad topics like \"SEO.\" That's what tells it which Reddit posts are worth a reply.",
   },
   {
     title: "It watches, so you don't have to",
-    body: "Conversation Finder scans X on a schedule and drafts a reply with Claude the moment something's worth joining. No more refreshing search tabs all day.",
+    body: "Conversation Finder scans Reddit on a schedule — no login required — and drafts a reply with Claude the moment something's worth joining. No more refreshing search tabs all day.",
   },
   {
     title: "You approve — or you don't",
@@ -82,7 +82,7 @@ const STEPS = [
   },
 ];
 
-const PLATFORMS = [{ name: "X (Twitter)", soon: false }];
+const PLATFORMS = [{ name: "Reddit", soon: false }];
 
 // Official embed badge from tinystartups.com — each future launch site provides its own
 // distinct badge markup like this one, so entries here are whole components, not a shared
@@ -200,17 +200,17 @@ export default function RootPage() {
 
       <header className="hero">
         <span className="hero-badge">
-          <span className="dot" /> Find leads on X
+          <span className="dot" /> Find leads on Reddit
         </span>
         <h1>
-          Your next customer is tweeting right now.{" "}
+          Your next customer is already on Reddit.{" "}
           <span className="grad">AI finds them before you scroll past.</span>
         </h1>
         <p className="lead">
           Building a product means your next user is out there right now, posting about the
-          exact problem you solve — on X. Threadly finds that conversation
-          for you and drafts a reply, so you spend your time building, not scrolling search
-          results. Nothing goes out without your yes.
+          exact problem you solve — on Reddit. Threadly finds that conversation for you and
+          drafts a reply, so you spend your time building, not scrolling search results.
+          Nothing goes out without your yes — and finding leads never asks you to log in.
         </p>
         <div className="hero-ctas">
           <a href="/signup" className="btn btn-grad">
@@ -248,7 +248,7 @@ export default function RootPage() {
           <figure className="proof-shot">
             <img
               src="/approval-inbox.png"
-              alt="Threadly's Approval Inbox showing an AI-drafted reply next to the original X post and the agent's reasoning for why it drafted that reply"
+              alt="Threadly's Approval Inbox showing an AI-drafted reply next to the original post and the agent's reasoning for why it drafted that reply"
             />
             <figcaption>
               Every draft comes with the original post and the AI&apos;s reasoning — read it
@@ -258,11 +258,11 @@ export default function RootPage() {
           <figure className="proof-shot">
             <img
               src="/ready-to-post.png"
-              alt="Threadly's Ready to Post screen with buttons to copy the reply, open the original post on X, and mark it as posted"
+              alt="Threadly's Ready to Post screen with buttons to copy the reply, open the original post, and mark it as posted"
             />
             <figcaption>
-              Approve a draft and it&apos;s yours to post — copy the reply, open X, paste it in.
-              Threadly never posts on its own.
+              Approve a draft and it&apos;s yours to post — copy the reply, open the thread,
+              paste it in. Threadly never posts on its own.
             </figcaption>
           </figure>
         </div>
@@ -316,7 +316,7 @@ export default function RootPage() {
             </div>
             <div className="muted">7-day free trial, no card required — then ${currentPrice}/month, locked in for good</div>
             <ul>
-              <li>Unlimited approved connections on X</li>
+              <li>Unlimited approved connections on Reddit</li>
               <li>AI-drafted replies via Claude, on your schedule</li>
               <li>Full manual approval on every single post</li>
               <li>Cancel anytime from your dashboard</li>

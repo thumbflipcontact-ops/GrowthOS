@@ -1,15 +1,17 @@
 # Plugin: Reddit
 
 **Capabilities:** `Searchable`, `Publishable`
-**Auth:** `oauth2` (scopes: `read`, `submit`, `identity`)
-**Status:** implemented — see `docs/reviews/REDDIT_PLUGIN_IMPLEMENTATION_REPORT.md`. Not yet
-connected to a real Reddit account, and not yet consumed by any agent (Conversation Finder /
-Content Agent are explicitly out of scope until after this plugin — see `ROADMAP.md`).
+**Auth:** `oauth2` (scopes: `read`, `submit`, `identity`) — required only for `publish()`;
+`search()` is unauthenticated. See "Public sitewide search" below.
+**Status:** implemented and live — both Conversation Finder and Content Agent already consume
+this plugin end-to-end (`agents/conversation_finder/agent.py`'s `Searchable` fan-out,
+`agents/content_agent/agent.py`'s `_SUPPORTED_PLATFORMS`/`prompts/reddit_reply.py`).
 
 ## Purpose
 
-Search subreddits for relevant discussions; post approved replies. Reddit was chosen as the
-first plugin implemented — see `docs/decisions/0005-first-plugin-reddit.md` for why.
+Discover relevant Reddit posts sitewide, with no connected account required; post approved
+replies once a project does connect one. Reddit was chosen as the first plugin implemented —
+see `docs/decisions/0005-first-plugin-reddit.md` for why.
 
 ## Auth
 
@@ -56,14 +58,31 @@ Which subreddits this connection searches — e.g. ScoutSEO might set `["SEO", "
 "bigseo", "TechSEO"]`. An empty list is valid (a connection can exist, fully authorized,
 before anyone has picked subreddits); `search()` simply returns nothing until it's set.
 
-## `search()`
+## `search()` — public sitewide search
 
-For each configured subreddit, calls `GET /r/{subreddit}/search` (restricted to that
-subreddit, sorted newest-first), joining `PluginQuery.terms` with `OR`. Results are
-deduplicated per subreddit call (not across subreddits), filtered by `PluginQuery.since` if
-given, and capped at `PluginQuery.limit` across all subreddits combined. One subreddit's
-search failing does not fail the whole call — see `plugin.py`'s per-subreddit
-`try/except RedditAPIError`.
+Calls `GET /search.json` on `www.reddit.com` — Reddit's public, unauthenticated search
+endpoint, sitewide (not restricted to any subreddit), joining `PluginQuery.terms` with `OR`.
+**No OAuth token or connected account is required** — this is deliberate: a project gets
+Reddit lead discovery from the moment it's created (see
+`backend/app/api/v1/projects.py::create_project()`, which auto-creates a `CONNECTED`,
+credential-less `PluginConnection` for every new project), with connecting an account only
+ever needed to actually reply (see `publish()` below). Results are filtered by
+`PluginQuery.since` if given and capped at `PluginQuery.limit`; a failed or rate-limited call
+returns `[]` rather than raising, same contract as every other plugin's `search()`.
+
+`RedditConnectionConfig.subreddits` and `RedditClient.search_subreddit()` (the original,
+OAuth-authenticated, per-subreddit search) still exist but are **not called by `search()`
+today** — kept, not deleted, as a dormant capability a future "narrow to my favorite
+subreddits" power-user feature could reuse.
+
+**Rate limiting for the public endpoint** is deliberately much more conservative than the
+OAuth rate limiter below (10/min, see `plugin.py`'s `_PUBLIC_RATE_LIMITER`), and is a single
+bucket shared across every project (`_PUBLIC_BUCKET_KEY`) rather than one per project — this
+hits Reddit from one shared outbound IP regardless of which project's search triggered it.
+Reddit's terms treat any commercial/monetized use of its API as requiring a negotiated
+agreement (no self-serve pricing exists for this); this endpoint is used deliberately
+conservatively and in good faith while that's evaluated further, not as a settled-safe
+approach — see the platform's own outreach to Reddit's developer platform team.
 
 ## `publish()`
 
@@ -76,12 +95,16 @@ never mistaken for success.
 
 ## Rate limits
 
-Reddit API: ~60 requests/minute per OAuth client. Enforced via the shared token-bucket helper
-(`plugins/_shared/rate_limit.py`), one shared limiter instance per process (see `plugin.py`'s
-module-level `_RATE_LIMITER` — a fresh `RedditPlugin` is constructed on every registry
-lookup, so per-instance state would never actually limit anything). A throttled `search()`
-call returns whatever results it already gathered rather than raising; a throttled
-`publish()` call returns `PublishResult(success=False, error="Rate limited...")`.
+Two independent limiters, both via the shared token-bucket helper
+(`plugins/_shared/rate_limit.py`), each one shared instance per process (a fresh `RedditPlugin`
+is constructed on every registry lookup, so per-instance state would never actually limit
+anything):
+- `_RATE_LIMITER` (60/min) — Reddit's documented OAuth-client rate limit, gating `publish()`
+  and `health_check()`. A throttled `publish()` call returns
+  `PublishResult(success=False, error="Rate limited...")`.
+- `_PUBLIC_RATE_LIMITER` (10/min, shared across every project) — a deliberately conservative
+  budget for the public, unauthenticated `search()` endpoint (see above). A throttled
+  `search()` call returns `[]` rather than raising.
 
 ## Known constraints
 

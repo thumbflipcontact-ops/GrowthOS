@@ -9,14 +9,23 @@ from datetime import UTC, datetime
 from plugins._shared.base import PluginQuery, PluginResult, PublishResult, ResolvedConnection
 from plugins._shared.credentials import OAuth2Credentials
 from plugins._shared.rate_limit import RateLimiter
-from plugins.reddit.client import RedditAPIError, RedditClient
+from plugins.reddit.client import RedditAPIError, RedditClient, search_public
 from plugins.reddit.manifest import MANIFEST, RedditConnectionConfig
 
-# One shared limiter across every RedditPlugin instance in this process — a fresh instance is
-# constructed on every registry lookup (app/core/plugin_registry.py), so per-instance state
-# would reset each call and never actually limit anything. Matches Reddit's documented ~60
-# requests/minute per OAuth client (README §"Rate limits").
+# One shared limiter across every RedditPlugin instance in this process for OAuth-authenticated
+# calls (publish, health_check) — a fresh instance is constructed on every registry lookup
+# (app/core/plugin_registry.py), so per-instance state would reset each call and never actually
+# limit anything. Matches Reddit's documented ~60 requests/minute per OAuth client (README
+# §"Rate limits").
 _RATE_LIMITER = RateLimiter(capacity=60, refill_rate=1.0)
+
+# Reddit's public, unauthenticated search endpoint is far more easily rate-limited/blocked than
+# the OAuth API, and — unlike _RATE_LIMITER above — it's hit from one shared outbound IP across
+# every Threadly project, not a per-user OAuth client. Deliberately conservative (10/min) and a
+# single shared bucket (_PUBLIC_BUCKET_KEY, not a real project_id) rather than one budget per
+# project. See README.md's "Public sitewide search" section.
+_PUBLIC_RATE_LIMITER = RateLimiter(capacity=10, refill_rate=10 / 60)
+_PUBLIC_BUCKET_KEY = "shared"
 
 
 class RedditPlugin:
@@ -24,34 +33,34 @@ class RedditPlugin:
 
     def __init__(self, connection: ResolvedConnection) -> None:
         self._connection = connection
+        # Not read by search() below (public search is sitewide, not subreddit-scoped) — kept
+        # for config-shape validation and for search_subreddit()'s dormant, not-yet-wired-in
+        # per-subreddit mode (client.py), which a future power-user feature could reuse.
         self._config = RedditConnectionConfig.model_validate(connection.config)
         self._client = _build_client(connection)
 
     async def search(self, query: PluginQuery) -> list[PluginResult]:
-        if self._client is None or not self._config.subreddits:
+        """Sitewide, unauthenticated search — works whether or not this project has ever
+        connected a Reddit account, matching the product's "no login needed to find leads"
+        design (see README.md). Connecting an account (OAuth) is only ever required for
+        publish(), never for search()."""
+        if not query.terms:
+            return []
+        if not _PUBLIC_RATE_LIMITER.try_acquire(plugin_key="reddit", project_id=_PUBLIC_BUCKET_KEY):
+            return []  # throttled — never raise, matches every other plugin's rate-limit contract
+
+        try:
+            posts = await search_public(query.terms, limit=query.limit)
+        except RedditAPIError:
             return []
 
-        search_terms = " OR ".join(query.terms)
         results: list[PluginResult] = []
-        for subreddit in self._config.subreddits:
+        for post in posts:
+            if query.since is not None and _created_at(post) < query.since:
+                continue
+            results.append(_to_plugin_result(post))
             if len(results) >= query.limit:
                 break
-            if not self._try_acquire():
-                break  # throttled — return what we have so far, never raise
-
-            try:
-                posts = await self._client.search_subreddit(
-                    subreddit, search_terms, limit=query.limit - len(results)
-                )
-            except RedditAPIError:
-                continue  # one subreddit failing must not fail the whole search
-
-            for post in posts:
-                if query.since is not None and _created_at(post) < query.since:
-                    continue
-                results.append(_to_plugin_result(subreddit, post))
-                if len(results) >= query.limit:
-                    break
 
         return results
 
@@ -111,14 +120,14 @@ def _created_at(post: dict) -> datetime:
     return datetime.fromtimestamp(post.get("created_utc", 0), tz=UTC)
 
 
-def _to_plugin_result(subreddit: str, post: dict) -> PluginResult:
+def _to_plugin_result(post: dict) -> PluginResult:
     return PluginResult(
         url=f"https://reddit.com{post.get('permalink', '')}",
         title=post.get("title"),
         body=post.get("selftext") or "",
         author=post.get("author"),
         platform_metadata={
-            "subreddit": subreddit,
+            "subreddit": post.get("subreddit"),
             "thing_id": post.get("name"),
             "score": post.get("score"),
             "num_comments": post.get("num_comments"),

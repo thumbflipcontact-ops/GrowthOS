@@ -26,6 +26,9 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 function AgentSettingsCard({ projectId }: { projectId: string }) {
   const [keywordsText, setKeywordsText] = useState("");
+  const [suggestUrl, setSuggestUrl] = useState("");
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -141,6 +144,27 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
     }
   }
 
+  async function handleSuggestKeywords(e: React.FormEvent) {
+    e.preventDefault();
+    if (!suggestUrl.trim()) return;
+    setSuggestError(null);
+    setSuggesting(true);
+    try {
+      const { keywords } = await api.suggestKeywords(projectId, suggestUrl.trim());
+      // Suggestion only — merges with (never replaces) whatever's already typed, so a user
+      // who already has keywords doesn't lose them by trying this out.
+      const existing = textToKeywords(keywordsText);
+      const merged = [...existing, ...keywords.filter((k) => !existing.includes(k))];
+      setKeywordsText(merged.join(", "));
+    } catch (err) {
+      setSuggestError(
+        err instanceof ApiError ? err.message : "Could not read that website. Try a different URL."
+      );
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
   async function saveConfig() {
     await api.upsertAgentConfig(projectId, AGENT_KEY, {
       config: { keywords: textToKeywords(keywordsText) },
@@ -206,7 +230,24 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       {error && <div className="error-banner">{error}</div>}
       {savedMessage && <div className="success-banner">{savedMessage}</div>}
 
-      <form onSubmit={handleSave}>
+      <form onSubmit={handleSuggestKeywords} className="hstack" style={{ alignItems: "flex-end", gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <label htmlFor="suggest-url">Suggest keywords from your website</label>
+          <input
+            id="suggest-url"
+            type="url"
+            value={suggestUrl}
+            onChange={(e) => setSuggestUrl(e.target.value)}
+            placeholder="https://yourproduct.com"
+          />
+        </div>
+        <button type="submit" className="btn-secondary" disabled={suggesting || !suggestUrl.trim()}>
+          {suggesting ? "Reading..." : "Suggest"}
+        </button>
+      </form>
+      {suggestError && <p className="error-banner">{suggestError}</p>}
+
+      <form onSubmit={handleSave} style={{ marginTop: 16 }}>
         <label htmlFor="keywords">Keywords</label>
         <input
           id="keywords"

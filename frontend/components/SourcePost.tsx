@@ -4,6 +4,13 @@ export function originalPostUrl(item: ContentItem): string | null {
   if (item.target_platform === "twitter" && item.target_ref) {
     return `https://twitter.com/i/web/status/${item.target_ref}`;
   }
+  if (item.target_platform === "reddit" && item.target_ref?.startsWith("t3_")) {
+    // Reddit's own short-link scheme — resolves a submission's fullname (what
+    // plugins/reddit/plugin.py's _to_plugin_result sets as target_ref, since search only
+    // ever returns submissions, never individual comments) straight to its real permalink,
+    // with no extra API call needed.
+    return `https://redd.it/${item.target_ref.slice(3)}`;
+  }
   return null;
 }
 

@@ -1,7 +1,8 @@
-"""Unit tests for RedditPlugin — see plugins/reddit/plugin.py. Uses a fake RedditClient (not
-httpx.MockTransport — see test_client.py for HTTP-level coverage) so these tests focus on
-RedditPlugin's own logic: subreddit iteration, since-filtering, rate limiting, error
-isolation, and credential-absence handling.
+"""Unit tests for RedditPlugin — see plugins/reddit/plugin.py. `search()` is tested against a
+fake `search_public()` (not httpx.MockTransport — see test_client.py for HTTP-level coverage of
+the real endpoint), focused on RedditPlugin's own logic: since-filtering, rate limiting, and
+that search never depends on OAuth credentials. `publish()`/`health_check()` still use a fake
+RedditClient double, since those genuinely do depend on credentials.
 """
 
 from __future__ import annotations
@@ -46,23 +47,16 @@ class _FakeContentItem:
 
 @dataclass
 class _FakeRedditClient:
-    """Test double for RedditClient — queued responses per method, so tests control exactly
-    what "Reddit" returns without any HTTP layer involved."""
+    """Test double for RedditClient's authenticated methods — queued responses per method, so
+    publish()/health_check() tests control exactly what "Reddit" returns without any HTTP
+    layer involved. search() no longer goes through this at all (see _FakeSearchPublic
+    below)."""
 
-    search_results: dict[str, list[dict]] = field(default_factory=dict)
-    search_raises: set[str] = field(default_factory=set)
     submit_response: dict | None = None
     submit_error: RedditAPIError | None = None
     me_response: dict | None = None
     me_error: RedditAPIError | None = None
     submit_calls: list[tuple[str, str]] = field(default_factory=list)
-    search_calls: list[tuple[str, str, int]] = field(default_factory=list)
-
-    async def search_subreddit(self, subreddit: str, query: str, *, limit: int) -> list[dict]:
-        self.search_calls.append((subreddit, query, limit))
-        if subreddit in self.search_raises:
-            raise RedditAPIError(f"boom in {subreddit}")
-        return self.search_results.get(subreddit, [])
 
     async def submit_comment(self, *, thing_id: str, text: str) -> dict:
         self.submit_calls.append((thing_id, text))
@@ -84,27 +78,52 @@ def _install_fake_client(monkeypatch, fake: _FakeRedditClient) -> None:
 
 
 def _post(
-    *, name: str = "t3_a", title: str = "Post", permalink: str = "/r/SEO/x/", **extra
+    *, name: str = "t3_a", title: str = "Post", permalink: str = "/r/SEO/x/",
+    subreddit: str = "SEO", **extra,
 ) -> dict:
-    return {"name": name, "title": title, "permalink": permalink, **extra}
+    return {"name": name, "title": title, "permalink": permalink, "subreddit": subreddit, **extra}
+
+
+@dataclass
+class _FakeSearchPublic:
+    """Test double for the module-level `search_public()` function search() calls — a plain
+    fake, not httpx.MockTransport (see test_client.py for HTTP-level coverage of the real
+    endpoint)."""
+
+    results: list[dict] = field(default_factory=list)
+    raises: RedditAPIError | None = None
+    calls: list[tuple[list[str], int]] = field(default_factory=list)
+
+    async def __call__(self, terms: list[str], *, limit: int) -> list[dict]:
+        self.calls.append((terms, limit))
+        if self.raises is not None:
+            raise self.raises
+        return self.results
+
+
+def _install_fake_search_public(monkeypatch, fake: _FakeSearchPublic) -> None:
+    monkeypatch.setattr(plugin_module, "search_public", fake)
 
 
 @pytest.fixture(autouse=True)
-def _fresh_rate_limiter(monkeypatch: pytest.MonkeyPatch):
-    """The module-level rate limiter persists across calls by design (see plugin.py) — reset
-    it to a fresh, generous instance for each test so tests don't interfere with each
+def _fresh_rate_limiters(monkeypatch: pytest.MonkeyPatch):
+    """Both module-level rate limiters persist across calls by design (see plugin.py) — reset
+    each to a fresh, generous instance for every test so tests don't interfere with each
     other's budgets."""
     monkeypatch.setattr(
         plugin_module, "_RATE_LIMITER", RateLimiter(capacity=1000, refill_rate=1000.0)
     )
+    monkeypatch.setattr(
+        plugin_module, "_PUBLIC_RATE_LIMITER", RateLimiter(capacity=1000, refill_rate=1000.0)
+    )
 
 
 @pytest.mark.asyncio
-async def test_search_returns_results_from_configured_subreddits(monkeypatch) -> None:
-    fake = _FakeRedditClient(search_results={"SEO": [_post(name="t3_a", title="Hello")]})
-    _install_fake_client(monkeypatch, fake)
+async def test_search_returns_results_via_public_sitewide_search(monkeypatch) -> None:
+    fake = _FakeSearchPublic(results=[_post(name="t3_a", title="Hello", subreddit="SEO")])
+    _install_fake_search_public(monkeypatch, fake)
 
-    plugin = create_plugin(_oauth_connection(subreddits=["SEO"]))
+    plugin = create_plugin(_oauth_connection())
     results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["indexing"]))
 
     assert len(results) == 1
@@ -112,76 +131,71 @@ async def test_search_returns_results_from_configured_subreddits(monkeypatch) ->
     assert results[0].url == "https://reddit.com/r/SEO/x/"
     assert results[0].platform_metadata["subreddit"] == "SEO"
     assert results[0].platform_metadata["thing_id"] == "t3_a"
-    assert fake.search_calls == [("SEO", "indexing", 25)]
+    assert fake.calls == [(["indexing"], 25)]
 
 
 @pytest.mark.asyncio
-async def test_search_joins_multiple_terms_with_or(monkeypatch) -> None:
-    fake = _FakeRedditClient(search_results={"SEO": []})
-    _install_fake_client(monkeypatch, fake)
+async def test_search_passes_every_term_through_unjoined(monkeypatch) -> None:
+    # Joining terms with " OR " is search_public()'s own job (client.py) — search() just
+    # passes the term list straight through.
+    fake = _FakeSearchPublic(results=[])
+    _install_fake_search_public(monkeypatch, fake)
 
-    plugin = create_plugin(_oauth_connection(subreddits=["SEO"]))
+    plugin = create_plugin(_oauth_connection())
     await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["indexing", "crawl budget"]))
 
-    assert fake.search_calls[0][1] == "indexing OR crawl budget"
+    assert fake.calls[0][0] == ["indexing", "crawl budget"]
 
 
 @pytest.mark.asyncio
-async def test_search_queries_every_configured_subreddit(monkeypatch) -> None:
-    fake = _FakeRedditClient(
-        search_results={
-            "SEO": [_post(name="t3_a")],
-            "juststart": [_post(name="t3_b")],
-        }
+async def test_search_returns_results_spanning_multiple_subreddits(monkeypatch) -> None:
+    # Sitewide search returns posts from whatever subreddits Reddit matched — not scoped to
+    # RedditConnectionConfig.subreddits at all.
+    fake = _FakeSearchPublic(
+        results=[_post(name="t3_a", subreddit="SEO"), _post(name="t3_b", subreddit="juststart")]
     )
-    _install_fake_client(monkeypatch, fake)
+    _install_fake_search_public(monkeypatch, fake)
 
-    plugin = create_plugin(_oauth_connection(subreddits=["SEO", "juststart"]))
+    plugin = create_plugin(_oauth_connection())
     results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"], limit=25))
 
-    assert {r.platform_metadata["thing_id"] for r in results} == {"t3_a", "t3_b"}
+    assert {r.platform_metadata["subreddit"] for r in results} == {"SEO", "juststart"}
 
 
 @pytest.mark.asyncio
-async def test_search_respects_limit_across_subreddits(monkeypatch) -> None:
-    fake = _FakeRedditClient(
-        search_results={
-            "SEO": [_post(name="t3_a"), _post(name="t3_b")],
-            "juststart": [_post(name="t3_c")],
-        }
+async def test_search_respects_limit(monkeypatch) -> None:
+    fake = _FakeSearchPublic(
+        results=[_post(name="t3_a"), _post(name="t3_b"), _post(name="t3_c")]
     )
-    _install_fake_client(monkeypatch, fake)
+    _install_fake_search_public(monkeypatch, fake)
 
-    plugin = create_plugin(_oauth_connection(subreddits=["SEO", "juststart"]))
+    plugin = create_plugin(_oauth_connection())
     results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"], limit=2))
 
     assert len(results) == 2
 
 
 @pytest.mark.asyncio
-async def test_search_returns_empty_with_no_subreddits_configured(monkeypatch) -> None:
-    fake = _FakeRedditClient()
-    _install_fake_client(monkeypatch, fake)
+async def test_search_returns_empty_with_no_terms(monkeypatch) -> None:
+    fake = _FakeSearchPublic()
+    _install_fake_search_public(monkeypatch, fake)
 
-    plugin = create_plugin(_oauth_connection(subreddits=[]))
-    results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
+    plugin = create_plugin(_oauth_connection())
+    results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=[]))
 
     assert results == []
-    assert fake.search_calls == []  # never even calls Reddit
+    assert fake.calls == []  # never even calls Reddit
 
 
 @pytest.mark.asyncio
-async def test_search_one_failing_subreddit_does_not_fail_the_whole_search(monkeypatch) -> None:
-    fake = _FakeRedditClient(
-        search_results={"juststart": [_post(name="t3_ok")]}, search_raises={"SEO"}
-    )
-    _install_fake_client(monkeypatch, fake)
+async def test_search_returns_empty_when_reddit_api_errors(monkeypatch) -> None:
+    fake = _FakeSearchPublic(raises=RedditAPIError("boom"))
+    _install_fake_search_public(monkeypatch, fake)
 
-    plugin = create_plugin(_oauth_connection(subreddits=["SEO", "juststart"]))
+    plugin = create_plugin(_oauth_connection())
     results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
 
-    assert len(results) == 1
-    assert results[0].platform_metadata["thing_id"] == "t3_ok"
+    assert results == []  # never raises, matches every other plugin's search() contract
 
 
 @pytest.mark.asyncio
@@ -189,10 +203,10 @@ async def test_search_filters_out_posts_older_than_since(monkeypatch) -> None:
     now = datetime.now(UTC)
     old_post = _post(name="t3_old", created_utc=(now - timedelta(days=10)).timestamp())
     new_post = _post(name="t3_new", created_utc=now.timestamp())
-    fake = _FakeRedditClient(search_results={"SEO": [old_post, new_post]})
-    _install_fake_client(monkeypatch, fake)
+    fake = _FakeSearchPublic(results=[old_post, new_post])
+    _install_fake_search_public(monkeypatch, fake)
 
-    plugin = create_plugin(_oauth_connection(subreddits=["SEO"]))
+    plugin = create_plugin(_oauth_connection())
     results = await plugin.search(
         PluginQuery(project_id=uuid.uuid4(), terms=["x"], since=now - timedelta(days=1))
     )
@@ -201,48 +215,61 @@ async def test_search_filters_out_posts_older_than_since(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_returns_empty_without_credentials(monkeypatch) -> None:
+async def test_search_works_without_any_credentials(monkeypatch) -> None:
+    # The whole point: discovery never requires a connected Reddit account. Real
+    # _build_client() runs here (not patched) and sees credentials=None, same as production
+    # for every project before it ever connects an account.
+    fake = _FakeSearchPublic(results=[_post()])
+    _install_fake_search_public(monkeypatch, fake)
+
     connection = ResolvedConnection(
-        project_id=uuid.uuid4(),
-        plugin_key="reddit",
-        label="default",
-        config={"subreddits": ["SEO"]},
-        credentials=None,
+        project_id=uuid.uuid4(), plugin_key="reddit", label="default", config={}, credentials=None
     )
-    plugin = create_plugin(connection)  # real _build_client() — not patched — sees credentials=None
+    plugin = create_plugin(connection)
     results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
 
-    assert results == []
+    assert len(results) == 1
 
 
 @pytest.mark.asyncio
-async def test_search_returns_empty_with_non_oauth_credentials(monkeypatch) -> None:
+async def test_search_ignores_credential_shape(monkeypatch) -> None:
+    # search() never touches self._client at all, so even a credential shape Reddit's OAuth
+    # flow would never actually produce doesn't change search's behavior.
+    fake = _FakeSearchPublic(results=[_post()])
+    _install_fake_search_public(monkeypatch, fake)
+
     connection = ResolvedConnection(
         project_id=uuid.uuid4(),
         plugin_key="reddit",
         label="default",
-        config={"subreddits": ["SEO"]},
+        config={},
         credentials=ApiKeyCredentials(api_key="wrong-shape-for-reddit"),
     )
     plugin = create_plugin(connection)
     results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
 
-    assert results == []
+    assert len(results) == 1
 
 
 @pytest.mark.asyncio
 async def test_search_stops_when_rate_limited(monkeypatch) -> None:
-    monkeypatch.setattr(plugin_module, "_RATE_LIMITER", RateLimiter(capacity=1, refill_rate=0.0001))
-    fake = _FakeRedditClient(search_results={"SEO": [_post()], "juststart": [_post()]})
-    _install_fake_client(monkeypatch, fake)
+    monkeypatch.setattr(
+        plugin_module, "_PUBLIC_RATE_LIMITER", RateLimiter(capacity=1, refill_rate=0.0001)
+    )
+    fake = _FakeSearchPublic(results=[_post()])
+    _install_fake_search_public(monkeypatch, fake)
 
-    plugin = create_plugin(_oauth_connection(subreddits=["SEO", "juststart"]))
-    results = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
+    plugin = create_plugin(_oauth_connection())
+    first = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
+    second = await plugin.search(PluginQuery(project_id=uuid.uuid4(), terms=["x"]))
 
-    # Exactly one subreddit's worth of budget was available — the search stops rather than
-    # raising, per the documented rate-limit contract.
-    assert len(fake.search_calls) == 1
-    assert isinstance(results, list)
+    # Exactly one call's worth of budget was available — the second is throttled before ever
+    # calling search_public(), returning empty rather than raising, per the documented
+    # rate-limit contract. Also proves the bucket is shared across different projects (both
+    # queries use the same PUBLIC_BUCKET_KEY), not per-project.
+    assert len(first) == 1
+    assert second == []
+    assert len(fake.calls) == 1
 
 
 @pytest.mark.asyncio

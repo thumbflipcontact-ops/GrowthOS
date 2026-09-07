@@ -377,3 +377,47 @@ async def test_project_crud_and_org_scoped_authorization(
 
     missing_project = await api_client.get(f"/api/v1/projects/{uuid.uuid4()}")
     assert missing_project.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_creating_a_project_auto_connects_reddit_search_with_no_credentials(
+    api_client: AsyncClient, db_session
+) -> None:
+    """Reddit discovery works with no connected account (plugins/reddit/plugin.py's search()
+    is unauthenticated) — every new project should get a CONNECTED, credential-less
+    connection automatically, with no OAuth flow. See app/api/v1/projects.py::create_project()."""
+    import uuid
+
+    from app.models.plugin import PluginCapability, PluginConnectionStatus
+    from app.repositories.organization_repository import OrganizationRepository
+    from app.repositories.plugin_repository import PluginConnectionRepository
+
+    register = await register_and_login(
+        api_client,
+        db_session,
+        org_name="Acme",
+        org_slug="acme-reddit-autoconnect",
+        email="redditowner@example.com",
+        name="Owner",
+        password="correct-horse-battery-staple",
+    )
+    assert register.status_code == 201
+
+    org = await OrganizationRepository(db_session).get_by_slug("acme-reddit-autoconnect")
+    assert org is not None
+
+    create = await api_client.post(
+        f"/api/v1/orgs/{org.id}/projects",
+        json={"name": "ScoutSEO", "slug": "scoutseo-reddit-autoconnect"},
+    )
+    assert create.status_code == 201
+    project_id = create.json()["id"]
+
+    connection = await PluginConnectionRepository(db_session).get_by_project_plugin_and_label(
+        uuid.UUID(project_id), "reddit"
+    )
+    assert connection is not None
+    assert connection.status == PluginConnectionStatus.CONNECTED
+    assert connection.capabilities_enabled == [PluginCapability.SEARCHABLE]
+    assert connection.credentials_encrypted is None
+    assert connection.credential_data_key_wrapped is None

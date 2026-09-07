@@ -25,10 +25,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/blog/twitter-mentions-that-convert-dont-tag-you",
     "/blog/why-ai-twitter-automation-gets-accounts-banned",
     "/blog/the-two-week-old-tweet-problem",
-    "/alternatives/tweet-hunter",
-    "/alternatives/hypefury",
-    "/alternatives/xholic-ai",
-    "/alternatives/bisonary",
+    // The 4 /alternatives/* pages (X-comparison content, from before the Reddit pivot) are
+    // deliberately excluded from indexing here, not deleted — still reachable by direct URL.
   ];
   return routes.map((route) => ({
     url: `${BASE_URL}${route}`,

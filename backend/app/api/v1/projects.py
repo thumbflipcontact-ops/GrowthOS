@@ -6,10 +6,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, require_org_access, require_project_access
+from app.api.deps import get_db, get_plugin_catalog, require_org_access, require_project_access
 from app.core.errors import ValidationError
+from app.core.plugin_catalog import PluginCatalog
 from app.models.identity import Organization
+from app.models.plugin import PluginCapability, PluginConnection, PluginConnectionStatus
 from app.models.project import Project
+from app.repositories.plugin_repository import PluginConnectionRepository
 from app.repositories.project_repository import ProjectRepository
 from app.schemas.project import CreateProjectRequest, ProjectResponse
 
@@ -29,13 +32,35 @@ async def create_project(
     body: CreateProjectRequest,
     organization: Organization = Depends(require_org_access),
     session: AsyncSession = Depends(get_db),
+    catalog: PluginCatalog = Depends(get_plugin_catalog),
 ) -> Project:
     repo = ProjectRepository(session)
     if await repo.get_by_slug(organization.id, body.slug) is not None:
         raise ValidationError("A project with this slug already exists in this organization.")
 
     project = Project(org_id=organization.id, name=body.name, slug=body.slug)
-    return await repo.add(project)
+    project = await repo.add(project)
+
+    # Reddit discovery works with no connected account (plugins/reddit/plugin.py's search()
+    # is unauthenticated, sitewide) — auto-connecting SEARCHABLE here, with no credentials at
+    # all, is what gives every project working lead discovery from the moment it's created,
+    # with zero OAuth flow needed. Safe by construction:
+    # app/core/plugin_registry.py::_resolve_credentials() already returns None (not an error)
+    # for any auth_type when credentials_encrypted is unset. Connecting a real Reddit account
+    # later (to enable publish()) upserts this same row via the ordinary OAuth callback
+    # (app/services/oauth_connection.py) rather than creating a second one.
+    if catalog.get("reddit") is not None:
+        await PluginConnectionRepository(session).add(
+            PluginConnection(
+                project_id=project.id,
+                plugin_key="reddit",
+                capabilities_enabled=[PluginCapability.SEARCHABLE],
+                config={"subreddits": []},
+                status=PluginConnectionStatus.CONNECTED,
+            )
+        )
+
+    return project
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)

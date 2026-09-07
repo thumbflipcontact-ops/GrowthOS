@@ -124,6 +124,13 @@ export const api = {
     });
   },
 
+  suggestKeywords(projectId: string, url: string): Promise<{ keywords: string[] }> {
+    return apiFetch(`/api/v1/projects/${projectId}/keyword-suggestions`, {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    });
+  },
+
   createCheckoutSession(orgId: string): Promise<CheckoutSessionResponse> {
     return apiFetch(`/api/v1/orgs/${orgId}/billing/checkout-session`, { method: "POST" });
   },

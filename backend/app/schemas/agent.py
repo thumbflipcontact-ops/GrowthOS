@@ -3,7 +3,18 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
+
+
+class KeywordSuggestionRequest(BaseModel):
+    """See app/services/keyword_suggestion_service.py. Suggestion only — never persisted by
+    this request itself."""
+
+    url: HttpUrl
+
+
+class KeywordSuggestionResponse(BaseModel):
+    keywords: list[str]
 
 
 class AgentConfigUpsertRequest(BaseModel):
