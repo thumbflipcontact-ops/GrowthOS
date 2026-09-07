@@ -66,6 +66,20 @@ def get_register_ip_limiter() -> RateLimiter:
     return _register_ip_limiter
 
 
+# System-wide backstop the per-IP limiter above can't provide on its own — a bot swarm that
+# rotates IPs (or just spaces out attempts under 5/hour per address) sails straight through a
+# purely per-IP limit. Keyed by one fixed string ("global") rather than per-caller, so every
+# request across every IP shares this single bucket. 30/hour is well above anything this
+# product's real organic signup rate has ever hit (see the 2026-09-06/07 investigation this
+# was added for — 18 signups total since launch, most in one bot-like burst), while still
+# passing a genuine viral spike (e.g. a directory listing) through.
+_register_global_limiter = RateLimiter(capacity=30, refill_rate=30 / 3600)  # 30 attempts / hour
+
+
+def get_register_global_limiter() -> RateLimiter:
+    return _register_global_limiter
+
+
 # Tighter than login's — this endpoint also sends an email per successful match, so it's a
 # more attractive target for both inbox-spamming a victim and enumerating which emails have
 # accounts (the response itself never reveals that, but a sloppy rate limit could via timing

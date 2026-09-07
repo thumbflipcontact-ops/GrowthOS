@@ -118,15 +118,23 @@ def _generous_register_rate_limit():
     than duplicated into each test file's own `api_client` fixture, since essentially every
     one of them would need it. Each test file's own fixture still layers its own overrides
     (get_db, get_arq_redis, ...) on top of this in the same dependency_overrides dict."""
-    from app.api.deps import get_register_ip_limiter
+    from app.api.deps import get_register_global_limiter, get_register_ip_limiter
     from app.core.rate_limit import RateLimiter
     from app.main import app
 
     app.dependency_overrides[get_register_ip_limiter] = lambda: RateLimiter(
         capacity=1000, refill_rate=1000
     )
+    # Same gotcha, for the system-wide backstop limiter (capacity=30/hour) added alongside
+    # the per-IP one — it shares one bucket across every registration in the whole pytest
+    # session regardless of which "IP" each test client presents, so it exhausts even faster
+    # than the per-IP one without this override.
+    app.dependency_overrides[get_register_global_limiter] = lambda: RateLimiter(
+        capacity=1000, refill_rate=1000
+    )
     yield
     app.dependency_overrides.pop(get_register_ip_limiter, None)
+    app.dependency_overrides.pop(get_register_global_limiter, None)
 
 
 @pytest.fixture(autouse=True)

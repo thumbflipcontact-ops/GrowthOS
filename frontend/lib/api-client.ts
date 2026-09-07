@@ -72,6 +72,7 @@ export const api = {
     email: string;
     name: string;
     password: string;
+    website?: string;
   }): Promise<User> {
     return apiFetch("/api/v1/auth/register", { method: "POST", body: JSON.stringify(body) });
   },

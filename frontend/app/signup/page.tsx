@@ -17,6 +17,10 @@ export default function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Honeypot — matches backend/app/schemas/auth.py's RegisterRequest.website. Rendered visually
+  // hidden and out of tab order below; a real person never sees or fills this, so a non-empty
+  // value here means whatever submitted this form filled in every input it could find.
+  const [website, setWebsite] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [registered, setRegistered] = useState(false);
@@ -37,6 +41,7 @@ export default function SignupPage() {
         email,
         name,
         password,
+        website,
       });
       // Captured under the anonymous distinct_id — useSession's identify(organization.id)
       // call on the first post-verification page load merges this event into that org's
@@ -78,6 +83,22 @@ export default function SignupPage() {
       <div className="card">
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit}>
+          {/* Honeypot — invisible and unreachable by tab order for a real person; see the
+              `website` state's comment above. Not `display:none`/`hidden`, which some bots
+              skip — off-screen positioning still gets auto-filled by a naive form-filler. */}
+          <div style={{ position: "absolute", left: "-9999px", top: "-9999px" }} aria-hidden="true">
+            <label htmlFor="website">Website</label>
+            <input
+              id="website"
+              name="website"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+            />
+          </div>
+
           <label htmlFor="name">Your name</label>
           <input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
 

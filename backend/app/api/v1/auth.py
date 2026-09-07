@@ -16,6 +16,7 @@ from app.api.deps import (
     get_login_ip_limiter,
     get_password_reset_account_limiter,
     get_password_reset_ip_limiter,
+    get_register_global_limiter,
     get_register_ip_limiter,
     get_settings_dep,
 )
@@ -102,10 +103,23 @@ async def register(
     session: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
     ip_limiter: RateLimiter = Depends(get_register_ip_limiter),
+    global_limiter: RateLimiter = Depends(get_register_global_limiter),
 ) -> User:
     client_ip = request.client.host if request.client else "unknown"
     if not ip_limiter.try_acquire(f"ip:{client_ip}"):
         raise TooManyRequests("Too many signups from this address. Try again shortly.")
+    # Backstops the per-IP check above against a bot swarm spread across many addresses — see
+    # get_register_global_limiter's docstring. Checked second, after the cheaper per-IP check,
+    # so a single noisy IP burns its own budget first rather than eating into everyone else's.
+    if not global_limiter.try_acquire("global"):
+        raise TooManyRequests("Too many signups right now. Try again shortly.")
+
+    if body.website:
+        # Honeypot tripped — see RegisterRequest.website's docstring. Fabricated, never
+        # persisted: no organization/user row, no verification email sent, nothing for a
+        # retry to build on. Shaped exactly like a real success response so a scripted caller
+        # has no signal that anything was different.
+        return UserResponse(id=uuid.uuid4(), email=body.email, name=body.name)  # type: ignore[return-value]
 
     service = AuthService(session)
     user = await service.register(

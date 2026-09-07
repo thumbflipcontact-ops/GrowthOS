@@ -22,6 +22,12 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     name: str = Field(min_length=1, max_length=200)
     password: str = Field(min_length=12, max_length=200)
+    # Honeypot — frontend/app/signup/page.tsx renders this field visually hidden and
+    # unreachable by tab order, so a real person never fills it in. A scripted client that
+    # blindly populates every field it sees will, though — see app/api/v1/auth.py's register()
+    # route, which fabricates a fake success response instead of raising, so the bot has no
+    # signal to learn from and adjust its behavior. Never persisted or read anywhere else.
+    website: str = Field(default="", max_length=200)
 
     _normalize_email = field_validator("email", mode="after")(_normalize_email)
 
