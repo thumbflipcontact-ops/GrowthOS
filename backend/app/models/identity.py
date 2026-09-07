@@ -49,6 +49,15 @@ class User(UUIDPkMixin, CreatedAtMixin, Base):
     # inactivity sweep; nullable only because existing rows predate this column (migration
     # e4f6a8b0c2d3 backfills them to created_at), never expected to be NULL going forward.
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Nullable timestamp = not yet verified — same idiom as ApiKey.revoked_at /
+    # PasswordResetToken.used_at. Set by EmailVerificationService.verify(); checked by
+    # AuthService.authenticate() and the /auth/register route, which withholds a session
+    # cookie until this is non-null. Existing rows predate this column and are backfilled to
+    # created_at (migration <this file's revision>) so nobody already-registered gets locked
+    # out the moment this ships.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="user")
 

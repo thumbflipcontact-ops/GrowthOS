@@ -127,3 +127,30 @@ def _generous_register_rate_limit():
     )
     yield
     app.dependency_overrides.pop(get_register_ip_limiter, None)
+
+
+@pytest.fixture(autouse=True)
+def _generous_login_rate_limit():
+    """Same gotcha as `_generous_register_rate_limit` above, now doubly so: `tests/helpers.py`'s
+    `register_and_login` — used as setup by most integration tests since /auth/register no
+    longer grants a session by itself — calls POST /auth/login for every single test that
+    merely wants a logged-in client. `get_login_ip_limiter`'s real instance is a process-wide
+    singleton (capacity=10 / 5 min, shared across the whole pytest session, keyed by the same
+    "unknown" IP every ASGITransport test client presents), so it exhausts within the first
+    couple dozen tests without this override. test_auth_rate_limiting.py still gets real,
+    tiny-capacity limiter instances for its own dedicated tests — its fixtures set
+    app.dependency_overrides[get_login_ip_limiter]/[get_login_account_limiter] themselves,
+    which simply replaces the generous ones installed here."""
+    from app.api.deps import get_login_account_limiter, get_login_ip_limiter
+    from app.core.rate_limit import RateLimiter
+    from app.main import app
+
+    app.dependency_overrides[get_login_ip_limiter] = lambda: RateLimiter(
+        capacity=1000, refill_rate=1000
+    )
+    app.dependency_overrides[get_login_account_limiter] = lambda: RateLimiter(
+        capacity=1000, refill_rate=1000
+    )
+    yield
+    app.dependency_overrides.pop(get_login_ip_limiter, None)
+    app.dependency_overrides.pop(get_login_account_limiter, None)

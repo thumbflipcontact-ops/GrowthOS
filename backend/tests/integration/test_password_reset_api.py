@@ -99,7 +99,7 @@ def _extract_token(sent_request: httpx.Request) -> str:
 
 @pytest.mark.asyncio
 async def test_forgot_password_sends_a_working_reset_link(
-    api_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    api_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, db_session
 ) -> None:
     from app.api.deps import get_settings_dep
     from app.main import app
@@ -129,14 +129,28 @@ async def test_forgot_password_sends_a_working_reset_link(
         "/api/v1/auth/forgot-password", json={"email": "reset-flow@example.com"}
     )
     assert r.status_code == 204
-    assert len(sent) == 1
-    token = _extract_token(sent[0])
+    # sent[0] is /auth/register's own verification email (unrelated to this flow) — the
+    # password-reset email is whatever was sent most recently.
+    assert len(sent) == 2
+    token = _extract_token(sent[-1])
 
     reset = await api_client.post(
         "/api/v1/auth/reset-password",
         json={"token": token, "new_password": "brand-new-password-456"},
     )
     assert reset.status_code == 200
+
+    # The final login checks below go through AuthService.authenticate(), which requires a
+    # verified email — irrelevant to what this test actually checks (password reset), so
+    # verify directly rather than round-tripping a second real email.
+    from datetime import UTC, datetime
+
+    from app.repositories.user_repository import UserRepository
+
+    user = await UserRepository(db_session).get_by_email("reset-flow@example.com")
+    assert user is not None
+    user.email_verified_at = datetime.now(UTC)
+    await db_session.flush()
 
     # Old password no longer works, new one does.
     old = await api_client.post(
@@ -204,7 +218,8 @@ async def test_reset_password_token_is_single_use(
         },
     )
     await api_client.post("/api/v1/auth/forgot-password", json={"email": "single-use@example.com"})
-    token = _extract_token(sent[0])
+    # sent[0] is /auth/register's own verification email — the reset email is the latest one.
+    token = _extract_token(sent[-1])
 
     first = await api_client.post(
         "/api/v1/auth/reset-password",
@@ -245,7 +260,8 @@ async def test_reset_password_expired_token_fails(
     await api_client.post(
         "/api/v1/auth/forgot-password", json={"email": "expired-token@example.com"}
     )
-    token = _extract_token(sent[0])
+    # sent[0] is /auth/register's own verification email — the reset email is the latest one.
+    token = _extract_token(sent[-1])
 
     from datetime import UTC, datetime, timedelta
 

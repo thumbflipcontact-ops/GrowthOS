@@ -19,6 +19,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,18 +39,36 @@ export default function SignupPage() {
         password,
       });
       // Captured under the anonymous distinct_id — useSession's identify(organization.id)
-      // call on the very next page load (dashboard) merges this event into that org's
+      // call on the first post-verification page load merges this event into that org's
       // timeline, PostHog's standard anonymous-then-identified pattern.
       initPosthog()?.capture("signup_completed");
-      // Registration signs the browser in directly (session cookie set on the response), and
-      // the org is immediately entitled via the no-card trial (see
-      // docs/billing/BILLING_ARCHITECTURE.md) — no billing step required before the
-      // dashboard, unlike the old card-required flow.
-      window.location.href = "/dashboard";
+      // Registration no longer signs the browser in directly — it withholds a session until
+      // the emailed verification link is clicked (see
+      // backend/app/services/email_verification_service.py), so there's no dashboard
+      // redirect here anymore.
+      setRegistered(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
+    } finally {
       setSubmitting(false);
     }
+  }
+
+  if (registered) {
+    return (
+      <div className="container">
+        <h1>Check your email</h1>
+        <div className="card">
+          <p>
+            We&apos;ve sent a verification link to <strong>{email}</strong>. Click it to
+            activate your account and start your free trial.
+          </p>
+        </div>
+        <p className="muted">
+          Already have an account? <a href="/login">Log in</a>
+        </p>
+      </div>
+    );
   }
 
   return (

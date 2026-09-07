@@ -64,8 +64,27 @@ def password_reset_requested(*, user_name: str, reset_url: str) -> tuple[str, st
     return subject, html_body
 
 
+def email_verification_requested(*, user_name: str, verify_url: str) -> tuple[str, str]:
+    name = escape(user_name)
+    # verify_url is our own server-generated link (frontend_origin + a urlsafe token), not
+    # user-controlled input, but escaped anyway on the same "never interpolate raw" habit as
+    # the other templates.
+    url = escape(verify_url)
+    subject = "Verify your email to start using Threadly"
+    html_body = f"""
+    <p>Hi {name},</p>
+    <p>Thanks for signing up for Threadly! Click the link below to verify your email address
+    and log in — it expires in 24 hours and can only be used once.</p>
+    <p><a href="{url}">Verify your email</a></p>
+    <p>If you didn't create a Threadly account, you can safely ignore this email.</p>
+    <p>— The Threadly Team</p>
+    """.strip()
+    return subject, html_body
+
+
 __all__ = [
     "conversation_finder_disabled_inactivity",
     "conversation_finder_disabled_not_entitled",
+    "email_verification_requested",
     "password_reset_requested",
 ]

@@ -9,9 +9,11 @@ from app.models.billing import Subscription, SubscriptionStatus
 from app.models.brief import DailyBrief
 from app.models.content import ContentItem, ContentItemStatus
 from app.models.crm import Company, Competitor, CompetitorObservation, Contact, ContactStatus
+from app.models.email_verification import EmailVerificationToken
 from app.models.event import DomainEvent
 from app.models.identity import Membership, MembershipRole, Organization, User
 from app.models.knowledge import BuyingIntent, KnowledgeItem
+from app.models.password_reset import PasswordResetToken
 from app.models.plugin import (
     PluginCapability,
     PluginCatalogEntry,
@@ -35,12 +37,14 @@ __all__ = [
     "Contact",
     "ContactStatus",
     "DomainEvent",
+    "EmailVerificationToken",
     "Membership",
     "MembershipRole",
     "Organization",
     "User",
     "BuyingIntent",
     "KnowledgeItem",
+    "PasswordResetToken",
     "PluginCapability",
     "PluginCatalogEntry",
     "PluginConnection",

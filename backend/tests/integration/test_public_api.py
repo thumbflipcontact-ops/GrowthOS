@@ -15,6 +15,7 @@ from app.models.content import ContentItemStatus
 from app.repositories.organization_repository import OrganizationRepository
 from app.services.content_drafts import ContentDraftClient
 from app.services.knowledge_base import KnowledgeBaseClient
+from tests.helpers import register_and_login
 
 pytestmark = pytest.mark.integration
 
@@ -57,15 +58,14 @@ async def api_client(db_session, _migrated_db, fake_arq_redis: _FakeArqRedis):
 @pytest_asyncio.fixture
 async def project_and_key(api_client: AsyncClient, db_session) -> tuple[str, str]:
     suffix = uuid.uuid4().hex[:8]
-    await api_client.post(
-        "/api/v1/auth/register",
-        json={
-            "org_name": "Acme",
-            "org_slug": f"acme-public-api-{suffix}",
-            "email": f"owner-{suffix}@example.com",
-            "name": "Owner",
-            "password": "correct-horse-battery-staple",
-        },
+    await register_and_login(
+        api_client,
+        db_session,
+        org_name="Acme",
+        org_slug=f"acme-public-api-{suffix}",
+        email=f"owner-{suffix}@example.com",
+        name="Owner",
+        password="correct-horse-battery-staple",
     )
     org = await OrganizationRepository(db_session).get_by_slug(f"acme-public-api-{suffix}")
     assert org is not None

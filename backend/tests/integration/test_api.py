@@ -13,6 +13,8 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from tests.helpers import register_and_login
+
 pytestmark = pytest.mark.integration
 
 
@@ -63,7 +65,11 @@ async def test_plugin_catalog_reflects_discovered_plugins_but_requires_auth(
 
 
 @pytest.mark.asyncio
-async def test_register_login_me_logout_flow(api_client: AsyncClient) -> None:
+async def test_register_login_me_logout_flow(api_client: AsyncClient, db_session) -> None:
+    from datetime import UTC, datetime
+
+    from app.repositories.user_repository import UserRepository
+
     register = await api_client.post(
         "/api/v1/auth/register",
         json={
@@ -76,6 +82,21 @@ async def test_register_login_me_logout_flow(api_client: AsyncClient) -> None:
     )
     assert register.status_code == 201
     user_id = register.json()["id"]
+    # Register no longer grants a session by itself — only /auth/verify-email or a
+    # subsequent /auth/login does, once the account is verified.
+    assert "growthos_session" not in api_client.cookies
+
+    user = await UserRepository(db_session).get_by_email("founder@example.com")
+    assert user is not None
+    user.email_verified_at = datetime.now(UTC)
+    await db_session.flush()
+
+    login = await api_client.post(
+        "/api/v1/auth/login",
+        json={"email": "founder@example.com", "password": "correct-horse-battery-staple"},
+    )
+    assert login.status_code == 200
+    assert login.json()["id"] == user_id
     assert "growthos_session" in api_client.cookies
 
     me = await api_client.get("/api/v1/auth/me")
@@ -88,19 +109,18 @@ async def test_register_login_me_logout_flow(api_client: AsyncClient) -> None:
     me_after_logout = await api_client.get("/api/v1/auth/me")
     assert me_after_logout.status_code == 401
 
-    login = await api_client.post(
-        "/api/v1/auth/login",
-        json={"email": "founder@example.com", "password": "correct-horse-battery-staple"},
-    )
-    assert login.status_code == 200
-    assert login.json()["id"] == user_id
-
 
 @pytest.mark.asyncio
-async def test_login_with_different_email_casing_than_registered(api_client: AsyncClient) -> None:
+async def test_login_with_different_email_casing_than_registered(
+    api_client: AsyncClient, db_session
+) -> None:
     # Real bug: a user who registered as "Name@Example.com" could never log back in typing
     # "name@example.com" — User.email equality is a case-sensitive Postgres `=`. Fixed by
     # normalizing email to lowercase at the RegisterRequest/LoginRequest schema boundary.
+    from datetime import UTC, datetime
+
+    from app.repositories.user_repository import UserRepository
+
     register = await api_client.post(
         "/api/v1/auth/register",
         json={
@@ -113,6 +133,14 @@ async def test_login_with_different_email_casing_than_registered(api_client: Asy
     )
     assert register.status_code == 201
     user_id = register.json()["id"]
+
+    # Login is gated on email verification now — mark it verified directly (same shortcut
+    # tests/helpers.py's register_and_login takes) so this test can focus on the casing
+    # behavior it actually exercises rather than the real email round-trip.
+    user = await UserRepository(db_session).get_by_email("casing.test@example.com")
+    assert user is not None
+    user.email_verified_at = datetime.now(UTC)
+    await db_session.flush()
 
     login = await api_client.post(
         "/api/v1/auth/login",
@@ -143,9 +171,11 @@ async def test_register_rejects_duplicate_email_regardless_of_casing(api_client:
 
 @pytest.mark.asyncio
 async def test_register_and_login_both_set_last_login_at(api_client: AsyncClient, db_session) -> None:
-    """See app/core/agent_lifecycle.py's 48h-inactivity sweep — both entry points that issue a
-    session must stamp User.last_login_at, or a user who never revisits /auth/login (riding
-    their long-lived signup session) would be falsely flagged as inactive."""
+    """See app/core/agent_lifecycle.py's 48h-inactivity sweep — register still stamps
+    User.last_login_at at signup (even though it no longer grants a session immediately —
+    that now waits for email verification), and a real login must advance it again, or a
+    user who verifies late but never revisits /auth/login again would be falsely flagged as
+    inactive."""
     from app.repositories.user_repository import UserRepository
 
     register = await api_client.post(
@@ -165,7 +195,13 @@ async def test_register_and_login_both_set_last_login_at(api_client: AsyncClient
     after_register = user.last_login_at
     assert after_register is not None
 
-    await api_client.post("/api/v1/auth/logout")
+    # Login is gated on email verification now — mark it verified directly (register no
+    # longer grants a session on its own, so there's nothing to log out of yet here).
+    from datetime import UTC, datetime
+
+    user.email_verified_at = datetime.now(UTC)
+    await db_session.flush()
+
     login = await api_client.post(
         "/api/v1/auth/login",
         json={"email": "lastlogin@example.com", "password": "correct-horse-battery-staple"},
@@ -193,7 +229,7 @@ def _parse_set_cookie_attrs(set_cookie_header: str) -> dict[str, str | None]:
 
 @pytest.mark.asyncio
 async def test_logout_clears_cookies_with_the_same_secure_and_samesite_login_set(
-    api_client: AsyncClient,
+    api_client: AsyncClient, db_session
 ) -> None:
     """A delete_cookie() whose secure/samesite attributes don't match the original set_cookie()
     produces a Set-Cookie header real browsers silently drop in a cross-site deployment (Vercel
@@ -204,7 +240,15 @@ async def test_logout_clears_cookies_with_the_same_secure_and_samesite_login_set
     hardcoding secure=True/False for one environment — is what would have caught it: the bug is
     invisible under ENVIRONMENT=local (both sides happen to default to secure=False;
     samesite=lax), so a test pinned to local's values would pass regardless of this mismatch.
+
+    Register no longer sets the session cookie itself, so the "set" side of the parity check
+    now comes from /auth/login (the entry point that actually grants the session here) rather
+    than from the register response.
     """
+    from datetime import UTC, datetime
+
+    from app.repositories.user_repository import UserRepository
+
     register = await api_client.post(
         "/api/v1/auth/register",
         json={
@@ -216,7 +260,18 @@ async def test_logout_clears_cookies_with_the_same_secure_and_samesite_login_set
         },
     )
     assert register.status_code == 201
-    set_cookie_headers = register.headers.get_list("set-cookie")
+
+    user = await UserRepository(db_session).get_by_email("cookie-parity@example.com")
+    assert user is not None
+    user.email_verified_at = datetime.now(UTC)
+    await db_session.flush()
+
+    login = await api_client.post(
+        "/api/v1/auth/login",
+        json={"email": "cookie-parity@example.com", "password": "correct-horse-battery-staple"},
+    )
+    assert login.status_code == 200
+    set_cookie_headers = login.headers.get_list("set-cookie")
     session_set = next(h for h in set_cookie_headers if h.startswith("growthos_session="))
     csrf_set = next(h for h in set_cookie_headers if h.startswith("growthos_csrf="))
     session_set_attrs = _parse_set_cookie_attrs(session_set)
@@ -282,15 +337,14 @@ async def test_project_crud_and_org_scoped_authorization(
 
     from app.repositories.organization_repository import OrganizationRepository
 
-    register = await api_client.post(
-        "/api/v1/auth/register",
-        json={
-            "org_name": "Acme",
-            "org_slug": "acme-project-crud",
-            "email": "projowner@example.com",
-            "name": "Owner",
-            "password": "correct-horse-battery-staple",
-        },
+    register = await register_and_login(
+        api_client,
+        db_session,
+        org_name="Acme",
+        org_slug="acme-project-crud",
+        email="projowner@example.com",
+        name="Owner",
+        password="correct-horse-battery-staple",
     )
     assert register.status_code == 201
 

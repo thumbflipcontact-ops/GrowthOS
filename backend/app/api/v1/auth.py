@@ -38,8 +38,10 @@ from app.schemas.auth import (
     RegisterRequest,
     ResetPasswordRequest,
     UserResponse,
+    VerifyEmailRequest,
 )
 from app.services.auth_service import AuthService
+from app.services.email_verification_service import EmailVerificationService
 from app.services.password_reset_service import PasswordResetService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -113,6 +115,24 @@ async def register(
         name=body.name,
         password=body.password,
     )
+    # No session cookie yet — granted once /auth/verify-email confirms this is a real,
+    # reachable address. A registration response the caller can't log in with looks odd in
+    # isolation, but it's the whole point: an account that never verifies never gets in.
+    await EmailVerificationService(session, settings).send_verification_email(user=user)
+    return user
+
+
+@router.post("/verify-email", response_model=UserResponse)
+async def verify_email(
+    body: VerifyEmailRequest,
+    response: Response,
+    session: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> User:
+    service = EmailVerificationService(session, settings)
+    user = await service.verify(token=body.token)
+    # Same as reset-password: a freshly-verified account shouldn't require a second trip
+    # through login.
     _set_session_cookies(response, str(user.id), settings)
     return user
 

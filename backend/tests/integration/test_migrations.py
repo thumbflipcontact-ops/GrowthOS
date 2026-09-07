@@ -12,6 +12,7 @@ EXPECTED_TABLES = {
     "organizations",
     "users",
     "password_reset_tokens",
+    "email_verification_tokens",
     "memberships",
     "projects",
     "plugin_catalog",

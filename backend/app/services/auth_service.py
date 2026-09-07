@@ -80,6 +80,14 @@ class AuthService:
             )
             raise AuthenticationError("Invalid email or password.")
 
+        if user.email_verified_at is None:
+            # Correct password, but no session yet — distinct from "wrong password" since the
+            # caller already knows this account exists (they typed the right password for it),
+            # so there's no enumeration risk in saying so explicitly.
+            raise AuthenticationError(
+                "Please verify your email before logging in — check your inbox for the link."
+            )
+
         result = await self.session.execute(select(Membership).where(Membership.user_id == user.id))
         first_membership = result.scalars().first()
         org_id = first_membership.org_id if first_membership else None

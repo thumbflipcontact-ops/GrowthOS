@@ -22,6 +22,7 @@ from app.core.errors import SubscriptionRequiredError
 from app.models.billing import Subscription, SubscriptionStatus
 from app.models.identity import Organization
 from app.repositories.organization_repository import OrganizationRepository
+from tests.helpers import register_and_login
 
 pytestmark = pytest.mark.integration
 
@@ -163,15 +164,14 @@ async def api_client(db_session, _migrated_db):
 
 
 async def _register_and_create_project(api_client: AsyncClient, db_session, *, suffix: str) -> tuple[str, str]:
-    await api_client.post(
-        "/api/v1/auth/register",
-        json={
-            "org_name": "Acme",
-            "org_slug": f"acme-entitle-api-{suffix}",
-            "email": f"owner-{suffix}@example.com",
-            "name": "Owner",
-            "password": "correct-horse-battery-staple",
-        },
+    await register_and_login(
+        api_client,
+        db_session,
+        org_name="Acme",
+        org_slug=f"acme-entitle-api-{suffix}",
+        email=f"owner-{suffix}@example.com",
+        name="Owner",
+        password="correct-horse-battery-staple",
     )
     org = await OrganizationRepository(db_session).get_by_slug(f"acme-entitle-api-{suffix}")
     assert org is not None

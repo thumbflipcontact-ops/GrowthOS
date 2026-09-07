@@ -11,6 +11,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.services.knowledge_base import KnowledgeBaseClient
+from tests.helpers import register_and_login
 
 pytestmark = pytest.mark.integration
 
@@ -37,15 +38,14 @@ async def api_client(db_session, _migrated_db):
 async def project_id(api_client: AsyncClient, db_session) -> str:
     from app.repositories.organization_repository import OrganizationRepository
 
-    await api_client.post(
-        "/api/v1/auth/register",
-        json={
-            "org_name": "Acme",
-            "org_slug": "acme-knowledge-items",
-            "email": "kiowner@example.com",
-            "name": "Owner",
-            "password": "correct-horse-battery-staple",
-        },
+    await register_and_login(
+        api_client,
+        db_session,
+        org_name="Acme",
+        org_slug="acme-knowledge-items",
+        email="kiowner@example.com",
+        name="Owner",
+        password="correct-horse-battery-staple",
     )
     org = await OrganizationRepository(db_session).get_by_slug("acme-knowledge-items")
     assert org is not None

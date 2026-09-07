@@ -98,6 +98,13 @@ export const api = {
     });
   },
 
+  verifyEmail(token: string): Promise<User> {
+    return apiFetch("/api/v1/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
+  },
+
   me(): Promise<User> {
     return apiFetch("/api/v1/auth/me");
   },

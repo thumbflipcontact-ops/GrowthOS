@@ -19,8 +19,16 @@ export default function LoginPage() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         setError("Too many attempts. Wait a few minutes and try again.");
+      } else if (err instanceof ApiError && err.status === 401) {
+        // The backend's own message is already worded with security in mind — "Invalid email
+        // or password" for wrong credentials (no enumeration), but a specific, more useful
+        // "please verify your email" for a correct password on an unverified account (no
+        // enumeration risk there, since the caller already proved they know the password).
+        // Passing it through as-is, rather than overriding with a hardcoded generic string,
+        // is what actually surfaces that second case to a real user.
+        setError(err.message);
       } else {
-        setError("Invalid email or password.");
+        setError("Something went wrong. Try again.");
       }
       setSubmitting(false);
     }

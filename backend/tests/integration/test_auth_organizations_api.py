@@ -9,6 +9,8 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from tests.helpers import register_and_login
+
 pytestmark = pytest.mark.integration
 
 
@@ -32,17 +34,16 @@ async def api_client(db_session, _migrated_db):
 
 @pytest.mark.asyncio
 async def test_me_organizations_returns_the_org_created_at_registration(
-    api_client: AsyncClient,
+    api_client: AsyncClient, db_session
 ) -> None:
-    register = await api_client.post(
-        "/api/v1/auth/register",
-        json={
-            "org_name": "Acme",
-            "org_slug": "acme-me-orgs",
-            "email": "owner@example.com",
-            "name": "Owner",
-            "password": "correct-horse-battery-staple",
-        },
+    register = await register_and_login(
+        api_client,
+        db_session,
+        org_name="Acme",
+        org_slug="acme-me-orgs",
+        email="owner@example.com",
+        name="Owner",
+        password="correct-horse-battery-staple",
     )
     assert register.status_code == 201
 
@@ -66,11 +67,18 @@ async def test_me_organizations_requires_authentication(api_client: AsyncClient)
 async def test_me_organizations_is_empty_list_not_error_when_somehow_orgless(
     api_client: AsyncClient, db_session
 ) -> None:
+    from datetime import UTC, datetime
+
     from app.core.security import hash_password
     from app.models.identity import User
 
     db_session.add(
-        User(email="orphan@example.com", name="Orphan", password_hash=hash_password("x" * 12))
+        User(
+            email="orphan@example.com",
+            name="Orphan",
+            password_hash=hash_password("x" * 12),
+            email_verified_at=datetime.now(UTC),
+        )
     )
     await db_session.flush()
 

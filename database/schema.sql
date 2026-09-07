@@ -37,14 +37,17 @@ create table organizations (
 );
 
 create table users (
-    id              uuid primary key default gen_random_uuid(),
-    email           text not null unique,
-    name            text not null,
-    password_hash   text not null,
+    id                  uuid primary key default gen_random_uuid(),
+    email               text not null unique,
+    name                text not null,
+    password_hash       text not null,
     -- Set on both login and signup — see app/core/agent_lifecycle.py's 48h-inactivity sweep,
     -- the only reader.
-    last_login_at   timestamptz,
-    created_at      timestamptz not null default now()
+    last_login_at       timestamptz,
+    -- Null = not yet verified — see email_verification_tokens below. AuthService.authenticate()
+    -- and /auth/register withhold a session cookie until this is set.
+    email_verified_at   timestamptz,
+    created_at          timestamptz not null default now()
 );
 
 -- token_hash is a SHA-256 digest (same scheme as api_keys.key_hash, see
@@ -52,6 +55,18 @@ create table users (
 -- token is emailed to the user exactly once and never persisted. used_at nullable = still
 -- valid, same idiom as api_keys.revoked_at.
 create table password_reset_tokens (
+    id          uuid primary key default gen_random_uuid(),
+    user_id     uuid not null references users(id) on delete cascade,
+    token_hash  text not null,
+    expires_at  timestamptz not null,
+    used_at     timestamptz,
+    created_at  timestamptz not null default now(),
+    unique (token_hash)
+);
+
+-- Same hashed-token shape as password_reset_tokens above. Sent on every /auth/register; the
+-- resulting user has no session until this is consumed via /auth/verify-email.
+create table email_verification_tokens (
     id          uuid primary key default gen_random_uuid(),
     user_id     uuid not null references users(id) on delete cascade,
     token_hash  text not null,
