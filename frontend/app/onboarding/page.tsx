@@ -1,9 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KeywordChips } from "@/components/KeywordChips";
 import { ApiError, api } from "@/lib/api-client";
 import { useSession } from "@/lib/useSession";
+
+const AGENT_KEY = "conversation_finder";
+
+function normalizeKeywords(keywords: unknown): string[] {
+  return Array.isArray(keywords) ? keywords : [];
+}
 
 // Matches MINIMUM_SCHEDULE_INTERVAL_SECONDS in backend/app/services/agent_config.py — the
 // platform-wide floor, same constant frontend/app/settings/agents/page.tsx uses. Once a day
@@ -52,7 +58,27 @@ function OnboardingForm({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState(0);
+  // Someone revisiting this page (e.g. via the browser back button) after already completing
+  // it once has a real, saved conversation_finder config — without this, the form always
+  // started from an empty keyword list, which reads as "my keywords got lost" even though
+  // nothing was. Mirrors settings/agents/page.tsx's identical fetch-on-mount.
+  const [loadingConfig, setLoadingConfig] = useState(true);
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    api
+      .listAgentConfigs(projectId)
+      .then((configs) => {
+        const existing = configs.find((c) => c.agent_key === AGENT_KEY);
+        if (existing) {
+          setKeywords(normalizeKeywords(existing.config.keywords));
+        }
+      })
+      .catch(() => {
+        // Non-fatal — worst case this behaves exactly like today: an empty, editable form.
+      })
+      .finally(() => setLoadingConfig(false));
+  }, [projectId]);
 
   async function handleSuggest(e: React.FormEvent) {
     e.preventDefault();
@@ -133,6 +159,10 @@ function OnboardingForm({ projectId }: { projectId: string }) {
 
   if (scanning) {
     return <ScanningScreen keywordCount={keywords.length} progress={progress} />;
+  }
+
+  if (loadingConfig) {
+    return <p className="muted">Loading...</p>;
   }
 
   return (
