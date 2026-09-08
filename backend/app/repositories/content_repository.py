@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import select, update
 
 from app.models.content import ContentItem, ContentItemStatus, ContentPublishAttempt
+from app.models.knowledge import KnowledgeItem
 from app.repositories.base import Repository
 
 
@@ -39,15 +40,32 @@ class ContentItemRepository(Repository[ContentItem]):
         limit: int = 50,
         offset: int = 0,
     ) -> list[ContentItem]:
-        stmt = (
-            select(ContentItem)
-            .where(ContentItem.project_id == project_id)
-            .order_by(ContentItem.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        stmt = select(ContentItem).where(ContentItem.project_id == project_id)
         if status is not None:
             stmt = stmt.where(ContentItem.status == status)
+
+        if status == ContentItemStatus.PENDING_REVIEW.value:
+            # The Approval Inbox specifically — surface the strongest leads first, not just
+            # the most recently drafted ones. A draft's own `ContentItem.confidence` is the
+            # model's confidence in *its reply*, a different axis from how good the lead
+            # itself is; the lead-relevance score the LLM scoring pass produces
+            # (agents/conversation_finder/prompts.py) lives on the source KnowledgeItem, so
+            # this joins to it. NULLS LAST covers a knowledge_item that's since been deleted
+            # (knowledge_item_id survives via ON DELETE SET NULL) or a draft with no source at
+            # all — falls to the end rather than sorting as if it were the least relevant.
+            # created_at DESC is only the tiebreak for equal/missing scores, not the primary
+            # order, unlike every other status this method serves (ready-to-post, posted),
+            # which stay chronological — order there reflects a real posting queue, not lead
+            # quality.
+            stmt = stmt.outerjoin(
+                KnowledgeItem, ContentItem.knowledge_item_id == KnowledgeItem.id
+            ).order_by(
+                KnowledgeItem.confidence.desc().nulls_last(), ContentItem.created_at.desc()
+            )
+        else:
+            stmt = stmt.order_by(ContentItem.created_at.desc())
+
+        stmt = stmt.limit(limit).offset(offset)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

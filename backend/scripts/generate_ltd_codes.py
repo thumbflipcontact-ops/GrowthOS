@@ -6,12 +6,18 @@ docs/deployment/DEPLOYMENT.md's Railway SSH pattern):
 
     MSYS_NO_PATHCONV=1 railway ssh --service GrowthOS -- \\
         env PYTHONPATH=/app:/app/backend:/app/.pydeps/lib/python3.12/site-packages \\
-        python3 backend/scripts/generate_ltd_codes.py --count 100
+        python3 backend/scripts/generate_ltd_codes.py --count 100 --source appsumo
 
 Prints one code per line to stdout — nothing else — so the output can be piped straight into
 a file to hand to AppSumo (or wherever the codes need to go). Each code is a short, random,
 unambiguous string (no 0/O/1/I) rather than a UUID, since a human may need to type one in by
 hand on the /redeem page.
+
+`--source` tags every code in this batch with which marketplace it's for (e.g. "appsumo",
+"dealmirror", "pitchground", "direct") — see app/models/ltd_code.py's `source` column.
+Optional so old call sites/scripts keep working, but always pass it when launching on a new
+channel: it's the only thing that lets you later tell "how many DealMirror codes actually
+got redeemed" apart from AppSumo's.
 """
 
 from __future__ import annotations
@@ -35,7 +41,7 @@ def _generate_code() -> str:
     return "".join(secrets.choice(_ALPHABET) for _ in range(_CODE_LENGTH))
 
 
-async def main(count: int) -> None:
+async def main(count: int, source: str | None) -> None:
     settings = get_settings()
     engine = create_engine(settings.database_url)
     session_factory = create_session_factory(engine)
@@ -49,7 +55,7 @@ async def main(count: int) -> None:
                 continue
             seen.add(code)
             codes.append(code)
-            session.add(LtdCode(code=code))
+            session.add(LtdCode(code=code, source=source))
         await session.commit()
 
     for code in codes:
@@ -61,8 +67,14 @@ async def main(count: int) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--count", type=int, required=True, help="How many codes to generate.")
+    parser.add_argument(
+        "--source",
+        type=str,
+        default=None,
+        help="Which marketplace this batch is for (e.g. appsumo, dealmirror). Optional.",
+    )
     args = parser.parse_args()
     if args.count <= 0:
         print("--count must be positive.", file=sys.stderr)
         sys.exit(1)
-    asyncio.run(main(args.count))
+    asyncio.run(main(args.count, args.source))

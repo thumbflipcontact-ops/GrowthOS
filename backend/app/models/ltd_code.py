@@ -14,7 +14,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, text
+from sqlalchemy import DateTime, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,6 +30,14 @@ class LtdCode(UUIDPkMixin, CreatedAtMixin, Base):
     __tablename__ = "ltd_codes"
 
     code: Mapped[str] = mapped_column(nullable=False, unique=True)
+    # Which marketplace batch this code was generated for (e.g. "appsumo", "dealmirror",
+    # "pitchground", "direct") — a free-form label set once at generation time by
+    # scripts/generate_ltd_codes.py's --source, never edited after. Nullable, not a closed
+    # enum: new marketplaces get added without a migration, and every code generated before
+    # this column existed stays NULL rather than being misattributed to a guessed source.
+    # Exists purely for reconciliation (redemption counts and revenue-per-channel) — nothing
+    # in the redemption flow itself (app/services/ltd_redemption_service.py) reads this.
+    source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[LtdCodeStatus] = mapped_column(
         pg_enum(LtdCodeStatus, "ltd_code_status"),
         nullable=False,

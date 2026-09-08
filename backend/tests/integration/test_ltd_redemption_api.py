@@ -66,9 +66,11 @@ async def api_client(db_session, _migrated_db):
         app.dependency_overrides.clear()
 
 
-async def _make_code(db_session, *, status: LtdCodeStatus = LtdCodeStatus.UNREDEEMED) -> str:
+async def _make_code(
+    db_session, *, status: LtdCodeStatus = LtdCodeStatus.UNREDEEMED, source: str | None = None
+) -> str:
     code = f"TEST-{uuid.uuid4().hex[:8].upper()}"
-    db_session.add(LtdCode(code=code, status=status))
+    db_session.add(LtdCode(code=code, status=status, source=source))
     await db_session.flush()
     return code
 
@@ -105,6 +107,25 @@ async def test_redeem_creates_an_ltd_org_with_one_project_allowed(
     assert updated_code.status == LtdCodeStatus.REDEEMED
     assert updated_code.redeemed_by_org_id == org.id
     assert updated_code.redeemed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_redeem_preserves_the_codes_marketplace_source(
+    api_client: AsyncClient, db_session
+) -> None:
+    """`source` (which marketplace batch this code came from — see
+    scripts/generate_ltd_codes.py --source) is purely for redemption-count reporting;
+    redeeming a code must never clear or overwrite it."""
+    code = await _make_code(db_session, source="dealmirror")
+
+    r = await api_client.post("/api/v1/ltd/redeem", json=_redeem_body(code))
+    assert r.status_code == 201
+
+    updated_code = (
+        await db_session.execute(select(LtdCode).where(LtdCode.code == code))
+    ).scalar_one()
+    assert updated_code.source == "dealmirror"
+    assert updated_code.status == LtdCodeStatus.REDEEMED
 
 
 @pytest.mark.asyncio

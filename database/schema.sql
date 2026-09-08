@@ -150,6 +150,11 @@ create type ltd_code_status as enum ('unredeemed', 'redeemed');
 create table ltd_codes (
     id                  uuid primary key default gen_random_uuid(),
     code                text not null unique,
+    -- Which marketplace batch this was generated for (e.g. 'appsumo', 'dealmirror',
+    -- 'direct') — free-form, set once by scripts/generate_ltd_codes.py's --source, purely
+    -- for redemption-count/revenue-per-channel reporting. NULL for codes generated before
+    -- this column existed.
+    source              varchar(50),
     status              ltd_code_status not null default 'unredeemed',
     -- ON DELETE SET NULL, not CASCADE — the redemption record (which code, when) is worth
     -- keeping for reconciliation against AppSumo even if the org itself is later deleted.

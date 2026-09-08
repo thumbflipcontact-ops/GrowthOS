@@ -189,6 +189,61 @@ async def test_list_content_items_filters_by_status(
 
 
 @pytest.mark.asyncio
+async def test_pending_review_items_are_ordered_by_lead_relevance_not_recency(
+    api_client: AsyncClient, project_id: str, db_session
+) -> None:
+    """The Approval Inbox (status=pending_review) should surface the strongest leads first —
+    see ContentItemRepository.list_by_project. Create the weak lead's draft *after* the
+    strong lead's, so a plain created_at-desc ordering would (wrongly) put the weak one on
+    top; asserts the response instead reflects the source knowledge_item's confidence."""
+    kb = KnowledgeBaseClient(db_session)
+    drafts = ContentDraftClient(db_session)
+
+    weak_lead, _ = await kb.upsert_discovery(
+        project_id=uuid.UUID(project_id),
+        platform="reddit",
+        url="https://reddit.com/r/x/weak",
+        tags=[],
+        confidence=Decimal("0.3"),
+    )
+    strong_lead, _ = await kb.upsert_discovery(
+        project_id=uuid.UUID(project_id),
+        platform="reddit",
+        url="https://reddit.com/r/x/strong",
+        tags=[],
+        confidence=Decimal("0.9"),
+    )
+
+    strong_item = await drafts.create_draft(
+        project_id=uuid.UUID(project_id),
+        type="reddit_reply",
+        body="Strong lead reply.",
+        confidence=Decimal("0.75"),
+        target_platform="reddit",
+        knowledge_item_id=strong_lead.id,
+    )
+    strong_item.status = ContentItemStatus.PENDING_REVIEW
+    await db_session.flush()
+
+    # Created after the strong one, so a recency-only sort would put this first instead.
+    weak_item = await drafts.create_draft(
+        project_id=uuid.UUID(project_id),
+        type="reddit_reply",
+        body="Weak lead reply.",
+        confidence=Decimal("0.75"),
+        target_platform="reddit",
+        knowledge_item_id=weak_lead.id,
+    )
+    weak_item.status = ContentItemStatus.PENDING_REVIEW
+    await db_session.flush()
+
+    r = await api_client.get(f"/api/v1/projects/{project_id}/content-items?status=pending_review")
+    assert r.status_code == 200
+    ids_in_order = [item["id"] for item in r.json()]
+    assert ids_in_order == [str(strong_item.id), str(weak_item.id)]
+
+
+@pytest.mark.asyncio
 async def test_get_content_item_returns_the_item(
     api_client: AsyncClient, project_id: str, db_session
 ) -> None:
