@@ -97,7 +97,7 @@ const STEPS = [
   },
   {
     title: "It watches, so you don't have to",
-    body: "Conversation Finder scans Reddit every 30 minutes — no login required — then Claude reads each match to judge whether it's a genuine lead and how strong their buying intent is, not just whether it shares a keyword. Worth-joining posts get a drafted reply. No more refreshing search tabs all day.",
+    body: "Conversation Finder scans Reddit once a day — no login required — then Claude reads each match to judge whether it's a genuine lead and how strong their buying intent is, not just whether it shares a keyword. Worth-joining posts get a drafted reply. No more refreshing search tabs all day.",
   },
   {
     title: "You approve — or you don't",

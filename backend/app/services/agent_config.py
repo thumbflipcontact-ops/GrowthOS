@@ -28,16 +28,22 @@ from app.repositories.agent_repository import AgentConfigRepository
 # agent-specific (deliberately: this file's own docstring rule is "no agent-specific code
 # here or ever should be"). Originally set to 6 hours because X's pay-per-use search pricing
 # (see plugins/twitter/README.md) meant an unbounded schedule_cron let one customer's cost
-# scale past what a flat subscription price covers. Since the Reddit pivot, the primary
-# constraint is different: Reddit's public search has no per-call monetary cost at all, but a
-# very tight shared rate limit instead (confirmed via direct production testing — Reddit can
-# 429 a second request within about a second of the first; see plugins/reddit/plugin.py's
-# _PUBLIC_RATE_LIMITER). 30 minutes is short enough to feel responsive (matching what
-# competing tools show) while a project's single search call per run stays well inside that
-# shared budget even with a handful of projects running close together. If a paid-API
-# plugin (X, LinkedIn) is ever reconnected for real customers, this floor needs revisiting
-# for THAT plugin's cost reasons — the rate-limit reasoning above doesn't apply to it.
-MINIMUM_SCHEDULE_INTERVAL_SECONDS = 30 * 60
+# scale past what a flat subscription price covers, then lowered to 30 minutes after the
+# Reddit pivot since Reddit's public search itself has no per-call monetary cost (just a tight
+# shared rate limit — see plugins/reddit/plugin.py's _PUBLIC_RATE_LIMITER).
+#
+# Raised back up to 24 hours for a different reason than either of those: every run still
+# makes a real, metered Anthropic API call regardless of which platform plugin it searches
+# (agents/conversation_finder/prompts.py's batched lead-scoring pass), and that cost is now
+# the binding constraint again — not Reddit's rate limit, but the ceiling on what a flat
+# subscription (and especially a one-time-payment plan, e.g. an AppSumo-style lifetime deal,
+# where the cost keeps recurring forever after a single fixed payment) can safely absorb.
+# Once every 24 hours caps the *automatic* schedule at roughly 30 LLM calls/month/project on
+# its own; see app/core/usage_limits.py for the separate hard ceiling that also covers manual
+# "Run now" clicks and content_agent's per-lead drafting calls, which this floor alone doesn't
+# bound. If a paid-API plugin (X, LinkedIn) is ever reconnected for real customers, this floor
+# needs revisiting for that plugin's own cost reasons too.
+MINIMUM_SCHEDULE_INTERVAL_SECONDS = 24 * 60 * 60
 
 
 def _validate_cron(cron_expression: str) -> None:
@@ -98,11 +104,19 @@ class AgentConfigService:
                 details={"agent_key": agent_key, "errors": exc.errors()},
             ) from exc
 
-        if schedule_cron is not None:
-            _validate_cron(schedule_cron)
-
         existing = await self.configs.get_by_project_and_key(project_id, agent_key)
         is_update = existing is not None
+
+        # Only validate a schedule_cron that's actually new or changing — not one already
+        # stored as-is. Without this, tightening MINIMUM_SCHEDULE_INTERVAL_SECONDS (as
+        # happened going from 30 minutes to 24 hours) would break every *other* field update
+        # for a project whose cron predates the change: this method is also how
+        # app/core/agent_lifecycle.py's sweep disables an inactive project, and it always
+        # round-trips the project's existing schedule_cron unchanged — re-validating it there
+        # would raise on a value that was perfectly valid when the customer first saved it.
+        if schedule_cron is not None and (existing is None or existing.schedule_cron != schedule_cron):
+            _validate_cron(schedule_cron)
+
         record = existing or AgentConfig(project_id=project_id, agent_key=agent_key)
         record.config = config
         record.schedule_cron = schedule_cron

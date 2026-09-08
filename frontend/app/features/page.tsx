@@ -11,7 +11,7 @@ export const metadata = {
 const FEATURES = [
   {
     title: "Conversation Finder",
-    body: "Give it your keywords and ICP once — or just your website, and it works out the specific phrases people actually use. It scans Reddit every 30 minutes, no login required, and surfaces the posts that actually match what you're building — no more refreshing search tabs all day.",
+    body: "Give it your keywords and ICP once — or just your website, and it works out the specific phrases people actually use. It scans Reddit once a day, no login required, and surfaces the posts that actually match what you're building — no more refreshing search tabs all day.",
   },
   {
     title: "AI lead scoring",

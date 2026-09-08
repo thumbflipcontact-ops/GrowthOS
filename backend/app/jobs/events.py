@@ -45,6 +45,7 @@ from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
 from app.core.redis import build_redis_settings
 from app.core.subscriptions import SubscriptionRegistry, discover_agent_subscriptions
+from app.core.usage_limits import has_reached_run_cap
 from app.models.agent import AgentRun, AgentRunStatus
 from app.models.event import DomainEvent
 from app.models.project import Project
@@ -108,6 +109,17 @@ async def run_agent_for_event(ctx: dict, agent_key: str, event_id: str) -> None:
                 "agent_run_for_event.skipped_org_not_entitled",
                 agent_key=agent_key,
                 org_id=str(project.org_id),
+            )
+            return
+
+        # See app/core/usage_limits.py — same cost ceiling as app/jobs/agent_runs.py's
+        # run_scheduled_agent, applied here too since this is the path that spends real LLM
+        # tokens per drafted reply.
+        if await has_reached_run_cap(session, project.id):
+            logger.info(
+                "agent_run_for_event.skipped_run_cap_reached",
+                agent_key=agent_key,
+                project_id=str(project.id),
             )
             return
 

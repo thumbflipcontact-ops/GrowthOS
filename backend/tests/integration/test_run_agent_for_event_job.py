@@ -235,6 +235,46 @@ async def test_run_agent_for_event_skips_when_the_agent_is_disabled_for_the_proj
 
 
 @pytest.mark.asyncio
+async def test_run_agent_for_event_skips_when_the_monthly_run_cap_is_reached(
+    db_session, session_factory_for
+) -> None:
+    """See app/core/usage_limits.py — same shared cost ceiling as
+    test_agent_runs_job.py's equivalent test, applied to the subscription-triggered path that
+    spends real LLM tokens per drafted reply."""
+    from app.core.usage_limits import MAX_AGENT_RUNS_PER_MONTH
+    from app.jobs.events import run_agent_for_event
+
+    project = await _make_project(db_session)
+    _, event = await _make_knowledge_item_and_event(db_session, project)
+    existing_config = await AgentConfigRepository(db_session).add(
+        AgentConfig(project_id=project.id, agent_key="content_agent")
+    )
+    for _ in range(MAX_AGENT_RUNS_PER_MONTH):
+        db_session.add(
+            AgentRun(
+                agent_config_id=existing_config.id,
+                project_id=project.id,
+                agent_key="content_agent",
+                status=AgentRunStatus.SUCCEEDED,
+            )
+        )
+    await db_session.flush()
+
+    llm = _llm_provider_returning(_draft_json())
+    await run_agent_for_event(_ctx(session_factory_for, llm_provider=llm), "content_agent", str(event.id))
+
+    runs = (
+        await db_session.execute(select(AgentRun).where(AgentRun.project_id == project.id))
+    ).scalars().all()
+    assert len(runs) == MAX_AGENT_RUNS_PER_MONTH  # unchanged — no new run was attempted
+
+    drafts = (
+        await db_session.execute(select(ContentItem).where(ContentItem.project_id == project.id))
+    ).scalars().all()
+    assert drafts == []
+
+
+@pytest.mark.asyncio
 async def test_run_agent_for_event_records_a_failed_run_when_the_llm_call_fails(
     db_session, session_factory_for
 ) -> None:

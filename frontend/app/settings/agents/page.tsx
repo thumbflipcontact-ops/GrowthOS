@@ -9,8 +9,10 @@ import { useSession } from "@/lib/useSession";
 
 const AGENT_KEY = "conversation_finder";
 // Matches MINIMUM_SCHEDULE_INTERVAL_SECONDS in backend/app/services/agent_config.py — the
-// platform-wide floor. Only option for now since nothing shorter is actually accepted.
-const SCHEDULE_CRON = "*/30 * * * *";
+// platform-wide floor. Only option for now since nothing more frequent is actually accepted
+// — once a day, not the old 30-minute cadence, since every run makes a real, metered
+// Anthropic API call (see agent_config.py's own comment on why this was raised back up).
+const SCHEDULE_CRON = "0 0 * * *";
 
 function normalizeKeywords(keywords: unknown): string[] {
   return Array.isArray(keywords) ? keywords : [];
@@ -222,9 +224,9 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
       <h2>Conversation Finder</h2>
       <p className="muted">
         Enter your website below and press &ldquo;Suggest&rdquo; — Claude reads your site and
-        generates a list of specific phrases people actually search for. Every 30 minutes (or
-        right away if you press &ldquo;Run now&rdquo;), Threadly searches Reddit for posts
-        matching those keywords, and any worth replying to show up as drafts on the{" "}
+        generates a list of specific phrases people actually search for. Once a day (or right
+        away if you press &ldquo;Run now&rdquo;), Threadly searches Reddit for posts matching
+        those keywords, and any worth replying to show up as drafts on the{" "}
         <a href="/approvals">Approvals</a> page for you to review.
       </p>
 
@@ -266,7 +268,7 @@ function AgentSettingsCard({ projectId }: { projectId: string }) {
             onChange={(e) => setEnabled(e.target.checked)}
             style={{ width: "auto" }}
           />
-          <span>Run automatically every 30 minutes</span>
+          <span>Run automatically once a day</span>
         </label>
 
         <div className="hstack" style={{ marginTop: 20 }}>

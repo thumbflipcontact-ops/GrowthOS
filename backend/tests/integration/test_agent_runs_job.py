@@ -196,6 +196,46 @@ async def test_run_scheduled_agent_is_a_noop_for_a_missing_config(
 
 
 @pytest.mark.asyncio
+async def test_run_scheduled_agent_skips_when_the_monthly_run_cap_is_reached(
+    db_session, session_factory_for
+) -> None:
+    """See app/core/usage_limits.py — a cost ceiling independent of entitlement. Pre-fills the
+    project's agent_runs count for the current calendar month up to the cap, then asserts a
+    further scheduled/manual trigger adds no new row (rather than, say, running anyway with a
+    warning) — the whole point is that it must not make another LLM call."""
+    from app.core.usage_limits import MAX_AGENT_RUNS_PER_MONTH
+    from app.jobs.agent_runs import run_scheduled_agent
+
+    project = await _make_project(db_session)
+    await _connect_dummy_as_searchable(db_session, project)
+    config = await AgentConfigRepository(db_session).add(
+        AgentConfig(
+            project_id=project.id,
+            agent_key="conversation_finder",
+            config={"keywords": ["indexing"]},
+            enabled=True,
+        )
+    )
+    for _ in range(MAX_AGENT_RUNS_PER_MONTH):
+        db_session.add(
+            AgentRun(
+                agent_config_id=config.id,
+                project_id=project.id,
+                agent_key="conversation_finder",
+                status=AgentRunStatus.SUCCEEDED,
+            )
+        )
+    await db_session.flush()
+
+    await run_scheduled_agent(await _ctx(session_factory_for), str(config.id))
+
+    runs = (
+        await db_session.execute(select(AgentRun).where(AgentRun.project_id == project.id))
+    ).scalars().all()
+    assert len(runs) == MAX_AGENT_RUNS_PER_MONTH  # unchanged — no new run was attempted
+
+
+@pytest.mark.asyncio
 async def test_run_scheduled_agent_records_a_failed_run_and_reraises_when_the_agent_errors(
     db_session, session_factory_for, monkeypatch
 ) -> None:

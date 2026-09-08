@@ -39,6 +39,7 @@ from app.core.observability import capture_exception, capture_operator_alert, in
 from app.core.plugin_catalog import PluginCatalog, discover_installed_plugins
 from app.core.plugin_registry import PluginRegistry
 from app.core.redis import build_redis_settings
+from app.core.usage_limits import has_reached_run_cap
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
 from app.models.project import Project
 from app.repositories.plugin_repository import PluginConnectionRepository
@@ -84,6 +85,16 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
                 "agent_run.skipped_org_not_entitled",
                 agent_config_id=agent_config_id,
                 org_id=str(project.org_id),
+            )
+            return
+
+        # See app/core/usage_limits.py — a cost ceiling independent of entitlement, so a
+        # single project can't generate unbounded Anthropic spend on a flat-price plan.
+        if await has_reached_run_cap(session, project.id):
+            logger.info(
+                "agent_run.skipped_run_cap_reached",
+                agent_config_id=agent_config_id,
+                project_id=str(project.id),
             )
             return
 

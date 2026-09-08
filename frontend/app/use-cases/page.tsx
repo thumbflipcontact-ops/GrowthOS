@@ -19,7 +19,7 @@ const USE_CASES = [
   },
   {
     title: "Staying visible without it becoming a full-time job",
-    body: "Solo founders don't have hours a day for social listening. Threadly keeps watching your keywords every 30 minutes, so you only spend time on the replies worth sending.",
+    body: "Solo founders don't have hours a day for social listening. Threadly keeps watching your keywords once a day, so you only spend time on the replies worth sending.",
   },
   {
     title: "Not losing track of who you've already talked to",
