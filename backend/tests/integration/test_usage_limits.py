@@ -10,7 +10,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.core.usage_limits import MAX_AGENT_RUNS_PER_MONTH, has_reached_run_cap, runs_this_month
+from app.core.usage_limits import (
+    MAX_AGENT_RUNS_PER_MONTH,
+    MAX_AGENT_RUNS_PER_MONTH_LTD,
+    has_reached_run_cap,
+    runs_this_month,
+)
 from app.models.agent import AgentConfig, AgentRun, AgentRunStatus
 from app.models.identity import Organization
 from app.models.project import Project
@@ -21,10 +26,10 @@ from app.repositories.project_repository import ProjectRepository
 pytestmark = pytest.mark.integration
 
 
-async def _make_project(db_session) -> Project:
+async def _make_project(db_session, *, is_ltd: bool = False) -> Project:
     suffix = uuid.uuid4().hex[:8]
     org = await OrganizationRepository(db_session).add(
-        Organization(name="Acme", slug=f"acme-usage-{suffix}")
+        Organization(name="Acme", slug=f"acme-usage-{suffix}", is_ltd=is_ltd)
     )
     return await ProjectRepository(db_session).add(
         Project(org_id=org.id, name="ScoutSEO", slug=f"scoutseo-usage-{suffix}")
@@ -104,3 +109,22 @@ async def test_has_reached_run_cap_is_false_below_the_cap_and_true_at_it(db_sess
 
     await _add_run(db_session, project)
     assert await has_reached_run_cap(db_session, project.id) is True
+
+
+@pytest.mark.asyncio
+async def test_ltd_org_gets_the_tighter_ltd_cap_not_the_regular_one(db_session) -> None:
+    """An LTD org's project hits its own, lower ceiling well before the regular
+    MAX_AGENT_RUNS_PER_MONTH — see usage_limits.py's docstring on why (a one-time payment
+    that never grows to cover ongoing cost, unlike a subscription)."""
+    assert MAX_AGENT_RUNS_PER_MONTH_LTD < MAX_AGENT_RUNS_PER_MONTH  # the premise of this test
+
+    project = await _make_project(db_session, is_ltd=True)
+    for _ in range(MAX_AGENT_RUNS_PER_MONTH_LTD - 1):
+        await _add_run(db_session, project)
+    assert await has_reached_run_cap(db_session, project.id) is False
+
+    await _add_run(db_session, project)
+    assert await has_reached_run_cap(db_session, project.id) is True
+    # Nowhere near the regular cap yet — proves it's really using the LTD number, not just
+    # coincidentally hitting the regular one too.
+    assert await runs_this_month(db_session, project.id) < MAX_AGENT_RUNS_PER_MONTH

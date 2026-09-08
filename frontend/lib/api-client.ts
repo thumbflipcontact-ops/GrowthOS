@@ -81,6 +81,17 @@ export const api = {
     return apiFetch("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) });
   },
 
+  redeemLtdCode(body: {
+    code: string;
+    org_name: string;
+    org_slug: string;
+    email: string;
+    name: string;
+    password: string;
+  }): Promise<User> {
+    return apiFetch("/api/v1/ltd/redeem", { method: "POST", body: JSON.stringify(body) });
+  },
+
   logout(): Promise<void> {
     return apiFetch("/api/v1/auth/logout", { method: "POST" });
   },

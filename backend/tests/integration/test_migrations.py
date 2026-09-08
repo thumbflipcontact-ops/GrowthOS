@@ -33,6 +33,7 @@ EXPECTED_TABLES = {
     "api_keys",
     "webhook_subscriptions",
     "webhook_deliveries",
+    "ltd_codes",
 }
 
 EXPECTED_ENUMS = {
@@ -46,6 +47,7 @@ EXPECTED_ENUMS = {
     "contact_status",
     "subscription_status",
     "webhook_delivery_status",
+    "ltd_code_status",
 }
 
 

@@ -34,14 +34,22 @@ class Organization(UUIDPkMixin, CreatedAtMixin, Base):
         nullable=False, default=False, server_default=text("false")
     )
     # Manual, per-org ceiling on how many projects it may create — see
-    # app/api/v1/projects.py's create_project. NULL (every org today, including every real
-    # Polar subscriber) means unlimited; this exists for a plan whose cost scales with project
-    # count but whose revenue doesn't grow to match (e.g. a one-time-payment AppSumo-style
-    # lifetime deal, where each project runs its own independent, metered agent schedule — see
-    # app/core/usage_limits.py). No AppSumo integration exists yet to set this automatically
-    # from a purchased tier; it's set directly in the database per org, the same way
-    # is_comped already is, until/unless a real redemption-code flow is built.
+    # app/api/v1/projects.py's create_project. NULL (every regular Polar subscriber) means
+    # unlimited; set to 1 automatically by app/services/ltd_redemption_service.py for a
+    # redeemed AppSumo-style lifetime-deal code, since that plan's cost scales with project
+    # count (each running its own independent, metered agent schedule — see
+    # app/core/usage_limits.py) but its revenue is a single one-time payment that never grows
+    # to match. Can still be set directly in the database for any other case, the same way
+    # is_comped already is.
     max_projects: Mapped[int | None] = mapped_column(nullable=True)
+    # True only for an org created via a redeemed LTD code (app/models/ltd_code.py) — makes
+    # is_org_entitled() permanently True (same short-circuit as is_comped, but tracked
+    # separately: an LTD org genuinely paid, once, and shouldn't be reported alongside
+    # actually-free comped accounts) and is the signal app/core/usage_limits.py uses to apply
+    # the LTD tier's own, tighter monthly run cap instead of a regular subscriber's.
+    is_ltd: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=text("false")
+    )
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="organization")
     projects: Mapped[list[Project]] = relationship(back_populates="organization")  # noqa: F821

@@ -111,6 +111,18 @@ def get_resend_verification_account_limiter() -> RateLimiter:
     return _resend_verification_account_limiter
 
 
+# Same reasoning as _register_ip_limiter — no per-account limiter (there's no account to key
+# on until redemption succeeds), IP-only, but a real concern here specifically: a wrong code
+# is indistinguishable from an already-redeemed one (see LtdRedemptionService.redeem's own
+# comment), so without this an attacker could brute-force guess valid, still-unredeemed codes
+# by volume.
+_ltd_redeem_ip_limiter = RateLimiter(capacity=5, refill_rate=5 / 3600)  # 5 attempts / hour / IP
+
+
+def get_ltd_redeem_ip_limiter() -> RateLimiter:
+    return _ltd_redeem_ip_limiter
+
+
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
     """Request-scoped session — commits on a clean response, rolls back on any exception.
     See app/core/db.py for the underlying session_factory, created once at startup

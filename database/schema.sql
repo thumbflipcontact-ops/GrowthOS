@@ -37,10 +37,14 @@ create table organizations (
     -- the database (no admin UI), same pattern as max_projects below.
     is_comped   boolean not null default false,
     -- Manual, per-org ceiling on how many projects it may create — see
-    -- app/api/v1/projects.py's create_project. NULL (every org today) means unlimited; exists
-    -- for a plan whose cost scales with project count but whose revenue doesn't (e.g. a
-    -- one-time-payment lifetime deal). Set directly in the database, same as is_comped.
+    -- app/api/v1/projects.py's create_project. NULL (every regular Polar subscriber) means
+    -- unlimited; set to 1 automatically by a redeemed LTD code (see ltd_codes below and
+    -- app/services/ltd_redemption_service.py). Can still be set directly, same as is_comped.
     max_projects integer,
+    -- True only for an org created via a redeemed LTD code — see ltd_codes below. Makes
+    -- is_org_entitled() permanently true (same as is_comped), tracked separately since an LTD
+    -- org genuinely paid once, unlike a comped/free account.
+    is_ltd      boolean not null default false,
     created_at  timestamptz not null default now()
 );
 
@@ -135,6 +139,23 @@ create table subscriptions (
     updated_at                timestamptz not null default now(),
     unique (org_id),
     unique (polar_subscription_id)
+);
+
+create type ltd_code_status as enum ('unredeemed', 'redeemed');
+
+-- AppSumo-style lifetime-deal redemption codes — see app/services/ltd_redemption_service.py
+-- (the only place one is created or redeemed). `code` is plaintext, not hashed: it isn't a
+-- session credential on its own (redeeming still requires a real name/email/password), and
+-- an operator needs to read codes back out directly to hand a batch to AppSumo.
+create table ltd_codes (
+    id                  uuid primary key default gen_random_uuid(),
+    code                text not null unique,
+    status              ltd_code_status not null default 'unredeemed',
+    -- ON DELETE SET NULL, not CASCADE — the redemption record (which code, when) is worth
+    -- keeping for reconciliation against AppSumo even if the org itself is later deleted.
+    redeemed_by_org_id  uuid references organizations(id) on delete set null,
+    redeemed_at         timestamptz,
+    created_at          timestamptz not null default now()
 );
 
 -- ============================================================================

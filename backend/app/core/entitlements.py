@@ -30,9 +30,11 @@ NO_CARD_TRIAL_DAYS = 7
 
 async def is_org_entitled(session: AsyncSession, org_id: uuid.UUID) -> bool:
     """True if `org_id` is manually comped (Organization.is_comped — a permanent override, see
-    that column's docstring), OR has a subscription row whose Polar-mirrored status is
-    `trialing` or `active`, OR has no subscription row yet but is still within its no-card
-    trial window (NO_CARD_TRIAL_DAYS from Organization.created_at — see billing_service.py's
+    that column's docstring), OR paid via a redeemed AppSumo-style lifetime-deal code
+    (Organization.is_ltd — also permanent, but tracked separately from is_comped since an LTD
+    org genuinely paid), OR has a subscription row whose Polar-mirrored status is `trialing`
+    or `active`, OR has no subscription row yet but is still within its no-card trial window
+    (NO_CARD_TRIAL_DAYS from Organization.created_at — see billing_service.py's
     create_checkout_session, which no longer asks Polar for its own trial on top of this).
     False for `past_due` (a renewal charge failed), `canceled`, and a no-card trial that has
     elapsed without the org ever completing Checkout — none of those may consume paid,
@@ -41,7 +43,7 @@ async def is_org_entitled(session: AsyncSession, org_id: uuid.UUID) -> bool:
     organization = await OrganizationRepository(session).get(org_id)
     if organization is None:
         return False
-    if organization.is_comped:
+    if organization.is_comped or organization.is_ltd:
         return True
 
     subscription = await SubscriptionRepository(session).get_by_org(org_id)
