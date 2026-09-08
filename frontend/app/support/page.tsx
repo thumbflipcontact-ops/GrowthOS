@@ -16,7 +16,7 @@ const COMMON_ISSUES = [
   },
   {
     q: "My leads don't look relevant",
-    a: "This almost always comes down to keywords. Specific phrases someone would actually type (\"struggling to rank\", \"nobody's finding my blog\") work far better than a single broad word (\"SEO\"). Edit your keywords any time from Settings → Agents.",
+    a: "This almost always comes down to keywords. If you used \"Suggest keywords,\" the AI only reads your own homepage copy — it's guessing plausible search terms from how you describe your product, not from how real people phrase problems on Reddit, so its first draft doesn't always land. Either way, specific phrases someone would actually type (\"struggling to rank\", \"nobody's finding my blog\") work far better than a single broad word (\"SEO\"). Edit your keywords any time from Settings → Agents.",
   },
   {
     q: "I want to cancel my subscription",
