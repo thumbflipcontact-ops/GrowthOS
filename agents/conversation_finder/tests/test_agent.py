@@ -133,7 +133,9 @@ class _FakeLLM:
         text = self.response_text if self.response_text is not None else _auto_lead_score_response(
             request
         )
-        return SimpleNamespace(text=text)
+        # model/input_tokens/output_tokens mirror the real CompletionResult shape (see
+        # app/core/llm/base.py) — ctx.usage.record() reads these, see _FakeUsage below.
+        return SimpleNamespace(text=text, model="fake-model", input_tokens=100, output_tokens=50)
 
 
 @dataclass
@@ -148,10 +150,22 @@ class _FakeEventPublisher:
         )
 
 
+@dataclass
+class _FakeUsage:
+    """Stands in for LlmUsageClient (app/services/llm_usage.py) — records each call's
+    kwargs rather than computing a real cost, since these tests care that a call happened
+    with the right attribution, not the dollar figure pricing.py produces."""
+
+    recorded: list[dict[str, Any]] = field(default_factory=list)
+
+    async def record(self, **kwargs: Any) -> None:
+        self.recorded.append(kwargs)
+
+
 def _project(icp_keywords: list[str] | None = None) -> SimpleNamespace:
     icp_config = {"keywords": icp_keywords} if icp_keywords is not None else {}
     return SimpleNamespace(
-        id=uuid.uuid4(), icp_config=icp_config, name="Acme", brand_voice={}
+        id=uuid.uuid4(), org_id=uuid.uuid4(), icp_config=icp_config, name="Acme", brand_voice={}
     )
 
 
@@ -163,6 +177,7 @@ def _ctx(
     knowledge_base: _FakeKnowledgeBase | None = None,
     events: _FakeEventPublisher | None = None,
     llm: _FakeLLM | None = None,
+    usage: _FakeUsage | None = None,
 ) -> tuple[AgentContext, _FakeKnowledgeBase, _FakeEventPublisher]:
     kb = knowledge_base or _FakeKnowledgeBase()
     ev = events or _FakeEventPublisher()
@@ -179,6 +194,7 @@ def _ctx(
         knowledge_base=kb,  # type: ignore[arg-type]
         content=None,  # type: ignore[arg-type]  # conversation_finder never calls ctx.content
         events=ev,  # type: ignore[arg-type]
+        usage=usage or _FakeUsage(),  # type: ignore[arg-type]
         logger=structlog.get_logger(),
         agent_run_id=uuid.uuid4(),
     )
@@ -420,6 +436,33 @@ async def test_llm_score_and_reasoning_are_saved_as_confidence_and_pain_point() 
     assert saved["confidence"] == Decimal("0.9")
     assert saved["buying_intent"] == "high"
     assert saved["pain_point"] == "Actively asking for a crawl budget tool."
+
+
+@pytest.mark.asyncio
+async def test_records_llm_usage_for_the_scoring_call() -> None:
+    plugin = _FakePlugin(
+        key="reddit", results=[_result("https://x.invalid/1", title="crawl budget")]
+    )
+    ctx, _, _ = _ctx(plugins=[plugin], config={"keywords": ["crawl budget"]})
+
+    await ConversationFinderAgent().run(ctx)
+
+    assert len(ctx.usage.recorded) == 1  # type: ignore[attr-defined]
+    call = ctx.usage.recorded[0]  # type: ignore[attr-defined]
+    assert call["org_id"] == ctx.project.org_id
+    assert call["project_id"] == ctx.project.id
+    assert call["purpose"] == "conversation_finder.lead_scoring"
+    assert call["agent_run_id"] == ctx.agent_run_id
+
+
+@pytest.mark.asyncio
+async def test_no_llm_usage_recorded_when_there_are_no_candidates() -> None:
+    plugin = _FakePlugin(key="reddit", results=[])
+    ctx, _, _ = _ctx(plugins=[plugin], config={"keywords": ["crawl budget"]})
+
+    await ConversationFinderAgent().run(ctx)
+
+    assert ctx.usage.recorded == []  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio

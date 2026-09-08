@@ -110,6 +110,19 @@ def _project() -> SimpleNamespace:
     return SimpleNamespace(id=uuid.uuid4(), org_id=uuid.uuid4(), brand_voice={})
 
 
+@dataclass
+class _FakeUsage:
+    """Stands in for LlmUsageClient (app/services/llm_usage.py). `_FakeLLMProvider.complete`
+    below returns a `CompletionResult` with no token counts, so `record()`'s real
+    implementation would no-op anyway — this fake exists only so AgentContext.usage has
+    something satisfying its shape; nothing here asserts on `recorded`."""
+
+    recorded: list[dict[str, Any]] = field(default_factory=list)
+
+    async def record(self, **kwargs: Any) -> None:
+        self.recorded.append(kwargs)
+
+
 def _ctx(
     *,
     item: SimpleNamespace | None,
@@ -129,6 +142,7 @@ def _ctx(
         knowledge_base=_FakeKnowledgeBase(item=item),  # type: ignore[arg-type]
         content=content,  # type: ignore[arg-type]
         events=None,  # type: ignore[arg-type]  # content_agent never calls ctx.events
+        usage=_FakeUsage(),  # type: ignore[arg-type]
         logger=structlog.get_logger(),
         agent_run_id=uuid.uuid4(),
         trigger_payload=trigger_payload if trigger_payload is not None else default_payload,
@@ -244,6 +258,21 @@ async def test_creates_a_draft_from_a_successful_completion() -> None:
     assert len(content.submitted) == 1
     assert content.submitted[0]["passed"] is True
     assert content.submitted[0]["org_id"] == ctx.project.org_id
+
+
+@pytest.mark.asyncio
+async def test_records_llm_usage_for_the_draft_completion() -> None:
+    item = _knowledge_item()
+    ctx, _, _ = _ctx(item=item, llm_response_text=_draft_json())
+
+    await ContentAgent().run(ctx)
+
+    assert len(ctx.usage.recorded) == 1  # type: ignore[attr-defined]
+    call = ctx.usage.recorded[0]  # type: ignore[attr-defined]
+    assert call["org_id"] == ctx.project.org_id
+    assert call["project_id"] == ctx.project.id
+    assert call["purpose"] == "content_agent.draft_reply"
+    assert call["agent_run_id"] == ctx.agent_run_id
 
 
 @pytest.mark.asyncio

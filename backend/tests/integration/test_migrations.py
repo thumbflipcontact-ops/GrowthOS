@@ -34,6 +34,7 @@ EXPECTED_TABLES = {
     "webhook_subscriptions",
     "webhook_deliveries",
     "ltd_codes",
+    "llm_usage_logs",
 }
 
 EXPECTED_ENUMS = {

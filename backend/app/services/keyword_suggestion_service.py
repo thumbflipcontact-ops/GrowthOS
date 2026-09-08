@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 
 import httpx
 
 from app.core.errors import ValidationError
 from app.core.llm.base import CompletionRequest, LLMMessage, LLMProvider
+from app.services.llm_usage import LlmUsageClient
 
 _HTTP_TIMEOUT_SECONDS = 10.0
 _MAX_PAGE_CHARS = 20_000  # plenty for a homepage; keeps the LLM call small and cheap
@@ -45,7 +47,15 @@ Never invent claims about the product beyond what the page text says."""
 
 
 class KeywordSuggestionService:
-    async def suggest(self, *, url: str, llm: LLMProvider) -> list[str]:
+    async def suggest(
+        self,
+        *,
+        url: str,
+        llm: LLMProvider,
+        usage: LlmUsageClient,
+        org_id: uuid.UUID,
+        project_id: uuid.UUID,
+    ) -> list[str]:
         text = await self._fetch_text(url)
         if not text:
             raise ValidationError("Could not read any text from that URL.", details={"url": url})
@@ -59,6 +69,9 @@ class KeywordSuggestionService:
             temperature=0.3,
         )
         completion = await llm.complete(request)
+        await usage.record(
+            org_id=org_id, project_id=project_id, purpose="keyword_suggestion", result=completion
+        )
         keywords = _parse_keywords(completion.text)
         # Defensive, not the primary mechanism — the prompt above is what actually gets short
         # keywords most of the time. This just drops the occasional sentence-length outlier

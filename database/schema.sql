@@ -263,6 +263,26 @@ create table agent_runs (
     created_at          timestamptz not null default now()
 );
 
+-- The real, measured cost of every LLM completion this platform makes — see
+-- app/models/llm_usage.py and app/core/llm/pricing.py. Purely a reporting log (nothing reads
+-- it at request time); a "spend by org" query is `select org_id, sum(cost_usd) from
+-- llm_usage_logs group by org_id`. cost_usd is computed once at write time from the pricing
+-- table and stored, never recomputed on read, so a later rate change never rewrites history.
+create table llm_usage_logs (
+    id              uuid primary key default gen_random_uuid(),
+    org_id          uuid not null references organizations(id) on delete cascade,
+    project_id      uuid not null references projects(id) on delete cascade,
+    purpose         text not null,   -- 'conversation_finder.lead_scoring', 'content_agent.draft_reply', 'keyword_suggestion'
+    model           text not null,   -- the API-reported model id, e.g. 'claude-sonnet-4-5-20250929'
+    input_tokens    integer not null,
+    output_tokens   integer not null,
+    cost_usd        numeric(12, 6) not null,
+    -- Only set for an agent-triggered call; NULL for keyword_suggestion (no agent_runs row).
+    agent_run_id    uuid references agent_runs(id) on delete set null,
+    created_at      timestamptz not null default now()
+);
+create index idx_llm_usage_logs_org_created on llm_usage_logs (org_id, created_at);
+
 -- ============================================================================
 -- Domain events — the transactional outbox agents communicate through
 -- (see ARCHITECTURE.md §7, docs/decisions/0006-event-driven-agent-communication.md)

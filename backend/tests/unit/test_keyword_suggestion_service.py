@@ -5,6 +5,9 @@ for the completion call — no test ever makes a real network or LLM call.
 
 from __future__ import annotations
 
+import uuid
+from typing import Any
+
 import httpx
 import pytest
 
@@ -35,6 +38,23 @@ class _FakeLLM:
         return CompletionResult(text=self._text, model="fake")
 
 
+class _FakeUsage:
+    """Stands in for LlmUsageClient (app/services/llm_usage.py) — these tests care about
+    keyword parsing, not cost logging, so this just needs to satisfy the call shape."""
+
+    def __init__(self) -> None:
+        self.recorded: list[dict[str, Any]] = []
+
+    async def record(self, **kwargs: Any) -> None:
+        self.recorded.append(kwargs)
+
+
+async def _suggest(llm: _FakeLLM, *, url: str = "https://example.com") -> list[str]:
+    return await KeywordSuggestionService().suggest(
+        url=url, llm=llm, usage=_FakeUsage(), org_id=uuid.uuid4(), project_id=uuid.uuid4()  # type: ignore[arg-type]
+    )
+
+
 @pytest.mark.asyncio
 async def test_suggest_strips_html_and_returns_parsed_keywords(monkeypatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -48,7 +68,7 @@ async def test_suggest_strips_html_and_returns_parsed_keywords(monkeypatch) -> N
     _patch_transport(monkeypatch, handler)
     llm = _FakeLLM('{"keywords": ["crawl budget", "technical seo", "site audit"]}')
 
-    keywords = await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+    keywords = await _suggest(llm)
 
     assert keywords == ["crawl budget", "technical seo", "site audit"]
     assert llm.last_request is not None
@@ -66,7 +86,7 @@ async def test_suggest_extracts_json_object_from_surrounding_text(monkeypatch) -
     _patch_transport(monkeypatch, handler)
     llm = _FakeLLM('Sure, here you go: {"keywords": ["a", "b"]} — hope that helps!')
 
-    keywords = await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+    keywords = await _suggest(llm)
 
     assert keywords == ["a", "b"]
 
@@ -80,7 +100,7 @@ async def test_suggest_raises_on_unreachable_url(monkeypatch) -> None:
     llm = _FakeLLM("{}")
 
     with pytest.raises(ValidationError):
-        await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+        await _suggest(llm)
 
 
 @pytest.mark.asyncio
@@ -92,7 +112,7 @@ async def test_suggest_raises_on_error_status(monkeypatch) -> None:
     llm = _FakeLLM("{}")
 
     with pytest.raises(ValidationError):
-        await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+        await _suggest(llm)
 
 
 @pytest.mark.asyncio
@@ -104,7 +124,7 @@ async def test_suggest_raises_on_empty_page_text(monkeypatch) -> None:
     llm = _FakeLLM("{}")
 
     with pytest.raises(ValidationError):
-        await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+        await _suggest(llm)
 
 
 @pytest.mark.asyncio
@@ -116,7 +136,7 @@ async def test_suggest_raises_when_model_response_has_no_keywords_list(monkeypat
     llm = _FakeLLM('{"not_keywords": []}')
 
     with pytest.raises(ValidationError):
-        await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+        await _suggest(llm)
 
 
 @pytest.mark.asyncio
@@ -135,7 +155,7 @@ async def test_suggest_drops_sentence_length_outliers(monkeypatch) -> None:
         '"cheap hosting"]}'
     )
 
-    keywords = await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+    keywords = await _suggest(llm)
 
     assert keywords == ["crawl budget", "cheap hosting"]
 
@@ -150,6 +170,6 @@ async def test_suggest_falls_back_to_unfiltered_list_if_everything_is_long(monke
     _patch_transport(monkeypatch, handler)
     llm = _FakeLLM('{"keywords": ["looking for an affordable way to promote my website"]}')
 
-    keywords = await KeywordSuggestionService().suggest(url="https://example.com", llm=llm)
+    keywords = await _suggest(llm)
 
     assert keywords == ["looking for an affordable way to promote my website"]

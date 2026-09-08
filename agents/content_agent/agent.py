@@ -106,6 +106,13 @@ class ContentAgent:
             temperature=config.temperature,
         )
         completion = await ctx.llm.complete(request)
+        await ctx.usage.record(
+            org_id=ctx.project.org_id,
+            project_id=ctx.project.id,
+            purpose="content_agent.draft_reply",
+            result=completion,
+            agent_run_id=ctx.agent_run_id,
+        )
 
         try:
             draft = parse_draft_reply(completion.text)

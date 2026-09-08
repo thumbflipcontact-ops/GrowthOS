@@ -23,12 +23,14 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     import structlog
+
     from app.core.events import EventPublisher
     from app.core.llm.base import LLMProvider
     from app.core.plugin_registry import PluginRegistry
     from app.models.project import Project
     from app.services.content_drafts import ContentDraftClient
     from app.services.knowledge_base import KnowledgeBaseClient
+    from app.services.llm_usage import LlmUsageClient
 
 
 @dataclass(slots=True)
@@ -40,6 +42,10 @@ class AgentContext:
     knowledge_base: KnowledgeBaseClient
     content: ContentDraftClient
     events: EventPublisher
+    # Records the real, measured cost of every ctx.llm.complete(...) call this agent makes —
+    # see app/services/llm_usage.py. Added alongside the other clients above the same way
+    # `content` was added when Content Agent first needed one (this docstring's own history).
+    usage: LlmUsageClient
     logger: structlog.stdlib.BoundLogger
     # The agent_runs row this context was built for, if any — set by the job runner
     # (app/jobs/agent_runs.py / app/jobs/events.py) once that row exists, so an agent can

@@ -45,6 +45,7 @@ from app.models.project import Project
 from app.repositories.plugin_repository import PluginConnectionRepository
 from app.services.content_drafts import ContentDraftClient
 from app.services.knowledge_base import KnowledgeBaseClient
+from app.services.llm_usage import LlmUsageClient
 
 logger = structlog.get_logger()
 
@@ -127,6 +128,7 @@ async def run_scheduled_agent(ctx: dict, agent_config_id: str) -> None:
                 knowledge_base=KnowledgeBaseClient(session),
                 content=ContentDraftClient(session),
                 events=EventPublisher(session),
+                usage=LlmUsageClient(session),
                 logger=run_logger,
                 agent_run_id=run.id,
             )

@@ -236,6 +236,13 @@ async def _score_candidates_with_llm(
         temperature=_SCORING_TEMPERATURE,
     )
     completion = await ctx.llm.complete(request)
+    await ctx.usage.record(
+        org_id=ctx.project.org_id,
+        project_id=ctx.project.id,
+        purpose="conversation_finder.lead_scoring",
+        result=completion,
+        agent_run_id=ctx.agent_run_id,
+    )
     scores = parse_lead_scores(completion.text)
     return {score.url: score for score in scores}
 
