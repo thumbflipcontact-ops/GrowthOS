@@ -33,6 +33,14 @@ create table organizations (
     id          uuid primary key default gen_random_uuid(),
     name        text not null,
     slug        text not null unique,
+    -- Manual, permanent entitlement override — see app/core/entitlements.py. Set directly in
+    -- the database (no admin UI), same pattern as max_projects below.
+    is_comped   boolean not null default false,
+    -- Manual, per-org ceiling on how many projects it may create — see
+    -- app/api/v1/projects.py's create_project. NULL (every org today) means unlimited; exists
+    -- for a plan whose cost scales with project count but whose revenue doesn't (e.g. a
+    -- one-time-payment lifetime deal). Set directly in the database, same as is_comped.
+    max_projects integer,
     created_at  timestamptz not null default now()
 );
 

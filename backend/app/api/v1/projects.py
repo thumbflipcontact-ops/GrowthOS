@@ -38,6 +38,22 @@ async def create_project(
     if await repo.get_by_slug(organization.id, body.slug) is not None:
         raise ValidationError("A project with this slug already exists in this organization.")
 
+    # organization.max_projects is NULL (unlimited) for every regular subscriber today — see
+    # its own docstring in app/models/identity.py. Only orgs with an explicit ceiling set
+    # (e.g. a lifetime-deal tier) are actually gated here.
+    if organization.max_projects is not None:
+        existing_count = len(await repo.list_by_org(organization.id))
+        if existing_count >= organization.max_projects:
+            raise ValidationError(
+                f"This plan allows up to {organization.max_projects} project"
+                f"{'s' if organization.max_projects != 1 else ''}. Delete one first, or "
+                "upgrade to a higher tier.",
+                details={
+                    "max_projects": organization.max_projects,
+                    "existing_count": existing_count,
+                },
+            )
+
     project = Project(org_id=organization.id, name=body.name, slug=body.slug)
     project = await repo.add(project)
 

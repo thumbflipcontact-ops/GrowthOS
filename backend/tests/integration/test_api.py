@@ -380,6 +380,45 @@ async def test_project_crud_and_org_scoped_authorization(
 
 
 @pytest.mark.asyncio
+async def test_project_creation_is_rejected_once_the_orgs_max_projects_is_reached(
+    api_client: AsyncClient, db_session
+) -> None:
+    """organization.max_projects is NULL (unlimited) for every regular subscriber — see its
+    docstring in app/models/identity.py. Only an org with an explicit ceiling set (e.g. a
+    lifetime-deal tier, set directly in the database until a real AppSumo integration exists)
+    is actually gated here."""
+    from app.repositories.organization_repository import OrganizationRepository
+
+    register = await register_and_login(
+        api_client,
+        db_session,
+        org_name="Acme",
+        org_slug="acme-project-cap",
+        email="capowner@example.com",
+        name="Owner",
+        password="correct-horse-battery-staple",
+    )
+    assert register.status_code == 201
+
+    org = await OrganizationRepository(db_session).get_by_slug("acme-project-cap")
+    assert org is not None
+    org.max_projects = 1
+    await db_session.commit()
+
+    first = await api_client.post(
+        f"/api/v1/orgs/{org.id}/projects", json={"name": "ScoutSEO", "slug": "scoutseo-cap-1"}
+    )
+    assert first.status_code == 201
+
+    second = await api_client.post(
+        f"/api/v1/orgs/{org.id}/projects", json={"name": "ScoutSEO 2", "slug": "scoutseo-cap-2"}
+    )
+    # ValidationError maps to 422, not 400 — see app/core/errors.py.
+    assert second.status_code == 422
+    assert "1 project" in second.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_creating_a_project_auto_connects_reddit_search_with_no_credentials(
     api_client: AsyncClient, db_session
 ) -> None:

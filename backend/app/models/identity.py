@@ -33,6 +33,15 @@ class Organization(UUIDPkMixin, CreatedAtMixin, Base):
     is_comped: Mapped[bool] = mapped_column(
         nullable=False, default=False, server_default=text("false")
     )
+    # Manual, per-org ceiling on how many projects it may create — see
+    # app/api/v1/projects.py's create_project. NULL (every org today, including every real
+    # Polar subscriber) means unlimited; this exists for a plan whose cost scales with project
+    # count but whose revenue doesn't grow to match (e.g. a one-time-payment AppSumo-style
+    # lifetime deal, where each project runs its own independent, metered agent schedule — see
+    # app/core/usage_limits.py). No AppSumo integration exists yet to set this automatically
+    # from a purchased tier; it's set directly in the database per org, the same way
+    # is_comped already is, until/unless a real redemption-code flow is built.
+    max_projects: Mapped[int | None] = mapped_column(nullable=True)
 
     memberships: Mapped[list[Membership]] = relationship(back_populates="organization")
     projects: Mapped[list[Project]] = relationship(back_populates="organization")  # noqa: F821
