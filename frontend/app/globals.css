@@ -1035,6 +1035,7 @@ button:disabled {
 .featured-on-window {
   overflow: hidden;
   position: relative;
+  margin-bottom: 64px;
   mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
   -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
 }

@@ -157,9 +157,34 @@ function TinyStartupsBadge() {
   );
 }
 
+// Official embed badge from vibecodinglist.com — plain <img>, not next/image, since that
+// component requires the source hostname to be allow-listed in next.config.js and this
+// matches the exact embed markup vibecodinglist.com itself provides. The UTM params in the
+// href are theirs, for their own attribution — left exactly as given, not simplified away.
+function VibeCodingListBadge() {
+  return (
+    <a
+      href="https://vibecodinglist.com/projects/threadly?utm_source=vcl_badge&utm_medium=builder_site&utm_campaign=listed_badge&utm_content=threadly"
+      target="_blank"
+      rel="noopener"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="https://vibecodinglist.com/assets/embed-widget/featured-on-badge-dark.png"
+        alt="Featured on VibeCodingList"
+        width={200}
+        height={51}
+      />
+    </a>
+  );
+}
+
 // Only real, confirmed placements go here — this renders as an "as featured on" trust signal,
 // so it must never claim coverage that doesn't exist yet.
-const FEATURED_ON = [{ key: "tinystartups", badge: <TinyStartupsBadge /> }];
+const FEATURED_ON = [
+  { key: "tinystartups", badge: <TinyStartupsBadge /> },
+  { key: "vibecodinglist", badge: <VibeCodingListBadge /> },
+];
 
 // Below this many real logos, scrolling would just show the same logo(s) repeating right next
 // to themselves — better to show them once, static, and switch on the moving belt once there
