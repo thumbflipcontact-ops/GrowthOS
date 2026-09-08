@@ -93,7 +93,7 @@ function TierBar({ tiers }: { tiers: PricingTier[] }) {
 const STEPS = [
   {
     title: "Tell it what you're building",
-    body: "Give Threadly your website — or type keywords and your ICP yourself — and it works out specific phrases people actually say, like \"struggling to rank,\" not broad topics like \"SEO.\" That's what tells it which Reddit posts are worth a reply.",
+    body: "Give Threadly your website, and it works out specific phrases people actually say, like \"struggling to rank,\" not broad topics like \"SEO.\" That's what tells it which Reddit posts are worth a reply.",
   },
   {
     title: "It watches, so you don't have to",
