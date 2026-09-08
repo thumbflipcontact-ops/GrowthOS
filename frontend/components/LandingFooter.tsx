@@ -30,6 +30,7 @@ export function LandingFooter() {
         <a href="/#pricing">Pricing</a>
         <a href="/faq">FAQ</a>
         <a href="/blog">Blog</a>
+        <a href="/support">Support</a>
         <a href="/privacy">Privacy Policy</a>
         <a href="/terms">Terms &amp; Conditions</a>
       </div>
