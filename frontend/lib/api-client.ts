@@ -92,6 +92,13 @@ export const api = {
     });
   },
 
+  resendVerificationEmail(email: string): Promise<void> {
+    return apiFetch("/api/v1/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
   resetPassword(token: string, newPassword: string): Promise<User> {
     return apiFetch("/api/v1/auth/reset-password", {
       method: "POST",

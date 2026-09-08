@@ -24,6 +24,8 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [registered, setRegistered] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -59,6 +61,20 @@ export default function SignupPage() {
     }
   }
 
+  async function handleResend() {
+    setResending(true);
+    try {
+      await api.resendVerificationEmail(email);
+      setResent(true);
+    } catch {
+      // Same reasoning as the login page's own handleResend — a 429 is the one realistic
+      // failure, generous enough that a real user won't hit it from normal use, and not worth
+      // a second error banner here.
+    } finally {
+      setResending(false);
+    }
+  }
+
   if (registered) {
     return (
       <div className="container">
@@ -69,6 +85,23 @@ export default function SignupPage() {
             activate your account and start your free trial.
           </p>
         </div>
+        <p className="muted">
+          {resent ? (
+            "Sent again — check your inbox (and spam folder)."
+          ) : (
+            <>
+              Didn&apos;t get it?{" "}
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resending}
+                className="link-button"
+              >
+                {resending ? "Sending..." : "Resend verification email"}
+              </button>
+            </>
+          )}
+        </p>
         <p className="muted">
           Already have an account? <a href="/login">Log in</a>
         </p>

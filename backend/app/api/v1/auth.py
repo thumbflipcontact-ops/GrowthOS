@@ -18,6 +18,8 @@ from app.api.deps import (
     get_password_reset_ip_limiter,
     get_register_global_limiter,
     get_register_ip_limiter,
+    get_resend_verification_account_limiter,
+    get_resend_verification_ip_limiter,
     get_settings_dep,
 )
 from app.core.config import Settings
@@ -37,6 +39,7 @@ from app.schemas.auth import (
     LoginRequest,
     OrganizationResponse,
     RegisterRequest,
+    ResendVerificationRequest,
     ResetPasswordRequest,
     UserResponse,
     VerifyEmailRequest,
@@ -149,6 +152,28 @@ async def verify_email(
     # through login.
     _set_session_cookies(response, str(user.id), settings)
     return user
+
+
+@router.post("/resend-verification", status_code=204, response_model=None)
+async def resend_verification(
+    body: ResendVerificationRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+    ip_limiter: RateLimiter = Depends(get_resend_verification_ip_limiter),
+    account_limiter: RateLimiter = Depends(get_resend_verification_account_limiter),
+) -> None:
+    # Same rate-limit-before-any-work shape as /forgot-password, and the same non-enumeration
+    # rule: always 204, whether or not the email has an account or is already verified — see
+    # EmailVerificationService.resend.
+    client_ip = request.client.host if request.client else "unknown"
+    if not ip_limiter.try_acquire(f"ip:{client_ip}"):
+        raise TooManyRequests("Too many attempts from this address. Try again shortly.")
+    if not account_limiter.try_acquire(f"account:{body.email}"):
+        raise TooManyRequests("Too many attempts for this account. Try again shortly.")
+
+    service = EmailVerificationService(session, settings)
+    await service.resend(email=body.email)
 
 
 @router.post("/login", response_model=UserResponse)

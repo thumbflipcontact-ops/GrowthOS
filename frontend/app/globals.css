@@ -36,6 +36,25 @@ a {
   color: var(--text);
 }
 
+/* A <button> that reads as inline text, not a boxed control — for an action embedded in a
+   sentence (e.g. "Didn't get it? Resend verification email") where a full button would look
+   heavier than the surrounding prose. */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .container {
   max-width: 640px;
   margin: 0 auto;

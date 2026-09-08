@@ -1,8 +1,12 @@
-"""Email verification — see app/api/v1/auth.py's /auth/register (sends the email) and
-/auth/verify-email (consumes the token) routes, and app/models/email_verification.py.
+"""Email verification — see app/api/v1/auth.py's /auth/register (sends the email),
+/auth/verify-email (consumes the token), and /auth/resend-verification (re-sends it) routes,
+and app/models/email_verification.py.
 
-Unlike password reset, there's no "don't reveal whether the email exists" concern here — the
-caller just registered this exact address, so there's nothing to enumerate.
+`send_verification_email` (called from /auth/register) has no "don't reveal whether the email
+exists" concern — the caller just registered this exact address, so there's nothing to
+enumerate. `resend` is different: it's a standalone endpoint any caller can hit with any
+email, so it follows the same non-revealing shape as PasswordResetService.request_reset — a
+no-op, not an error, for an email with no account or one already verified.
 """
 
 from __future__ import annotations
@@ -64,6 +68,12 @@ class EmailVerificationService:
             logger.warning(
                 "email_verification.email_send_failed", user_id=str(user.id), error=str(exc)
             )
+
+    async def resend(self, *, email: str) -> None:
+        user = await self.users.get_by_email(email)
+        if user is None or user.email_verified_at is not None:
+            return
+        await self.send_verification_email(user=user)
 
     async def verify(self, *, token: str) -> User:
         record = await self.tokens.get_by_hash(hash_api_key(token))

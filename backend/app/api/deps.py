@@ -96,6 +96,21 @@ def get_password_reset_account_limiter() -> RateLimiter:
     return _password_reset_account_limiter
 
 
+# Same reasoning as the password-reset limiters above — this endpoint sends an email per
+# successful match too, and is just as attractive a target for inbox-spamming or
+# email-enumeration-by-timing/volume.
+_resend_verification_ip_limiter = RateLimiter(capacity=3, refill_rate=3 / 900)  # 3 / 15 min / IP
+_resend_verification_account_limiter = RateLimiter(capacity=3, refill_rate=3 / 900)
+
+
+def get_resend_verification_ip_limiter() -> RateLimiter:
+    return _resend_verification_ip_limiter
+
+
+def get_resend_verification_account_limiter() -> RateLimiter:
+    return _resend_verification_account_limiter
+
+
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
     """Request-scoped session — commits on a clean response, rolls back on any exception.
     See app/core/db.py for the underlying session_factory, created once at startup

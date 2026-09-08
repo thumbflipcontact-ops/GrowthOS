@@ -45,6 +45,12 @@ class ForgotPasswordRequest(BaseModel):
     _normalize_email = field_validator("email", mode="after")(_normalize_email)
 
 
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+    _normalize_email = field_validator("email", mode="after")(_normalize_email)
+
+
 class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=1)
     new_password: str = Field(min_length=12, max_length=200)
