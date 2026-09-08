@@ -5,6 +5,7 @@ export const metadata = {
   title: "Blog — Threadly",
   description:
     "Notes on finding real conversations on Reddit, replying well, and growing without a growth team.",
+  alternates: { canonical: "/blog" },
 };
 
 // Hand-written posts, same pattern as the FAQ/use-cases arrays — no CMS, just a page per post

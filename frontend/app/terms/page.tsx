@@ -2,6 +2,7 @@ import { Logo } from "@/components/Logo";
 
 export const metadata = {
   title: "Terms & Conditions — Threadly",
+  alternates: { canonical: "/terms" },
 };
 
 export default function TermsPage() {

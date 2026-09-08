@@ -8,6 +8,7 @@ const DESCRIPTION =
 export const metadata = {
   title: `${TITLE} — Threadly`,
   description: DESCRIPTION,
+  alternates: { canonical: "/blog/approval-before-posting-is-the-ai-tool-standard" },
   openGraph: { title: TITLE, description: DESCRIPTION, type: "article" },
 };
 

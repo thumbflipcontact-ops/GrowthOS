@@ -5,6 +5,7 @@ export const metadata = {
   title: "Features — Threadly",
   description:
     "What Threadly actually does: finds relevant conversations on Reddit, judges which ones are real leads, drafts a reply with AI, and never posts anything without your approval.",
+  alternates: { canonical: "/features" },
 };
 
 const FEATURES = [

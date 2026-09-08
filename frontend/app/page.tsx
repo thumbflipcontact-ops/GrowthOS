@@ -11,6 +11,29 @@ import type { PricingTier } from "@/lib/types";
 // a slow or failed fetch can't advertise a rate a signup won't actually get.
 const FALLBACK_PRICE_USD = 29;
 
+// Gives Google and AI answer engines (ChatGPT/Perplexity-style crawlers) a clean, structured
+// "what is this" to cite directly, rather than having to infer it from prose — same reasoning
+// as the FAQ page's FAQPage schema. This page is a client component ("use client" above), so
+// this can't go through the metadata API (server-components-only) — a plain <script> tag in
+// the JSX below works the same way the blog posts' JSON-LD does.
+const ORGANIZATION_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Threadly",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  url: "https://www.usethreadly.co",
+  description:
+    "Threadly finds relevant conversations on Reddit matching your keywords, has Claude judge which ones are genuine leads, drafts a reply, and requires your approval before anything posts.",
+  offers: {
+    "@type": "Offer",
+    price: "9",
+    priceCurrency: "USD",
+    description: "Tiered launch pricing starting from $9/month, a 7-day free trial with no card required.",
+  },
+  author: { "@type": "Organization", name: "Threadly", url: "https://www.usethreadly.co" },
+};
+
 function tierNote(tier: PricingTier): string {
   if (tier.capacity === null) return "Standard price";
   if (tier.is_sold_out) return "Sold out";
@@ -196,6 +219,10 @@ export default function RootPage() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_JSON_LD) }}
+      />
       <LandingNav />
 
       <header className="hero">

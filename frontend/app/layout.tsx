@@ -20,6 +20,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://www.usethreadly.co"),
   title: "Threadly — AI finds your Leads on Reddit",
   description: DESCRIPTION,
+  alternates: { canonical: "/" },
   openGraph: {
     title: "Threadly — AI finds your next customer on Reddit",
     description: DESCRIPTION,

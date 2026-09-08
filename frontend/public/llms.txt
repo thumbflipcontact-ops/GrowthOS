@@ -1,0 +1,27 @@
+# Threadly
+
+> Threadly finds relevant conversations on Reddit matching your keywords, has Claude judge
+> whether each one is a genuine lead and how strong their buying intent is (not just a
+> keyword match), drafts a reply grounded in the original post, and requires a human to
+> approve every single one before anything is ever posted. Nothing is published
+> automatically, on any plan.
+
+Threadly is built for founders, indie hackers, and small teams looking for their next
+customer without a dedicated growth team. It runs in the background — no login or connected
+account is required to find leads — and surfaces what it finds in an Approval Inbox for the
+user to review.
+
+Pricing: tiered by signup order (first 5 customers pay $9/month, next 10 pay $19/month,
+everyone after that pays $29/month, locked in for as long as the subscription stays active).
+A 7-day free trial is available with no card required.
+
+## Key pages
+
+- [Homepage](https://www.usethreadly.co/): overview, how it works, pricing
+- [Features](https://www.usethreadly.co/features): full feature list
+- [Use Cases](https://www.usethreadly.co/use-cases): who Threadly is for
+- [FAQ](https://www.usethreadly.co/faq): common questions about how it works, pricing, and
+  the approval flow
+- [Blog](https://www.usethreadly.co/blog): product notes and integrations
+- [Terms & Conditions](https://www.usethreadly.co/terms)
+- [Privacy Policy](https://www.usethreadly.co/privacy)

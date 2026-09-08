@@ -2,6 +2,7 @@ import { Logo } from "@/components/Logo";
 
 export const metadata = {
   title: "Privacy Policy — Threadly",
+  alternates: { canonical: "/privacy" },
 };
 
 export default function PrivacyPage() {

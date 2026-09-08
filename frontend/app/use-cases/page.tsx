@@ -5,6 +5,7 @@ export const metadata = {
   title: "Use Cases — Threadly",
   description:
     "Who Threadly is for: founders, indie hackers, and small teams finding real conversations about the problem they solve, on Reddit.",
+  alternates: { canonical: "/use-cases" },
 };
 
 const USE_CASES = [

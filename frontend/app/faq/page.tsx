@@ -4,6 +4,7 @@ import { LandingNav } from "@/components/LandingNav";
 export const metadata = {
   title: "FAQ — Threadly",
   description: "Common questions about how Threadly works, pricing, and the approval flow.",
+  alternates: { canonical: "/faq" },
 };
 
 const FAQS = [
@@ -53,9 +54,26 @@ const FAQS = [
   },
 ];
 
+// Lets Google/AI answer engines lift these Q&A pairs directly into search results and
+// answers instead of having to parse them out of prose — same schema.org FAQPage shape the
+// (now-removed) /alternatives/* pages used for their own FAQ sections.
+const FAQ_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQS.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.a },
+  })),
+};
+
 export default function FaqPage() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+      />
       <LandingNav />
 
       <header className="hero">
