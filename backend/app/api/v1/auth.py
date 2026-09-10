@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 
+import structlog
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +48,8 @@ from app.schemas.auth import (
 from app.services.auth_service import AuthService
 from app.services.email_verification_service import EmailVerificationService
 from app.services.password_reset_service import PasswordResetService
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -122,6 +125,21 @@ async def register(
         # persisted: no organization/user row, no verification email sent, nothing for a
         # retry to build on. Shaped exactly like a real success response so a scripted caller
         # has no signal that anything was different.
+        #
+        # Logged server-side only (never returned to the caller, never persisted to the
+        # database) so an operator can tell real signups from bot noise after the fact — a
+        # plausible-looking name/email and a normal browser user_agent suggests a real
+        # person's autofill caught this hidden field, not a bot; a garbled name/email or a
+        # scripted-looking user_agent (curl, python-requests, headless-*) suggests the
+        # opposite. Not a definitive classifier either way, just the same signal a human
+        # would eyeball to make that call.
+        logger.warning(
+            "auth.register_honeypot_tripped",
+            email=body.email,
+            name=body.name,
+            ip=client_ip,
+            user_agent=request.headers.get("user-agent"),
+        )
         return UserResponse(id=uuid.uuid4(), email=body.email, name=body.name)  # type: ignore[return-value]
 
     service = AuthService(session)
