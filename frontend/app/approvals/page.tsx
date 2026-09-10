@@ -101,12 +101,6 @@ function ApprovalCard({
 
       <div className="content-body">{item.body}</div>
 
-      {item.reasoning && (
-        <p className="muted">
-          <strong>Agent&apos;s reasoning:</strong> {item.reasoning}
-        </p>
-      )}
-
       {manualPublishOnly && (
         <p className="muted" style={{ fontSize: 13 }}>
           Threadly can&apos;t post this one automatically — approving moves it to the{" "}
