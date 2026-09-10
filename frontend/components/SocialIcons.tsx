@@ -13,3 +13,31 @@ export function LinkedInIcon() {
     </svg>
   );
 }
+
+// Reddit's own brand orange (#FF4500), full color rather than currentColor like the icons
+// above — this one's used as a platform/integration badge (see the homepage's "Where
+// Threadly works" section), where the point is to be recognizable as Reddit specifically,
+// not to blend into surrounding text color the way a footer social link does. A simplified,
+// hand-drawn Snoo silhouette (own shapes, not a reproduction of Reddit's exact brand
+// artwork/path data) — legible at small badge sizes without needing Reddit's full logo file.
+export function RedditIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#FF4500" />
+      <line x1="16.1" y1="7.3" x2="17.6" y2="4.1" stroke="#fff" strokeWidth="1" strokeLinecap="round" />
+      <circle cx="17.8" cy="3.7" r="1.3" fill="#fff" />
+      <circle cx="6.3" cy="12.6" r="2.1" fill="#fff" />
+      <circle cx="17.7" cy="12.6" r="2.1" fill="#fff" />
+      <ellipse cx="12" cy="13.6" rx="7" ry="6" fill="#fff" />
+      <circle cx="9" cy="12.6" r="1.15" fill="#FF4500" />
+      <circle cx="15" cy="12.6" r="1.15" fill="#FF4500" />
+      <path
+        d="M8.5 15.6c1 .9 2.2 1.4 3.5 1.4s2.5-.5 3.5-1.4"
+        stroke="#FF4500"
+        strokeWidth="1"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

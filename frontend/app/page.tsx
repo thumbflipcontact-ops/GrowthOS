@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { LandingFooter } from "@/components/LandingFooter";
 import { LandingNav } from "@/components/LandingNav";
+import { RedditIcon } from "@/components/SocialIcons";
 import { api } from "@/lib/api-client";
 import type { PricingTier } from "@/lib/types";
 
@@ -105,7 +106,26 @@ const STEPS = [
   },
 ];
 
-const PLATFORMS = [{ name: "Reddit", soon: false }];
+// `icon`/`borderColor`/`shadowColor` are optional — a future platform without a dedicated
+// badge yet just falls back to the plain gradient dot .platform-pill already used for every
+// platform before this. Pre-mixed rgba (not a raw hex + a runtime hex->rgba helper) since
+// this is the only place either color is used — Reddit's own orange, #FF4500, at the same
+// low opacity the pill's previous purple accent used.
+const PLATFORMS: {
+  name: string;
+  soon: boolean;
+  icon?: typeof RedditIcon;
+  borderColor?: string;
+  shadowColor?: string;
+}[] = [
+  {
+    name: "Reddit",
+    soon: false,
+    icon: RedditIcon,
+    borderColor: "rgba(255, 69, 0, 0.28)",
+    shadowColor: "rgba(255, 69, 0, 0.10)",
+  },
+];
 
 // Official embed badge from tinystartups.com — each future launch site provides its own
 // distinct badge markup like this one, so entries here are whole components, not a shared
@@ -252,10 +272,10 @@ export default function RootPage() {
 
       <header className="hero">
         <span className="hero-badge">
-          <span className="dot" /> Find leads on Reddit
+          <span className="dot" /> Find leads on <span className="text-reddit">Reddit</span>
         </span>
         <h1>
-          Your next customer is already on Reddit.{" "}
+          Your next customer is already on <span className="text-reddit">Reddit</span>.{" "}
           <span className="grad">AI finds them before you scroll past.</span>
         </h1>
         <p className="lead">
@@ -317,8 +337,16 @@ export default function RootPage() {
         </div>
         <div className="platform-row">
           {PLATFORMS.map((p) => (
-            <div key={p.name} className={`platform-pill${p.soon ? " soon" : " live"}`}>
-              {!p.soon && <span className="dot" />}
+            <div
+              key={p.name}
+              className={`platform-pill${p.soon ? " soon" : " live"}`}
+              style={
+                !p.soon && p.borderColor
+                  ? { borderColor: p.borderColor, boxShadow: `0 1px 2px ${p.shadowColor}` }
+                  : undefined
+              }
+            >
+              {!p.soon && (p.icon ? <p.icon size={20} /> : <span className="dot" />)}
               {p.name}
               {p.soon && " — soon"}
             </div>

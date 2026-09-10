@@ -602,6 +602,13 @@ button:disabled {
   color: transparent;
 }
 
+/* Reddit's own brand orange (#FF4500) — same value the homepage's platform badge and its
+   Snoo icon (components/SocialIcons.tsx) already use, so every "Reddit" mention on the page
+   reads as the same, deliberate brand color rather than plain body text. */
+.text-reddit {
+  color: #ff4500;
+}
+
 .hero p.lead {
   font-size: 18px;
   color: var(--text-muted);
