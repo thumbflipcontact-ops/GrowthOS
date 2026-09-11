@@ -1,8 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, api } from "@/lib/api-client";
+import { GoogleIcon } from "@/components/SocialIcons";
+import { API_BASE_URL, ApiError, api } from "@/lib/api-client";
 import { initPosthog } from "@/lib/posthog";
+
+// A real top-level browser redirect (Google needs its own page, not a fetch() call) — see
+// backend/app/api/v1/auth_oauth.py. A brand-new Google signup skips this page's own
+// "Check your email" step entirely — Google already verified the address, so
+// GoogleOAuthService sets email_verified_at immediately and the callback lands the browser
+// straight on /dashboard, signed in.
+const GOOGLE_START_URL = `${API_BASE_URL}/api/v1/auth/google/start`;
 
 function slugify(value: string): string {
   return value
@@ -115,6 +123,10 @@ export default function SignupPage() {
       <p className="subtitle">7 days free. No card required.</p>
       <div className="card">
         {error && <div className="error-banner">{error}</div>}
+        <a href={GOOGLE_START_URL} className="btn btn-secondary btn-google">
+          <GoogleIcon /> Continue with Google
+        </a>
+        <div className="auth-divider">or</div>
         <form onSubmit={handleSubmit}>
           {/* Honeypot — invisible and unreachable by tab order for a real person; see the
               `website` state's comment above. Not `display:none`/`hidden`, which some bots

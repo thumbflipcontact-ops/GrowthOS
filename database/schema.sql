@@ -52,14 +52,33 @@ create table users (
     id                  uuid primary key default gen_random_uuid(),
     email               text not null unique,
     name                text not null,
-    password_hash       text not null,
+    -- Null for an account that has only ever signed in via an external identity provider —
+    -- see oauth_identities below. AuthService.authenticate() treats null the same as a wrong
+    -- password (same generic error), not a distinct one.
+    password_hash       text,
     -- Set on both login and signup — see app/core/agent_lifecycle.py's 48h-inactivity sweep,
     -- the only reader.
     last_login_at       timestamptz,
     -- Null = not yet verified — see email_verification_tokens below. AuthService.authenticate()
-    -- and /auth/register withhold a session cookie until this is set.
+    -- and /auth/register withhold a session cookie until this is set. A Google signup sets
+    -- this immediately at creation (Google already verified the address), skipping the
+    -- separate email-verification step entirely.
     email_verified_at   timestamptz,
     created_at          timestamptz not null default now()
+);
+
+-- Links a user to one external identity-provider account (Google today) — entirely separate
+-- from plugin_connections, which links a *project* to a data-source/publishing plugin like
+-- Reddit. See app/services/google_oauth_service.py.
+create table oauth_identities (
+    id                  uuid primary key default gen_random_uuid(),
+    user_id             uuid not null references users(id) on delete cascade,
+    provider            text not null,   -- 'google'
+    -- The provider's own stable subject id (Google's 'sub' claim), not the email — matched
+    -- against on every returning login.
+    provider_user_id    text not null,
+    created_at          timestamptz not null default now(),
+    unique (provider, provider_user_id)
 );
 
 -- token_hash is a SHA-256 digest (same scheme as api_keys.key_hash, see

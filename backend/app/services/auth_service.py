@@ -72,7 +72,11 @@ class AuthService:
 
     async def authenticate(self, *, email: str, password: str) -> User:
         user = await self.users.get_by_email(email)
-        if user is None or not verify_password(password, user.password_hash):
+        if (
+            user is None
+            or user.password_hash is None
+            or not verify_password(password, user.password_hash)
+        ):
             # Deliberately the same error for "no such user" and "wrong password" — do not
             # let a failed-login response reveal which one it was.
             await self._audit_login_attempt(

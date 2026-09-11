@@ -1,17 +1,31 @@
 "use client";
 
-import { useState } from "react";
-import { ApiError, api } from "@/lib/api-client";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { GoogleIcon } from "@/components/SocialIcons";
+import { API_BASE_URL, ApiError, api } from "@/lib/api-client";
 
 // Matches the exact wording AuthService.authenticate() raises for a correct password on an
 // unverified account (see backend/app/services/auth_service.py) — used to decide when to
 // offer the "Resend verification email" action below, not to re-derive the error copy itself.
 const UNVERIFIED_EMAIL_ERROR_SUBSTRING = "verify your email";
 
-export default function LoginPage() {
+// A real top-level browser redirect (Google needs its own page, not a fetch() call) — see
+// backend/app/api/v1/auth_oauth.py.
+const GOOGLE_START_URL = `${API_BASE_URL}/api/v1/auth/google/start`;
+
+function LoginForm() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // GoogleOAuthService's callback redirects back here with ?error=google_oauth_failed on
+  // anything from "you denied consent" to "Google's email wasn't verified" — one generic
+  // message covers all of it, same non-revealing spirit as the password login error below.
+  const [error, setError] = useState<string | null>(
+    searchParams.get("error") === "google_oauth_failed"
+      ? "Could not sign in with Google. Try again, or use your email and password."
+      : null
+  );
   const [submitting, setSubmitting] = useState(false);
   const [showResend, setShowResend] = useState(false);
   const [resending, setResending] = useState(false);
@@ -67,6 +81,10 @@ export default function LoginPage() {
       <h1>Log in</h1>
       <div className="card">
         {error && <div className="error-banner">{error}</div>}
+        <a href={GOOGLE_START_URL} className="btn btn-secondary btn-google">
+          <GoogleIcon /> Continue with Google
+        </a>
+        <div className="auth-divider">or</div>
         {showResend &&
           (resent ? (
             <p className="muted">
@@ -113,5 +131,15 @@ export default function LoginPage() {
         No account yet? <a href="/signup">Start your free trial</a>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  // useSearchParams needs a Suspense boundary in the app router — see Next.js's own
+  // deprecation notice for reading it without one (same pattern as /redeem's RedeemForm).
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

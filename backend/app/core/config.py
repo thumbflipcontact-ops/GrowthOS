@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     # backend/app/services/content_approval.py's MANUAL_PUBLISH_ONLY_PLATFORMS), so this is
     # just a safe landing spot for the OAuth callback route itself, which still exists.
     oauth_frontend_redirect_url: str = Field(default="http://localhost:3000/dashboard")
+    # "Continue with Google" account login/signup — see app/services/google_oauth_service.py.
+    # A FIXED Settings field, unlike oauth_client_credentials()'s open-ended per-plugin lookup
+    # above: this is one specific, permanent provider used for the platform's own account
+    # login, not one of an open-ended set of data-source plugins. Optional at the type level,
+    # same "fail loudly at first use, not at import time" pattern as polar_access_token —
+    # GoogleOAuthService raises GoogleOAuthNotConfigured if either is missing when
+    # /auth/google/start is actually hit.
+    google_oauth_client_id: str | None = Field(default=None)
+    google_oauth_client_secret: SecretStr | None = Field(default=None)
 
     # --- Error tracking — see app/core/observability.py and
     # docs/reviews/PRODUCTION_READINESS_REVIEW.md O8/O9. Optional: every process runs exactly

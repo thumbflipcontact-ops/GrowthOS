@@ -60,7 +60,12 @@ class User(UUIDPkMixin, CreatedAtMixin, Base):
 
     email: Mapped[str] = mapped_column(nullable=False, unique=True)
     name: Mapped[str] = mapped_column(nullable=False)
-    password_hash: Mapped[str] = mapped_column(nullable=False)
+    # Null for an account that has only ever signed in via an external identity provider (see
+    # app/models/oauth_identity.py) — there's no password to hash. AuthService.authenticate()
+    # treats a None here as "wrong password" (same generic error as an actual mismatch, not a
+    # distinct message), so a password-login attempt against a Google-only account can't be
+    # used to enumerate which accounts exist or how they authenticate.
+    password_hash: Mapped[str | None] = mapped_column(nullable=True)
     # Set on both login (AuthService.authenticate) and signup (AuthService.register) — a new
     # account issues a session exactly like a login does. Read by app/core/agent_lifecycle.py's
     # inactivity sweep; nullable only because existing rows predate this column (migration

@@ -123,6 +123,17 @@ def get_ltd_redeem_ip_limiter() -> RateLimiter:
     return _ltd_redeem_ip_limiter
 
 
+# Shared by both /auth/google/start and /auth/google/callback — same generosity as login's
+# own IP limiter (a real person retrying after denying consent, or Google's own redirect
+# hiccuping, shouldn't get locked out), same "IP only, no account to key a second limiter on
+# until a user is actually resolved" reasoning as _register_ip_limiter.
+_google_oauth_ip_limiter = RateLimiter(capacity=10, refill_rate=10 / 300)  # 10 / 5 min / IP
+
+
+def get_google_oauth_ip_limiter() -> RateLimiter:
+    return _google_oauth_ip_limiter
+
+
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
     """Request-scoped session — commits on a clean response, rolls back on any exception.
     See app/core/db.py for the underlying session_factory, created once at startup

@@ -160,6 +160,35 @@ button:disabled {
   margin-top: 20px;
 }
 
+/* "Continue with Google" (login/signup) — same .btn-secondary look, just with room for an
+   icon beside the label instead of text alone. */
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+/* The "or" separator between the Google button and the email/password form on login/signup —
+   a thin rule through the middle of the word, same idea as any standard auth-page divider. */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
 .error-banner {
   background: #fdecea;
   border: 1px solid var(--danger);

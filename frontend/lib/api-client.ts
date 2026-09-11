@@ -24,7 +24,11 @@ import type {
   User,
 } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+// Exported (not just used internally below) so a page that navigates the browser directly
+// to a backend route — rather than calling it via apiFetch — can still build the right URL.
+// GET /auth/google/start (frontend/app/login/page.tsx, frontend/app/signup/page.tsx) is
+// exactly that: a real top-level redirect to Google, not a fetch() call.
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   code: string;
