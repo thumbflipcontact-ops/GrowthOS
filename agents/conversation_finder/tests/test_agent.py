@@ -625,6 +625,89 @@ async def test_candidates_across_multiple_plugins_are_scored_in_one_batched_llm_
 
 
 @pytest.mark.asyncio
+async def test_near_duplicate_titles_are_collapsed_to_the_stronger_keyword_match() -> None:
+    # Real production case: the same developer crossposting one announcement to several
+    # subreddits — distinct URLs (so upsert_discovery's own unique(project_id, url) dedup
+    # never catches it), titles differing only by a version number.
+    plugin = _FakePlugin(
+        key="reddit",
+        results=[
+            _result(
+                "https://x.invalid/sonarr",
+                title="Quartermaster 1.2.0 dropping tomorrow for real users!",
+                body="now with full selfhosted support",
+            ),
+            _result(
+                "https://x.invalid/selfhosted",
+                title="Quartermaster 1.2 dropping tomorrow for real users!",
+                body="nothing else relevant here",
+            ),
+        ],
+    )
+    llm = _FakeLLM()
+    ctx, kb, _ = _ctx(
+        plugins=[plugin], config={"keywords": ["quartermaster", "selfhosted"]}, llm=llm
+    )
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 1
+    assert result.summary["near_duplicates_collapsed"] == 1
+    # The survivor is whichever candidate matched more of the configured keywords — here,
+    # the /sonarr one (title + body match vs. title-only for /selfhosted).
+    assert kb.saved_calls[0]["url"] == "https://x.invalid/sonarr"
+
+
+@pytest.mark.asyncio
+async def test_short_titles_are_never_collapsed_even_when_identical() -> None:
+    # A short, generic title (under the minimum length) is too likely to coincide by chance
+    # for similarity to mean anything — two real, unrelated posts can both be titled
+    # "crawl budget" without being the same post. This is also what keeps every other test
+    # in this file (which reuses "crawl budget" as its default placeholder title) unaffected
+    # by near-duplicate collapsing.
+    plugin = _FakePlugin(
+        key="reddit",
+        results=[
+            _result("https://x.invalid/a", title="crawl budget"),
+            _result("https://x.invalid/b", title="crawl budget"),
+        ],
+    )
+    llm = _FakeLLM()
+    ctx, kb, _ = _ctx(plugins=[plugin], config={"keywords": ["crawl budget"]}, llm=llm)
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 2
+    assert result.summary["near_duplicates_collapsed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_genuinely_different_long_titles_are_not_collapsed() -> None:
+    plugin = _FakePlugin(
+        key="reddit",
+        results=[
+            _result(
+                "https://x.invalid/a",
+                title="Quartermaster 1.2.0 dropping tomorrow for real users!",
+            ),
+            _result(
+                "https://x.invalid/b",
+                title="Looking for a self-hosted alternative to this crawl budget tool",
+            ),
+        ],
+    )
+    llm = _FakeLLM()
+    ctx, kb, _ = _ctx(
+        plugins=[plugin], config={"keywords": ["quartermaster", "crawl budget"]}, llm=llm
+    )
+
+    result = await ConversationFinderAgent().run(ctx)
+
+    assert result.knowledge_items_created == 2
+    assert result.summary["near_duplicates_collapsed"] == 0
+
+
+@pytest.mark.asyncio
 async def test_llm_is_not_called_when_there_are_no_candidates() -> None:
     plugin = _FakePlugin(key="reddit", results=[_result("https://x.invalid/1", body="unrelated")])
     llm = _FakeLLM()

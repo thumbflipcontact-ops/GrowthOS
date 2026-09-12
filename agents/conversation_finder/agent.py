@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from difflib import SequenceMatcher
 from typing import TYPE_CHECKING
 
 from plugins._shared.base import PluginQuery, PluginResult, Searchable
@@ -62,6 +63,19 @@ _BODY_EXCERPT_MAX_CHARS = 2000
 # short LeadScore entries in one response, with headroom.
 _SCORING_TEMPERATURE = 0.3
 _SCORING_MAX_TOKENS = 4096
+
+# How similar two candidates' titles must be (difflib's character-level ratio, 0-1) to be
+# treated as the same underlying post — see _dedupe_near_duplicate_titles. High enough that
+# two genuinely different posts sharing a few common words (e.g. two separate "crawl budget"
+# threads) never collide; a crosspost whose title differs only by a version number or a
+# trailing word easily clears it.
+_NEAR_DUPLICATE_TITLE_SIMILARITY = 0.85
+# A short title (e.g. a generic one- or two-word subject line) is too likely to coincide by
+# chance for a high similarity ratio to mean anything — two unrelated posts can both be
+# titled "Feedback?" without being the same post. Real crossposted announcements (the case
+# this exists for) run well longer than this; below it, near-duplicate checking never
+# applies regardless of similarity.
+_NEAR_DUPLICATE_MIN_TITLE_LENGTH = 20
 
 
 class ConversationFinderAgent:
@@ -141,6 +155,10 @@ class ConversationFinderAgent:
                     continue  # not even one configured keyword's words appear at all
                 candidates.append((platform, plugin_result, score, matched_terms))
 
+        near_duplicates_collapsed = len(candidates)
+        candidates = _dedupe_near_duplicate_titles(candidates)
+        near_duplicates_collapsed -= len(candidates)
+
         llm_scores_by_url: dict[str, LeadScore] = {}
         if candidates:
             try:
@@ -206,8 +224,56 @@ class ConversationFinderAgent:
             "platforms_searched": plugins_searched,
             "results_found": results_found,
             "unique_urls": len(seen_urls),
+            "near_duplicates_collapsed": near_duplicates_collapsed,
         }
         return result
+
+
+def _dedupe_near_duplicate_titles(
+    candidates: list[tuple[str, PluginResult, float, list[str]]],
+) -> list[tuple[str, PluginResult, float, list[str]]]:
+    """Collapses near-identical titles found within this run down to the single strongest
+    match. Real production case: the same developer crossposting one announcement to
+    several subreddits produces several distinct URLs (upsert_discovery's own
+    unique(project_id, url) dedup never catches this — the URLs really are different) with
+    titles that differ only by a version number or a trailing word, e.g. "Quartermaster
+    1.2.0 dropping tomorrow!" vs "Quartermaster 1.2 dropping tomorrow!". Without this, both
+    got saved, scored identically by the LLM (they're the same content), and drafted as two
+    separate leads for what a human immediately recognizes as one announcement.
+
+    Title-only: a candidate with no title (e.g. a tweet — see PluginResult.title's own note
+    that some platforms never set one) always passes through untouched, comparison against
+    it or by it never happens.
+
+    Deliberately scoped to THIS run's own candidates, not a historical/cross-run duplicate
+    check (that's real, separate, larger work — see content_self_check.py's own docstring on
+    why full duplicate-content detection isn't implemented) — an O(n^2) pass over at most a
+    few dozen items, no database query, run before the LLM scoring call so a collapsed
+    near-duplicate doesn't even cost anything to score."""
+    kept: list[tuple[str, PluginResult, float, list[str]]] = []
+    for candidate in candidates:
+        title = candidate[1].title
+        if not title or len(title) < _NEAR_DUPLICATE_MIN_TITLE_LENGTH:
+            kept.append(candidate)
+            continue
+
+        match_index: int | None = None
+        for i, existing in enumerate(kept):
+            existing_title = existing[1].title
+            if not existing_title or len(existing_title) < _NEAR_DUPLICATE_MIN_TITLE_LENGTH:
+                continue
+            similarity = SequenceMatcher(None, title.lower(), existing_title.lower()).ratio()
+            if similarity >= _NEAR_DUPLICATE_TITLE_SIMILARITY:
+                match_index = i
+                break
+
+        if match_index is None:
+            kept.append(candidate)
+        elif candidate[2] > kept[match_index][2]:
+            kept[match_index] = candidate  # a stronger keyword match for the same post
+        # else: this one's keyword match is no stronger than the one already kept — drop it.
+
+    return kept
 
 
 async def _score_candidates_with_llm(
