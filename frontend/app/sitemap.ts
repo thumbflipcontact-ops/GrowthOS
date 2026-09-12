@@ -19,6 +19,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/signup",
     "/forgot-password",
     "/blog",
+    "/blog/how-to-reply-on-reddit-without-sounding-like-an-ad",
+    "/blog/finding-buying-intent-posts-on-reddit",
+    "/blog/why-reddit-bans-self-promotion",
     "/blog/threadly-now-in-n8n-and-openclaw",
     "/blog/approval-before-posting-is-the-ai-tool-standard",
     // 5 other blog posts (X/Twitter-specific pain points — X's ban policy, tweet decay, X
